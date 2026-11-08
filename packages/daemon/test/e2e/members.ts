@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
-import type { DaemonEvent } from "@ome-labs/api";
+import type { DaemonEvent, Settings } from "@ome-labs/api";
 
 import { Daemon, DaemonClient } from "../../src/index.ts";
 
@@ -32,12 +32,12 @@ export interface Member {
 }
 
 /** A new member: a daemon with a fresh profile, its signer unlocked for the suite. */
-export async function member(name: string): Promise<Member> {
+export async function member(name: string, settings: Partial<Settings> = {}): Promise<Member> {
   const home = await mkdtemp(join(tmpdir(), `ome-${name}-`));
   const daemon = new Daemon({
     profile: "default",
     home,
-    settings: { nodeUrl: NODE_URL },
+    settings: { nodeUrl: NODE_URL, ...settings },
     keeperListen: ["/ip4/127.0.0.1/tcp/0"],
   });
   await daemon.start();
