@@ -145,6 +145,53 @@ jobs:
       # outside CI (pnpm --filter @ome-labs/wallet test:e2e).
       - run: pnpm exec turbo run typecheck test --filter=@ome-labs/wallet --filter=@ome-labs/daemon
 
+  apple:
+    name: Mobile bindings (Apple)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The generated Swift on the macOS host, then the XCFramework for iOS, the iOS Simulator and macOS.
+      - run: pnpm --filter @ome-labs/ffi mobile:swift
+      - run: pnpm --filter @ome-labs/ffi mobile:apple
+
+  android:
+    name: Mobile bindings (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.8.2"
+      - run: cargo install cargo-ndk --locked
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The generated Kotlin on the JVM, then the AAR for arm64-v8a and x86_64.
+      - run: pnpm --filter @ome-labs/ffi mobile:kotlin
+      # The runner image ships Android NDKs; build with the newest.
+      - run: pnpm --filter @ome-labs/ffi mobile:android
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+
   noir:
     name: Noir
     runs-on: ubuntu-latest
