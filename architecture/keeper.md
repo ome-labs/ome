@@ -6,13 +6,16 @@ lets it out. It:
 - runs the DKG and reshare ceremonies with the other members' keepers;
 - answers threshold ECDH requests with DLEQ-proven partials;
 - gathers partials for its own member;
-- activates, holds or destroys shares as the vault's on-chain committee changes.
+- activates, holds or destroys shares as the vault's on-chain committee changes;
+- stores and replicates proposals, payloads, votes and receipts between members;
+- hosts and joins founding lobbies;
+- uses relay mailboxes so offline members catch up;
+- serves its member's daemon over a local JSON-RPC socket.
 
 It is a library first. `Keeper::start` takes its transport (`ome-net`), clock and storage from outside, so tests run
 many keepers in one process and an app can embed one.
 
-**Status:** checkpoint 7a is in the tree: custody, store, ceremonies, threshold ECDH and the custody rules below.
-Checkpoint 7b adds proposals and replication, sync, mailboxes, lobbies, the local RPC server and the binary.
+It also ships as the `ome-keeper` binary (below).
 
 ## What the keeper never does
 
@@ -53,7 +56,9 @@ SQLite in WAL mode with `secure_delete` on. It holds only public, non-secret sta
 - manifests by vault and epoch, with their status (`active`, `retired`, `removed`);
 - ceremony records with their parameters and results;
 - the ECDH audit log;
-- every config observation in full.
+- every config observation in full;
+- proposals, payloads by hash, approvals, rejections and receipts;
+- lobbies: the public roster and plan. The invite secret lives in custody.
 
 Migrations are append-only and tracked by `user_version`.
 
@@ -117,7 +122,8 @@ recoverable; destroying one that is still needed is not.
 
 A member removed without taking part in the reshare (neither dealer nor new member) sees an `Unknown` config and
 keeps its share. The removal still holds cryptographically, because the old shares no longer combine with the new
-committee. Erasing that leftover share is a deliberate step, not an automatic one; the RPC for it comes in 7b.
+committee. Erasing that leftover share is a deliberate step, not an automatic one: `vault.retire` destroys it, and
+only once the chain has moved past the committee it serves, so a mistaken call can't break a working vault.
 
 **Pending shares expire.** A completed reshare whose committee never becomes active is expired after
 `pending_share_ttl_secs` (default 7 days): its pending share is destroyed, the ceremony is marked `expired`, and
@@ -126,6 +132,102 @@ committee. Erasing that leftover share is a deliberate step, not an automatic on
 **Later hardening:** the keeper trusts its daemon to _report_ configs; it doesn't trust the daemon about _what they
 mean_. Reading the config note directly would remove the first trust as well. That needs PXE-style private note
 reading in the keeper, so it is deferred.
+
+## Spending records
+
+- **Proposals and votes**: the daemon puts proposals, approvals, rejections and receipts, and the keeper stores them
+  and pushes them to every member. A member that can't be reached gets them through its relay mailbox and the next
+  sync.
+- **Vote checks**: an approval or rejection is stored only if it is the Schnorr signature of the key in its slot over
+  `ome-protocol`'s approval message (`vault`, `outer_hash`, config version, deadline) or rejection message.
+- **Early votes**: a vote that arrives before its proposal is held, up to 1,024 votes, and checked when the proposal
+  arrives. Records are processed concurrently, so this ordering is normal.
+- **Payloads** are stored by hash and **never pushed**. A keeper that receives a proposal whose payload it lacks asks
+  whoever sent the proposal (`PayloadRequest`), and only payloads that a known proposal of that vault references are
+  accepted. A payload therefore never reaches a member that doesn't know why it exists, and the proposer needn't be
+  online.
+- **Unexpected spends**: `vault.observeTx` raises `UnexpectedSpend` for a vault transaction that matches no receipt.
+
+Replicated records skip the replay window: they are idempotent, verified on their own, and may arrive days late
+through a mailbox. Everything else must be fresh and unseen.
+
+## Catching up
+
+- **Sync**: every `sync_interval_secs` (default 60), the keeper sends each member a `SyncRequest` listing what it
+  holds. Members answer with up to 1,024 records it lacks, proposals first, and its payloads then follow by hash.
+- **Mailboxes**: a frame a member couldn't receive directly is sealed into that pair's daily mailbox
+  (`ome_crypto::sealing::mailbox`) at the relays, for `mailbox_ttl_days` (default 7).
+  - Every `mailbox_interval_secs` (default 30) the keeper polls the mailboxes of every committee and open-lobby peer
+    for each day in the window.
+  - It opens the envelopes and feeds them in as if they had arrived live, on a `Channel::Key`.
+  - The sealed sender must be the member the frame claims.
+  - Delivered envelopes are deleted at the relays.
+
+## Lobbies
+
+- **Host**: `open_lobby` creates an invite (`ome-invite-v0:`) holding a join secret, kept in custody. While the lobby
+  is open, the transport admits strangers on the lobby lane only.
+  - Each `LobbyJoin` must pass `ome_protocol::lobby::verify_join`: the joiner is the signer, and the proof matches
+    the secret and the joiner's keeper keys. Duplicate signing or transport keys, or a full roster, are refused.
+  - Every change sends the roster (`LobbyState`) to the guests.
+- **Start**: `start_lobby` fixes the plan:
+  - a fresh DKG session;
+  - the thresholds and salt;
+  - the members in slot order;
+  - `protocol_version` from `plan_version`, the newest version every founder's keeper speaks;
+  - founding secrets sealed to each member.
+
+  It sends the plan to the guests and closes admission.
+
+- **Guest**: joins with the invite, follows newer rosters from the host only, and accepts a plan only if:
+  - it comes from the host;
+  - it names this member exactly as it joined;
+  - its thresholds and members are valid;
+  - its version is one every member speaks;
+  - this member's secrets open.
+- **No automatic DKG**: a keeper never starts the DKG itself. Each member's daemon reads the plan and calls
+  `ceremony.dkg`, so a person has agreed to found the vault.
+- **Leaving**: guests can leave, and hosts can close.
+
+## RPC
+
+JSON-RPC 2.0, newline-delimited, over a Unix socket (`0600`), or a local-only named pipe on Windows.
+
+- **Authentication**: a session must first call `session.auth` with the launch token, compared in constant time.
+- **Encoding**: 32-byte values are `0x` hex, points are `{ x, y }`, and message bodies are hex of their canonical
+  wire encoding.
+- **Errors**: unauthenticated `-32001`, keeper errors `-32000`, standard JSON-RPC codes otherwise.
+
+| Area      | Methods                                                                                                                                        |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| keeper    | `keeper.info`, `peers.status`, `audit.list`, `events.subscribe`                                                                                |
+| vaults    | `vault.register`, `vault.observeConfig` (the whole config note), `vault.observeTx`, `vault.status`, `vault.list`, `vault.sync`, `vault.retire` |
+| ceremony  | `ceremony.dkg`, `ceremony.reshare`, `ceremony.status`                                                                                          |
+| ECDH      | `ecdh.batch`                                                                                                                                   |
+| spending  | `proposals.put` / `get` / `list`, `payloads.put` / `get`, `approvals.put` / `list`, `rejections.put` / `list`, `receipts.put` / `list`         |
+| lobbies   | `lobby.open`, `lobby.join`, `lobby.status`, `lobby.inspect`, `lobby.start`, `lobby.leave`, `lobby.close`, `lobby.list`                         |
+| mailboxes | `mailbox.poll`                                                                                                                                 |
+
+The request and response types move to `ome-api` in phase 9.
+
+## Binary
+
+`ome-keeper` has four commands: `init`, `identity`, `run` and `rpc`.
+
+- **Master key**: the supervising app runs `ome-keeper run --secrets-stdin` and writes one JSON line holding the
+  master key (kept in the OS keychain) and a fresh RPC token. A keeper on a member's own server uses
+  `OME_KEEPER_PASSPHRASE` (Argon2id with a per-keeper salt) and writes its RPC token to `rpc.token`.
+- **Config**: an optional `<data>/keeper.toml`, overridden by flags, sets:
+  - listen, external and relay addresses;
+  - the RPC socket;
+  - timeouts and the ECDH budget;
+  - the sync and mailbox intervals and the mailbox TTL;
+  - the pending-share lifetime.
+- **Startup**: `run` starts `Libp2pTransport`, plus `RelayMailbox` when relays are configured. When ready, it prints
+  one JSON line with its identity, transport key, peer id, addresses and socket, and writes the same to
+  `keeper.json`. Logs go to stderr as text or JSON.
+- **Shutdown**: on SIGTERM or Ctrl-C it stops the node and removes the socket.
+- **Data directory**: owner-only (`0700`). Secrets, the salt, the token and `keeper.json` are `0600`.
 
 ## Events
 
@@ -136,7 +238,11 @@ These are streamed to the daemon:
 - `CommitteeActivated` (vault and epoch);
 - `Removed`;
 - `ConfigMismatch` (vault, version and reason);
-- `PendingExpired`.
+- `PendingExpired`;
+- `Proposal`, `Payload`, `Approval`, `Rejection` and `Receipt` as records arrive;
+- `UnexpectedSpend`;
+- `Lobby` (status and roster size);
+- `Retired`.
 
 ## Tests
 
@@ -169,3 +275,23 @@ These are streamed to the daemon:
   - a silent member times a ceremony out and is blamed.
 
 Tests use a manual clock and wait on the keepers' own events, with a time limit, instead of sleeping.
+
+Checkpoint 7b adds:
+
+- `tests/proposals.rs`:
+  - a proposal, payload and votes reach every member;
+  - a payload is fetched from whichever member sent the proposal, even with the proposer offline;
+  - a vote that arrives first is held until its proposal does;
+  - forged or misdirected votes, and payloads of unknown vaults, are refused;
+  - receipts replicate, and an unknown spend alarms.
+- `tests/catch_up.rs`:
+  - an offline member catches up through sync and through its relay mailbox;
+  - an equivocating dealer is caught by the echo.
+- `tests/lobby.rs`:
+  - guests see the roster and receive the same plan, secrets and protocol version;
+  - a join with the wrong invite secret is refused;
+  - a guest leaves and the host closes.
+- `tests/rpc.rs`, over a real socket:
+  - sessions must authenticate, and the socket is owner-only;
+  - a daemon drives a live vault: ECDH, config observation, payloads, proposals and the audit log;
+  - keeper errors and unknown methods come back as errors.
