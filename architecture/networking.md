@@ -109,13 +109,18 @@ relay can't link them.
 
 ## What each party sees
 
-| Observer           | Sees                                                                                 | Never sees                                          |
-| ------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------- |
-| a relay            | IP addresses and peer ids of whoever connects, mailbox ids, sizes, times, ciphertext | vault addresses, signer keys, thresholds, plaintext |
-| a network observer | that two addresses speak Noise or QUIC, sizes and times                              | peer ids inside Noise, contents                     |
-| another keeper     | frames from admitted peers; strangers only on an open lobby's lane                   | anything from peers it doesn't admit                |
+| Observer           | Sees                                                                                                                               | Never sees                                                                                                |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| a relay            | IP addresses and peer ids of whoever connects, who relays to whom through circuits and when, mailbox ids, sizes, times, ciphertext | vault addresses, signer keys, thresholds, plaintext, circuit contents, which pair a mailbox id belongs to |
+| a network observer | that two addresses speak Noise or QUIC, sizes and times                                                                            | peer ids inside Noise, contents                                                                           |
+| another keeper     | frames from admitted peers; strangers only on an open lobby's lane                                                                 | anything from peers it doesn't admit                                                                      |
 
 Keeper peer ids are network identities. They are never written on chain.
+
+**Relay timing.** A relay that logs connections can correlate a deposit by one peer with a fetch by another and
+guess that two keepers talk. Mailbox ids change daily and are unlinkable, but connection metadata isn't hidden;
+hiding it would take a mixnet, which is out of scope. Teams that care run their own relay with an allow list
+(`architecture/relay.md`).
 
 ## Dependencies
 
@@ -135,11 +140,8 @@ generation, so `cargo deny` reports those crates as duplicates. Duplicates are w
 - `tests/memory.rs`: authenticated channels and peer status; admission at both ends; partitions; departed peers.
 - `tests/libp2p.rs`:
   - real loopback nodes exchange frames over TCP+Noise and over QUIC;
-  - a keeper with no direct address is reached through a relay circuit (reported as relayed);
   - the receiver's gate refuses a peer it doesn't admit;
   - an open lobby admits a stranger on the lobby lane only.
-- `tests/mailbox_client.rs`: deposit, fetch, merge and delete across two test relays; `MemoryMailbox` keeps the same
-  contract.
+- `tests/memory.rs` also checks that `MemoryMailbox` keeps the mailbox contract.
 
-The test relay in `tests/support/relay.rs` combines the circuit relay server with an in-memory mailbox store.
-`ome-relay` replaces it in phase 8.
+Relay circuits and `RelayMailbox` are tested against the real relay, in `ome-relay`'s tests (`architecture/relay.md`).
