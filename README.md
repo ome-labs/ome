@@ -35,6 +35,17 @@ pnpm test           # aztec test, cargo test, vitest
 pnpm format         # oxfmt, rustfmt, nargo fmt
 ```
 
+Contracts:
+
+```sh
+pnpm --filter @ome-labs/contracts test                  # unit, integration (TXE) and end-to-end tests
+pnpm --filter @ome-labs/contracts coverage              # LCOV report and a per-file summary of the contract
+pnpm --filter @ome-labs/contracts profile               # gate counts per function
+pnpm --filter @ome-labs/contracts profile:flamegraphs   # target/flamegraphs/<artifact>/<function>.svg
+```
+
+Coverage measures only tests that run without the TXE: Nargo stops recording a test at its first TXE call.
+
 ## License
 
 Copyright 2026 Vedant Chainani. Licensed under the [Apache License, Version 2.0](LICENSE).

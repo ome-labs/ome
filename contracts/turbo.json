@@ -16,7 +16,19 @@
       "inputs": ["Nargo.toml", "*/Nargo.toml", "*/src/**/*.nr"],
       "outputs": []
     },
-    "lint": { "inputs": ["Nargo.toml", "*/Nargo.toml", "*/src/**/*.nr"] },
-    "format:check": { "inputs": ["*/src/**/*.nr"] }
+    "lint": {
+      "inputs": ["Nargo.toml", "*/Nargo.toml", "*/src/**/*.nr"]
+    },
+    "format:check": {
+      "inputs": ["*/src/**/*.nr"]
+    },
+    "coverage": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "profile:flamegraphs": {
+      "dependsOn": ["build"],
+      "cache": false
+    }
   }
 }

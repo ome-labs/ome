@@ -45,6 +45,14 @@
     "profile": {
       "dependsOn": ["build"],
       "cache": false
+    },
+    "coverage": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "profile:flamegraphs": {
+      "dependsOn": ["build"],
+      "cache": false
     }
   }
 }

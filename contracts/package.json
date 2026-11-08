@@ -11,10 +11,12 @@
   "scripts": {
     "build": "aztec compile",
     "codegen": "aztec codegen target -o artifacts",
+    "coverage": "aztec test --package ome_vault --coverage && node ../scripts/noir-coverage.mjs target/coverage/ome_vault/lcov.info ome_vault",
     "format": "aztec-nargo fmt --workspace",
     "format:check": "aztec-nargo fmt --workspace --check",
     "lint": "aztec-nargo check --workspace --deny-warnings",
     "profile": "aztec profile gates target",
+    "profile:flamegraphs": "node ../scripts/noir-flamegraphs.mjs target ome_vault-OmeVault",
     "test": "aztec test"
   }
 }
