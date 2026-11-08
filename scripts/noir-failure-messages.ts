@@ -7,23 +7,29 @@
 // caller can reach is exempted by a comment directly above it containing `failure-check: invariant`, followed by the
 // reason. An assertion without a message fails the check: a contract's failures must explain themselves.
 //
-// Usage: node scripts/noir-failure-messages.mjs <package-dir>
-// Example: node scripts/noir-failure-messages.mjs contracts/ome_vault
+// Usage: node scripts/noir-failure-messages.ts <package-dir>
+// Example: node scripts/noir-failure-messages.ts contracts/ome_vault
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const packageDir = process.argv[2];
 if (!packageDir) {
-  console.error("usage: noir-failure-messages.mjs <package-dir>");
+  console.error("usage: noir-failure-messages.ts <package-dir>");
   process.exit(2);
+}
+
+/** A failure message and where the assertion raising it lives. */
+interface Failure {
+  message: string;
+  location: string;
 }
 
 const sourceDir = join(packageDir, "src");
 const testDir = join(sourceDir, "test");
 
 /** Every `.nr` file under `dir`, recursively. */
-function noirFiles(dir) {
+function noirFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return noirFiles(path);
@@ -32,7 +38,7 @@ function noirFiles(dir) {
 }
 
 /** The text between the parenthesis at `open` and its match, skipping string literals. */
-function argumentsAt(text, open) {
+function argumentsAt(text: string, open: number): string {
   let depth = 0;
   for (let i = open; i < text.length; i++) {
     const char = text[i];
@@ -49,17 +55,17 @@ function argumentsAt(text, open) {
 }
 
 /** The string literal an argument list ends with, if any. */
-function trailingString(args) {
+function trailingString(args: string): { template: boolean; value: string } | null {
   const match = args.trimEnd().match(/(f?)"((?:[^"\\]|\\.)*)"\s*,?$/);
-  return match ? { template: match[1] === "f", value: match[2] } : null;
+  return match ? { template: match[1] === "f", value: match[2] ?? "" } : null;
 }
 
-const lineOf = (text, index) => text.slice(0, index).split("\n").length;
+const lineOf = (text: string, index: number): number => text.slice(0, index).split("\n").length;
 
 /** Whether the comment block right above `line` (1-based) marks the assertion as unreachable. */
-function isMarkedInvariant(lines, line) {
-  for (let i = line - 2; i >= 0 && lines[i].trim().startsWith("//"); i--) {
-    if (lines[i].includes("failure-check: invariant")) return true;
+function isMarkedInvariant(lines: string[], line: number): boolean {
+  for (let i = line - 2; i >= 0 && lines[i]?.trim().startsWith("//"); i--) {
+    if (lines[i]?.includes("failure-check: invariant")) return true;
   }
   return false;
 }
@@ -69,8 +75,8 @@ const sources = noirFiles(sourceDir)
   .map((path) => ({ path, text: readFileSync(path, "utf8") }));
 
 /** The last string literal passed at every call of `fn`, across the package sources. */
-function literalsPassedTo(fn) {
-  const values = new Set();
+function literalsPassedTo(fn: string): string[] {
+  const values = new Set<string>();
   for (const { text } of sources) {
     for (const call of text.matchAll(new RegExp(`\\b${fn}\\s*\\(`, "g"))) {
       const isDefinition = /\bfn\s*$/.test(text.slice(0, call.index));
@@ -81,16 +87,16 @@ function literalsPassedTo(fn) {
   return [...values];
 }
 
-const failures = [];
-const exempt = [];
-const unexplained = [];
+const failures: Failure[] = [];
+const exempt: Failure[] = [];
+const unexplained: string[] = [];
 
 for (const { path, text } of sources) {
   const lines = text.split("\n");
 
   for (const assertion of text.matchAll(/\b(assert|assert_eq)\s*\(/g)) {
     const line = lineOf(text, assertion.index);
-    if (lines[line - 1].trim().startsWith("//")) continue;
+    if (lines[line - 1]?.trim().startsWith("//")) continue;
 
     const location = `${relative(packageDir, path)}:${line}`;
     const message = trailingString(argumentsAt(text, assertion.index + assertion[0].length - 1));
@@ -100,7 +106,9 @@ for (const { path, text } of sources) {
     } else if (isMarkedInvariant(lines, line)) {
       exempt.push({ message: message.value, location });
     } else if (message.template) {
-      const fn = [...text.slice(0, assertion.index).matchAll(/\bfn\s+(\w+)/g)].at(-1)[1];
+      const fn = [...text.slice(0, assertion.index).matchAll(/\bfn\s+(\w+)/g)].at(-1)?.[1];
+      if (!fn) throw new Error(`template assertion outside a function at ${location}`);
+
       for (const value of literalsPassedTo(fn)) {
         failures.push({ message: message.value.replace(/\{\w+\}/g, value), location });
       }
@@ -110,12 +118,13 @@ for (const { path, text } of sources) {
   }
 }
 
-const expected = new Map();
+const expected = new Map<string, number>();
 for (const path of noirFiles(testDir)) {
   for (const match of readFileSync(path, "utf8").matchAll(
     /should_fail_with\s*=\s*"((?:[^"\\]|\\.)*)"/g,
   )) {
-    expected.set(match[1], (expected.get(match[1]) ?? 0) + 1);
+    const message = match[1] ?? "";
+    expected.set(message, (expected.get(message) ?? 0) + 1);
   }
 }
 

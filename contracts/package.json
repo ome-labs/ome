@@ -10,13 +10,13 @@
   },
   "scripts": {
     "build": "aztec compile",
-    "check:failures": "node ../scripts/noir-failure-messages.mjs ome_vault",
+    "check:failures": "node ../scripts/noir-failure-messages.ts ome_vault",
     "codegen": "aztec codegen target -o artifacts",
     "format": "aztec-nargo fmt --workspace",
     "format:check": "aztec-nargo fmt --workspace --check",
     "lint": "aztec-nargo check --workspace --deny-warnings && pnpm run check:failures",
     "profile": "aztec profile gates target",
-    "profile:flamegraphs": "node ../scripts/noir-flamegraphs.mjs target ome_vault-OmeVault",
+    "profile:flamegraphs": "node ../scripts/noir-flamegraphs.ts target ome_vault-OmeVault",
     "test": "aztec test"
   }
 }

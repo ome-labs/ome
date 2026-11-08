@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "turbo run build",
-    "check": "pnpm format:check && turbo run lint typecheck build deny",
+    "check": "pnpm format:check && tsc -p tsconfig.json && turbo run lint typecheck build deny",
     "codegen": "turbo run codegen",
     "dev": "turbo run dev",
     "format": "oxfmt --write . && turbo run format",
@@ -15,7 +15,7 @@
     "lint:fix": "oxlint --fix .",
     "prepare": "lefthook install",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "tsc -p tsconfig.json && turbo run typecheck"
   },
   "devDependencies": {
     "@commitlint/cli": "catalog:",

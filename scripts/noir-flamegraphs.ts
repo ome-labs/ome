@@ -2,8 +2,8 @@
 // Writes a gate-count flamegraph for every function of the given contract artifacts into
 // `<target-dir>/flamegraphs/<artifact>/<function>.svg`, and prints each function's gate count.
 //
-// Usage: node scripts/noir-flamegraphs.mjs <target-dir> <artifact-name>...
-// Example: node scripts/noir-flamegraphs.mjs target ome_vault-OmeVault
+// Usage: node scripts/noir-flamegraphs.ts <target-dir> <artifact-name>...
+// Example: node scripts/noir-flamegraphs.ts target ome_vault-OmeVault
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, renameSync } from "node:fs";
@@ -11,14 +11,20 @@ import { join } from "node:path";
 
 const [targetDir, ...artifacts] = process.argv.slice(2);
 if (!targetDir || artifacts.length === 0) {
-  console.error("usage: noir-flamegraphs.mjs <target-dir> <artifact-name>...");
+  console.error("usage: noir-flamegraphs.ts <target-dir> <artifact-name>...");
   process.exit(2);
 }
 
-/** @type {{ name: string, type: string, gates: number }[]} */
+/** One row of `aztec profile gates --json`. */
+interface GateReport {
+  name: string;
+  type: string;
+  gates: number;
+}
+
 const report = JSON.parse(
   execFileSync("aztec", ["profile", "gates", targetDir, "--json"], { encoding: "utf8" }),
-);
+) as GateReport[];
 
 for (const artifact of artifacts) {
   const functions = report

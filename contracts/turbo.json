@@ -21,7 +21,7 @@
         "Nargo.toml",
         "*/Nargo.toml",
         "*/src/**/*.nr",
-        "$TURBO_ROOT$/scripts/noir-failure-messages.mjs"
+        "$TURBO_ROOT$/scripts/noir-failure-messages.ts"
       ]
     },
     "format:check": {
