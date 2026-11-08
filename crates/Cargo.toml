@@ -11,8 +11,50 @@ repository = "https://github.com/ome-labs/ome"
 rust-version = "1.99"
 publish = false
 
-# Shared dependency versions; crates opt in with `dep = { workspace = true }`.
+# Shared dependency versions; crates opt in with `dep = { workspace = true }` and add features locally.
+#
+# Core crates (ome-crypto, ome-wire, ome-protocol, ome-signer) must build for `wasm32-unknown-unknown` and mobile
+# targets as well as natively, so shared dependencies start with default features off and core crates do no I/O.
+# They are not `no_std`: taceo-poseidon2 always enables ark-std's `std` and `getrandom` features. On WebAssembly that
+# `getrandom` needs its `js` backend, which the crate depending on taceo-poseidon2 declares for `target_family = "wasm"`.
+# Randomness reaches core code only as `rand_core` trait parameters.
 [workspace.dependencies]
+# Curve and field arithmetic (Grumpkin over BN254) and Aztec's Poseidon2.
+ark-ec = { version = "0.6", default-features = false }
+ark-ff = { version = "0.6", default-features = false }
+ark-grumpkin = { version = "0.6", default-features = false }
+taceo-poseidon2 = { version = "0.3", default-features = false, features = ["bn254", "t4"] }
+
+# Secret handling.
+subtle = { version = "2.6", default-features = false }
+zeroize = { version = "1.9", default-features = false, features = ["derive"] }
+
+# Randomness. `getrandom` 0.2 is only the WebAssembly backend for ark-std (see above).
+getrandom = { version = "0.2", features = ["js"] }
+rand_core = { version = "0.10", default-features = false }
+rand_chacha = { version = "0.10", default-features = false }
+
+# Encryption, signatures and hashing.
+ed25519-dalek = { version = "3", default-features = false }
+hmac = { version = "0.13", default-features = false }
+hpke = { version = "0.15", default-features = false, features = [
+  "alloc",
+  "chacha",
+  "hkdfsha2",
+  "x25519",
+] }
+sha2 = { version = "0.11", default-features = false }
+x25519-dalek = { version = "3", default-features = false, features = ["static_secrets", "zeroize"] }
+
+# Encoding and errors.
+postcard = { version = "1.1", default-features = false, features = ["alloc"] }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+thiserror = { version = "2", default-features = false }
+
+# Test-only.
+hex = "0.4"
+proptest = "1.12"
+serde_json = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

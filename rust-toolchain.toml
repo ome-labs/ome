@@ -1,4 +1,6 @@
 [toolchain]
 channel = "1.99.1"
 components = ["rustfmt", "clippy"]
+# Core crates must also build for WebAssembly (ome-wasm); rustup installs the target with the toolchain.
+targets = ["wasm32-unknown-unknown"]
 profile = "minimal"
