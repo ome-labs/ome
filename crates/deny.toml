@@ -12,6 +12,10 @@ ignore = [
   # libp2p-quic and libp2p-tcp → if-watch → netlink-packet-core. It runs no code in the built binary,
   # and no maintained release of that chain drops it yet.
   { id = "RUSTSEC-2024-0436", reason = "unmaintained compile-time macro via libp2p's if-watch; no fixed release" },
+  # `basic-toml` (unmaintained, no vulnerability) is read at compile time by askama's derive macros, which only
+  # uniffi_bindgen uses: the developer-side generator of ome-ffi's Swift and Kotlin bindings (feature `bindgen`).
+  # Nothing of it is in the library a phone links. Revisit on every UniFFI upgrade.
+  { id = "RUSTSEC-2026-0374", reason = "unmaintained compile-time TOML parser via uniffi_bindgen's askama; generator only" },
 ]
 
 [licenses]
@@ -32,6 +36,35 @@ allow = [
   "Unicode-3.0",
   "Unlicense",
   "Zlib",
+]
+
+# UniFFI (ome-ffi's Swift and Kotlin bindings) is MPL-2.0: file-level copyleft, which covers changes to UniFFI's own
+# files only. Allowed for these crates alone, not as a general license.
+exceptions = [
+  { allow = [
+    "MPL-2.0",
+  ], crate = "uniffi" },
+  { allow = [
+    "MPL-2.0",
+  ], crate = "uniffi_bindgen" },
+  { allow = [
+    "MPL-2.0",
+  ], crate = "uniffi_core" },
+  { allow = [
+    "MPL-2.0",
+  ], crate = "uniffi_internal_macros" },
+  { allow = [
+    "MPL-2.0",
+  ], crate = "uniffi_macros" },
+  { allow = [
+    "MPL-2.0",
+  ], crate = "uniffi_meta" },
+  { allow = [
+    "MPL-2.0",
+  ], crate = "uniffi_pipeline" },
+  { allow = [
+    "MPL-2.0",
+  ], crate = "uniffi_udl" },
 ]
 
 [licenses.private]

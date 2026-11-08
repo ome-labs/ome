@@ -1,0 +1,55 @@
+[package]
+name = "ome-ffi"
+description = "The phone core of an Ome member's signing device, with Swift and Kotlin bindings through UniFFI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+name = "ome_ffi"
+# `cdylib` for Android and host tests, `staticlib` for the iOS XCFramework, `rlib` for the test device and Rust tests.
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[lints]
+workspace = true
+
+[features]
+# `uniffi-bindgen`, which writes the Swift and Kotlin bindings.
+bindgen = ["uniffi/cli"]
+# `ome-device`, a development signing device in a directory for the daemon's end-to-end tests.
+cli = ["dep:clap", "tokio/macros"]
+
+[[bin]]
+name = "uniffi-bindgen"
+required-features = ["bindgen"]
+
+[[bin]]
+name = "ome-device"
+required-features = ["cli"]
+
+[dependencies]
+chacha20poly1305 = { workspace = true }
+clap = { workspace = true, optional = true }
+hex = { workspace = true }
+ome-crypto = { workspace = true }
+ome-net = { workspace = true }
+ome-protocol = { workspace = true }
+ome-signer = { workspace = true }
+ome-wire = { workspace = true }
+os-rng = { workspace = true }
+rand_core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
+uniffi = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+libp2p = { workspace = true }
+ome-relay = { workspace = true }
+rand_chacha = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
