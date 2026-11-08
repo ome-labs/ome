@@ -928,6 +928,16 @@ export type Invite = {
 };
 
 /**
+ * A join request for an existing vault, as `keeper.joinRequest` and `membership.request` return it.
+ */
+export type JoinRequestText = {
+  /**
+   * `ome-join-v0:…`, signed by the newcomer's keeper; passed out of band to a member.
+   */
+  request: string;
+};
+
+/**
  * Params naming a lobby.
  */
 export type LobbyParams = {
@@ -2794,7 +2804,7 @@ export type FunctionParam = {
 };
 
 /**
- * A member to add.
+ * A member to add, as a verified join request names them.
  */
 export type Joiner = {
   /**
@@ -2824,9 +2834,9 @@ export type MembershipParams = {
    */
   remove: Array<number>;
   /**
-   * Members to add.
+   * Join requests (`membership.request` on the newcomers' daemons) of the members to add.
    */
-  add: Array<Joiner>;
+  add: Array<string>;
   /**
    * New spending threshold.
    */
@@ -2876,9 +2886,13 @@ export type MembershipPlan = {
    */
   next: CommitteeShape;
   /**
-   * Members that deal sub-shares.
+   * Members that deal sub-shares: members who stay.
    */
   dealers: Array<number>;
+  /**
+   * The members joining, from their verified join requests.
+   */
+  joiners: Array<Joiner>;
   /**
    * Whether it removes at most `t_v - 1` members.
    */
@@ -3105,6 +3119,7 @@ export interface KeeperMethods {
   "session.auth": { params: AuthParams; result: null };
   "events.subscribe": { params: Empty; result: null };
   "keeper.info": { params: Empty; result: KeeperInfo };
+  "keeper.joinRequest": { params: LobbyMemberParams; result: JoinRequestText };
   "vault.list": { params: Empty; result: Array<Vault> };
   "vault.status": { params: VaultParams; result: Vault };
   "vault.register": { params: RegisterParams; result: Vault };
@@ -3188,6 +3203,7 @@ export interface DaemonMethods {
   "contacts.list": { params: Empty; result: Array<Contact> };
   "contacts.put": { params: ContactParams; result: Array<Contact> };
   "contacts.remove": { params: AddressParams; result: Array<Contact> };
+  "membership.request": { params: Empty; result: JoinRequestText };
   "membership.plan": { params: MembershipParams; result: MembershipPlan };
   "membership.begin": { params: RotationRef; result: RotationState };
   "membership.get": { params: RotationRef; result: RotationState | null };

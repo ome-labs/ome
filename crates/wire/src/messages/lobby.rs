@@ -11,15 +11,21 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use super::{bounded, ceremony::addresses};
 use crate::{
-    Error, IdentityPublic,
-    codec::{from_canonical, to_canonical},
+    Error, IdentityPublic, KeeperIdentity,
+    codec::{canonical, from_canonical, to_canonical},
     limits::{MAX_INVITE_CHARS, MAX_MEMBERS, MAX_NAME_BYTES, MAX_SEALED_SECRETS_BYTES},
-    types::{WireField, WirePoint},
+    types::{Bytes64, WireField, WirePoint},
     version::{self, VersionRange},
 };
 
 /// Prefix of an invite's string form.
 pub const INVITE_PREFIX: &str = "ome-invite-v0:";
+
+/// Prefix of a join request's string form.
+pub const JOIN_REQUEST_PREFIX: &str = "ome-join-v0:";
+
+/// Domain of a join request's signature.
+const JOIN_REQUEST_DOMAIN: &str = "ome.join-request.v0";
 
 /// The header scope of a lobby's messages: its id zero-padded to 32 bytes.
 #[must_use]
@@ -157,6 +163,78 @@ impl Invite {
         let invite: Self = from_canonical(&bytes, MAX_INVITE_CHARS)?;
         invite.validate()?;
         Ok(invite)
+    }
+}
+
+/// A newcomer's request to join an existing vault, passed out of band to a member who plans the rotation: its name,
+/// signer key and keeper, signed by that keeper's identity so the keeper contact is the newcomer's own. The member
+/// still confirms out of band that the request came from the person they mean to add.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JoinRequest {
+    /// The newcomer.
+    pub member: LobbyMember,
+    /// Ed25519 signature by `member.keeper.identity` over the domain and `member`.
+    pub signature: Bytes64,
+}
+
+impl JoinRequest {
+    /// Signs `member` with `identity`, which must be the member's keeper.
+    ///
+    /// # Errors
+    /// [`Error::UnexpectedSigner`] for another keeper, or bounds errors.
+    pub fn sign(identity: &KeeperIdentity, member: LobbyMember) -> Result<Self, Error> {
+        if identity.public() != member.keeper.identity {
+            return Err(Error::UnexpectedSigner);
+        }
+        member.validate()?;
+        let signature = identity.sign(&canonical(&(JOIN_REQUEST_DOMAIN, &member))?);
+        Ok(Self { member, signature })
+    }
+
+    /// Checks the bounds and that the member's keeper signed it.
+    ///
+    /// # Errors
+    /// Bounds errors or [`Error::InvalidSignature`].
+    pub fn verify(&self) -> Result<(), Error> {
+        self.member.validate()?;
+        self.member.keeper.identity.verify(
+            &canonical(&(JOIN_REQUEST_DOMAIN, &self.member))?,
+            &self.signature,
+        )
+    }
+
+    /// The string form: [`JOIN_REQUEST_PREFIX`] followed by base64url (no padding) of the canonical bytes.
+    ///
+    /// # Errors
+    /// Bounds errors or [`Error::TooLarge`].
+    pub fn encode(&self) -> Result<String, Error> {
+        self.verify()?;
+        let text = format!(
+            "{JOIN_REQUEST_PREFIX}{}",
+            URL_SAFE_NO_PAD.encode(to_canonical(self, MAX_INVITE_CHARS)?)
+        );
+        if text.len() > MAX_INVITE_CHARS {
+            return Err(Error::TooLarge(text.len()));
+        }
+        Ok(text)
+    }
+
+    /// Parses and verifies the string form; surrounding whitespace is ignored.
+    ///
+    /// # Errors
+    /// [`Error::TooLarge`], [`Error::Malformed`], bounds errors or [`Error::InvalidSignature`].
+    pub fn decode(text: &str) -> Result<Self, Error> {
+        let text = text.trim();
+        if text.len() > MAX_INVITE_CHARS {
+            return Err(Error::TooLarge(text.len()));
+        }
+        let body = text
+            .strip_prefix(JOIN_REQUEST_PREFIX)
+            .ok_or(Error::Malformed)?;
+        let bytes = URL_SAFE_NO_PAD.decode(body).map_err(|_| Error::Malformed)?;
+        let request: Self = from_canonical(&bytes, MAX_INVITE_CHARS)?;
+        request.verify()?;
+        Ok(request)
     }
 }
 

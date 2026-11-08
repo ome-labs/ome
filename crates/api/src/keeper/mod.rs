@@ -13,8 +13,9 @@ pub use ceremonies::{
 };
 pub use events::KeeperEvent;
 pub use lobby::{
-    Invite, InviteParams, Lobby, LobbyJoinParams, LobbyJoined, LobbyMember, LobbyMemberParams,
-    LobbyOpenParams, LobbyOpened, LobbyParams, LobbyPlan, LobbyRole, LobbyStartParams, LobbyStatus,
+    Invite, InviteParams, JoinRequestText, Lobby, LobbyJoinParams, LobbyJoined, LobbyMember,
+    LobbyMemberParams, LobbyOpenParams, LobbyOpened, LobbyParams, LobbyPlan, LobbyRole,
+    LobbyStartParams, LobbyStatus,
 };
 pub use records::{
     BodyParams, IdParams, MailboxPolled, PayloadParams, PayloadStored, ProposalParams,
@@ -84,6 +85,8 @@ methods! {
     EventsSubscribe = "events.subscribe" (Empty) -> ();
     /// Who this keeper is.
     KeeperInfoGet = "keeper.info" (Empty) -> KeeperInfo;
+    /// A join request for an existing vault, naming this keeper and signed by it.
+    KeeperJoinRequest = "keeper.joinRequest" (LobbyMemberParams) -> JoinRequestText;
     /// Every vault the keeper knows.
     VaultList = "vault.list" (Empty) -> Vec<Vault>;
     /// One vault.

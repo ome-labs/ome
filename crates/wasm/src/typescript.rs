@@ -13,8 +13,7 @@ use crate::types::{
 };
 
 /// What the declarations import from `@ome-labs/api`.
-const SHARED: &str =
-    "ErrorKind, Hex32, Hex64, HexBytes, Manifest, MemberPartials, Point, Secret, VaultConfig";
+const SHARED: &str = "ErrorKind, Hex32, Hex64, HexBytes, Joiner, Manifest, MemberPartials, Point, Secret, VaultConfig";
 
 fn declare<T: TS + 'static>(out: &mut String, cfg: &Config) {
     let docs = T::docs().unwrap_or_default();

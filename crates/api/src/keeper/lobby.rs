@@ -41,6 +41,13 @@ pub struct LobbyOpened {
     pub invite: String,
 }
 
+/// A join request for an existing vault, as `keeper.joinRequest` and `membership.request` return it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct JoinRequestText {
+    /// `ome-join-v0:…`, signed by the newcomer's keeper; passed out of band to a member.
+    pub request: String,
+}
+
 /// Params of `lobby.join`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct LobbyJoinParams {

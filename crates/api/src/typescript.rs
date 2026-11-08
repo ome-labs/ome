@@ -49,7 +49,7 @@ fn types(cfg: &Config) -> Vec<Declared> {
         k::EcdhResult, k::BodyParams, k::ProposalStored, k::PayloadStored, k::IdParams, k::ProposalParams,
         k::PayloadParams, k::ReceiptParams, k::Receipt, k::TxParams, k::TxObserved, k::MailboxPolled,
         k::LobbyMemberParams, k::LobbyOpenParams, k::LobbyOpened, k::LobbyJoinParams, k::LobbyJoined,
-        k::InviteParams, k::Invite, k::LobbyParams, k::LobbyStartParams, k::LobbyRole, k::LobbyStatus,
+        k::InviteParams, k::Invite, k::JoinRequestText, k::LobbyParams, k::LobbyStartParams, k::LobbyRole, k::LobbyStatus,
         k::LobbyMember, k::LobbyPlan, k::Lobby, k::KeeperEvent,
         // Daemon.
         d::DaemonInfo, d::Settings, d::SettingsPatch, d::RelaysParams, d::Profile, d::ProfileCreateParams,

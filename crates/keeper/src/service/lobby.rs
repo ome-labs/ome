@@ -16,8 +16,8 @@ use ome_wire::{
     IdentityPublic, Message, SignedMessage,
     limits::{MAX_LOBBY_SECRETS_BYTES, MAX_MEMBERS, MAX_NAME_BYTES},
     messages::lobby::{
-        Invite, JoinSecret, KeeperContact, LobbyJoin, LobbyLeave, LobbyMember, LobbyPlan,
-        LobbyState, SealedSecrets, scope,
+        Invite, JoinRequest, JoinSecret, KeeperContact, LobbyJoin, LobbyLeave, LobbyMember,
+        LobbyPlan, LobbyState, SealedSecrets, scope,
     },
     types::{WireField, WirePoint, parse_field},
     version::SUPPORTED,
@@ -227,6 +227,20 @@ impl Keeper {
             .iter()
             .map(|text| from_json(text))
             .collect()
+    }
+
+    /// A join request for a vault that already exists: `name` and `signer_key` with this keeper as the newcomer's,
+    /// signed by this keeper's identity, in its string form.
+    ///
+    /// # Errors
+    /// Bounds errors.
+    pub fn join_request(&self, name: String, signer_key: WirePoint) -> Result<String> {
+        let member = LobbyMember {
+            name,
+            signer_key,
+            keeper: self.contact(),
+        };
+        Ok(JoinRequest::sign(&self.0.keys.identity, member)?.encode()?)
     }
 
     fn contact(&self) -> KeeperContact {

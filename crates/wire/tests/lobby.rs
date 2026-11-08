@@ -1,15 +1,15 @@
 //! Lobby founding: invites have exactly one string form and keep their secret out of logs, and a plan's protocol
-//! version must be one every member speaks.
+//! version must be one every member speaks. A join request is signed by the newcomer's own keeper.
 
 mod support;
 
 use ome_wire::{
     Error, Message, encode_body,
     limits::MAX_INVITE_CHARS,
-    messages::lobby::{INVITE_PREFIX, Invite},
+    messages::lobby::{INVITE_PREFIX, Invite, JOIN_REQUEST_PREFIX, JoinRequest},
     version::VersionRange,
 };
-use support::{invite, lobby_plan};
+use support::{identity, invite, lobby_member, lobby_plan};
 
 #[test]
 fn an_invite_round_trips_through_its_string_form() {
@@ -89,4 +89,27 @@ fn a_plan_needs_a_version_every_member_speaks() {
             field: "protocol_version"
         })
     );
+}
+
+#[test]
+fn a_join_request_is_signed_by_the_newcomers_keeper() {
+    let member = lobby_member(4);
+    let request = JoinRequest::sign(&identity(4), member.clone()).unwrap();
+    let text = request.encode().unwrap();
+    assert!(text.starts_with(JOIN_REQUEST_PREFIX));
+    assert_eq!(JoinRequest::decode(&text).unwrap().member, member);
+
+    // Another keeper cannot vouch for it, and an edited request no longer verifies.
+    assert_eq!(
+        JoinRequest::sign(&identity(5), member.clone()).err(),
+        Some(Error::UnexpectedSigner)
+    );
+    let renamed = JoinRequest {
+        member: ome_wire::messages::lobby::LobbyMember {
+            name: "someone else".to_owned(),
+            ..member
+        },
+        ..request
+    };
+    assert_eq!(renamed.verify().err(), Some(Error::InvalidSignature));
 }

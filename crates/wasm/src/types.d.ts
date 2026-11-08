@@ -5,6 +5,7 @@ import type {
   Hex32,
   Hex64,
   HexBytes,
+  Joiner,
   Manifest,
   MemberPartials,
   Point,

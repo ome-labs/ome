@@ -8,11 +8,11 @@ use ome_api::{
     jsonrpc::Request,
     keeper::{
         self as api, ApprovalsList, ApprovalsPut, AuditList, CeremonyDkg, CeremonyReshare,
-        CeremonyStatusGet, EcdhBatch, KeeperInfoGet, LobbyClose, LobbyInspect, LobbyJoin,
-        LobbyLeave, LobbyList, LobbyOpen, LobbyStart, LobbyStatusGet, MailboxPoll, PayloadsGet,
-        PayloadsPut, PeersStatus, ProposalsGet, ProposalsList, ProposalsPut, ReceiptsList,
-        ReceiptsPut, RejectionsList, RejectionsPut, VaultList, VaultObserveConfig, VaultObserveTx,
-        VaultRegister, VaultRetire, VaultStatusGet, VaultSync,
+        CeremonyStatusGet, EcdhBatch, KeeperInfoGet, KeeperJoinRequest, LobbyClose, LobbyInspect,
+        LobbyJoin, LobbyLeave, LobbyList, LobbyOpen, LobbyStart, LobbyStatusGet, MailboxPoll,
+        PayloadsGet, PayloadsPut, PeersStatus, ProposalsGet, ProposalsList, ProposalsPut,
+        ReceiptsList, ReceiptsPut, RejectionsList, RejectionsPut, VaultList, VaultObserveConfig,
+        VaultObserveTx, VaultRegister, VaultRetire, VaultStatusGet, VaultSync,
     },
 };
 use ome_protocol::vault::Config;
@@ -75,9 +75,14 @@ fn info(keeper: &Keeper) -> api::KeeperInfo {
 }
 
 /// Runs one method.
+#[expect(clippy::too_many_lines, reason = "one route per method")]
 pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, RpcError> {
     route! { request;
         KeeperInfoGet => |_| async { Ok(info(keeper)) };
+        KeeperJoinRequest => |p: api::LobbyMemberParams| async move {
+            let request = keeper.join_request(p.name, p.signer_key.try_into()?)?;
+            Ok(api::JoinRequestText { request })
+        };
         VaultList => |_| async { Ok(keeper.vaults().await.iter().map(convert::vault).collect()) };
         VaultStatusGet => |p: api::VaultParams| async move { Ok(convert::vault(&keeper.vault(p.vault.0).await?)) };
         VaultRegister => |p: api::RegisterParams| async move {

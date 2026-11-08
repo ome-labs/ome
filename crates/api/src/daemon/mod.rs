@@ -189,6 +189,8 @@ methods! {
     ContactsPut = "contacts.put" (ContactParams) -> Vec<Contact>;
     /// Removes a contact.
     ContactsRemove = "contacts.remove" (AddressParams) -> Vec<Contact>;
+    /// A join request for this member, to hand to a member of a vault it should join.
+    MembershipRequest = "membership.request" (Empty) -> crate::keeper::JoinRequestText;
     /// Plans a membership change (draft).
     MembershipPlanGet = "membership.plan" (MembershipParams) -> MembershipPlan;
     /// Starts a planned rotation (draft).

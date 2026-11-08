@@ -95,6 +95,24 @@ pub fn epoch_tagging_secret(
     })
 }
 
+/// The newcomer a join request names, after checking that its keeper signed it. The member planning the rotation
+/// still confirms out of band that it came from the person they mean to add.
+#[wasm_bindgen(js_name = decodeJoinRequest, unchecked_return_type = "Joiner")]
+pub fn decode_join_request(request: &str) -> Result<JsValue, JsValue> {
+    export(|| {
+        let member = ome_wire::messages::lobby::JoinRequest::decode(request)?.member;
+        Ok(ome_api::daemon::Joiner {
+            name: member.name,
+            signer_key: ome_api::Point::from(&member.signer_key),
+            keeper: ome_api::keeper::KeeperContact {
+                identity: member.keeper.identity.0.into(),
+                transport: member.keeper.transport.into(),
+                addresses: member.keeper.addresses,
+            },
+        })
+    })
+}
+
 /// The risks of spending threshold `k`, viewing threshold `t_v` and `n` members. None blocks a vault.
 #[wasm_bindgen(js_name = policyWarnings, unchecked_return_type = "Warning[]")]
 pub fn policy_warnings(

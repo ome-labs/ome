@@ -7,7 +7,7 @@ use ts_rs::TS;
 
 use crate::{Hex32, Point, keeper::KeeperContact};
 
-/// A member to add.
+/// A member to add, as a verified join request names them.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Joiner {
@@ -27,8 +27,8 @@ pub struct MembershipParams {
     pub vault: Hex32,
     /// Member indices to remove.
     pub remove: Vec<u32>,
-    /// Members to add.
-    pub add: Vec<Joiner>,
+    /// Join requests (`membership.request` on the newcomers' daemons) of the members to add.
+    pub add: Vec<String>,
     /// New spending threshold.
     pub threshold: u32,
     /// New viewing threshold.
@@ -59,8 +59,10 @@ pub struct MembershipPlan {
     pub current: CommitteeShape,
     /// After.
     pub next: CommitteeShape,
-    /// Members that deal sub-shares.
+    /// Members that deal sub-shares: members who stay.
     pub dealers: Vec<u32>,
+    /// The members joining, from their verified join requests.
+    pub joiners: Vec<Joiner>,
     /// Whether it removes at most `t_v - 1` members.
     pub within_removal_limit: bool,
     /// Why it cannot run, if it cannot.
