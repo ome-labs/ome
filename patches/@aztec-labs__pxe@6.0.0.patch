@@ -1,0 +1,182 @@
+diff --git a/dest/contract_function_simulator/oracle/private_execution_oracle.js b/dest/contract_function_simulator/oracle/private_execution_oracle.js
+index 9d67c0a57e1f33d544273de70bff5308dc804436..512be61e78fbc56e92072d860997a8daeacd3b66 100644
+--- a/dest/contract_function_simulator/oracle/private_execution_oracle.js
++++ b/dest/contract_function_simulator/oracle/private_execution_oracle.js
+@@ -179,7 +179,8 @@ import { UtilityExecutionOracle } from './utility_execution_oracle.js';
+         return classId;
+     }
+     /** Whether this is an unconstrained delivery to one of the wallet's own accounts (a self-send). */ #isUnconstrainedSelfSend(recipient, deliveryMode) {
+-        return deliveryMode === AppTaggingSecretKind.UNCONSTRAINED ? this.keyStore.hasAccount(recipient) : Promise.resolve(false);
++        // ome: for threshold accounts the wallet hook chooses the self-send strategy (per-epoch tagging secrets).
++        return deliveryMode === AppTaggingSecretKind.UNCONSTRAINED ? this.keyStore.hasAccount(recipient).then(async (own)=>own && !await this.keyStore.isThresholdAccount?.(recipient)) : Promise.resolve(false);
+     }
+     /** Resolves a wallet-provided {@link TaggingSecretStrategy} into the app-siloed secret handed to the contract. */ async #resolveTaggingSecretStrategy(strategy, sender, recipient) {
+         // PXE only performs the derivation; it does not reject a strategy that is unsound for the delivery mode (e.g. an
+@@ -232,8 +233,12 @@ import { UtilityExecutionOracle } from './utility_execution_oracle.js';
+    */ async getAppTaggingSecret(sender, recipient) {
+         assertAllowedScope(sender, this.scopes);
+         const senderCompleteAddress = await this.getCompleteAddressOrFail(sender);
+-        const senderIvsk = await this.keyStore.getMasterIncomingViewingSecretKey(sender);
+-        const extendedSecret = await AppTaggingSecret.computeViaEcdh(senderCompleteAddress, senderIvsk, recipient, this.contractAddress, recipient);
++        // ome: a threshold sender's key store computes `address_secret · recipient_address_point`.
++        const extendedSecret = await this.keyStore.isThresholdAccount?.(sender) ? await recipient.isValid() ? await AppTaggingSecret.computeDirectional((await this.keyStore.addressSecretMul(sender, [
++                await recipient.toAddressPoint()
++            ], {
++                purpose: 'sender-tag'
++            }))[0], this.contractAddress, recipient) : undefined : await AppTaggingSecret.computeViaEcdh(senderCompleteAddress, await this.keyStore.getMasterIncomingViewingSecretKey(sender), recipient, this.contractAddress, recipient);
+         if (!extendedSecret) {
+             this.logger.warn(`Computing a tagging secret for invalid recipient ${recipient} - returning no secret`, {
+                 contractAddress: this.contractAddress
+diff --git a/dest/contract_function_simulator/oracle/utility_execution_oracle.js b/dest/contract_function_simulator/oracle/utility_execution_oracle.js
+index a38a3e4e280cb6691ffa317a69c36c16a6e1a454..8dd947c0d960a626d0d063748179e844ffb88ba3 100644
+--- a/dest/contract_function_simulator/oracle/utility_execution_oracle.js
++++ b/dest/contract_function_simulator/oracle/utility_execution_oracle.js
+@@ -12,7 +12,7 @@ import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+ import { siloNullifier } from '@aztec-labs/stdlib/hash';
+ import { MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/client';
+ import { computeAddressSecret, hashPublicKey } from '@aztec-labs/stdlib/keys';
+-import { AppTaggingSecret, FlatPublicLogs, appSiloEcdhSharedSecret } from '@aztec-labs/stdlib/logs';
++import { AppTaggingSecret, FlatPublicLogs, appSiloEcdhSharedSecret, appSiloEcdhSharedSecretPoint } from '@aztec-labs/stdlib/logs';
+ import { getL1ToL2MessageWitness, lookUpL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
+ import { NoteStatus } from '@aztec-labs/stdlib/note';
+ import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+@@ -617,6 +617,13 @@ import { buildACIRCallback } from './acir_callback.js';
+             });
+             return EphemeralArray.fromValues(this.ephemeralArrayService, []);
+         }
++        // ome: a threshold account's key store computes `address_secret · P` for the whole batch.
++        if (await this.keyStore.isThresholdAccount?.(address)) {
++            const shared = await this.keyStore.addressSecretMul(address, ephPks.readAll(this.ephemeralArrayService).map(({ x, y })=>new Point(x, y)), {
++                purpose: 'decryption'
++            });
++            return EphemeralArray.fromValues(this.ephemeralArrayService, await allToCompletion(shared.map((point)=>appSiloEcdhSharedSecretPoint(point, this.contractAddress))));
++        }
+         const ivpkMHash = await hashPublicKey(recipientCompleteAddress.publicKeys.ivpkM);
+         const ivskM = await this.keyStore.getMasterSecretKey(ivpkMHash);
+         const addressSecret = await computeAddressSecret(await recipientCompleteAddress.getPreaddress(), ivskM);
+diff --git a/dest/entrypoints/pxe_creation_options.d.ts b/dest/entrypoints/pxe_creation_options.d.ts
+index 85b97cf0a021eec27744edf3774f5dbedd1659e4..22fced0de83cc92f5d746943300c12ed12bbe2fc 100644
+--- a/dest/entrypoints/pxe_creation_options.d.ts
++++ b/dest/entrypoints/pxe_creation_options.d.ts
+@@ -1,5 +1,6 @@
+ import type { BBPrivateKernelProverOptions } from '@aztec-labs/bb-prover/client';
+ import type { Logger } from '@aztec-labs/foundation/log';
++import type { KeyStore } from '@aztec-labs/key-store';
+ import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+ import type { CircuitSimulator } from '@aztec-labs/simulator/client';
+ import type { AztecNodeDebug, PrivateKernelProver } from '@aztec-labs/stdlib/interfaces/client';
+@@ -20,6 +21,12 @@ export type PXECreationOptions = {
+     hooks?: ExecutionHooks;
+     /** Contracts to preload on startup. Replaces the default when set. */
+     preloadedContractsProvider?: PreloadedContractsProvider;
++    /**
++     * ome: builds the key store over the PXE's store instead of the default `KeyStore`. A key store that implements
++     * `isThresholdAccount(account)` and `addressSecretMul(account, points, { purpose })` serves `address_secret · P` for
++     * accounts whose incoming viewing secret it does not hold.
++     */
++    createKeyStore?: (store: AztecAsyncKVStore) => KeyStore;
+     /**
+      * Optional debug API client for the same node. When provided, public function signatures are registered so the
+      * node can produce named public-execution stack traces. Only available on nodes started with debug endpoints
+diff --git a/dest/entrypoints/server/utils.js b/dest/entrypoints/server/utils.js
+index 722daa6691a70ad865041760116baa8501969ee4..abaf43786aa6968e7d8a5aef65936d16382bcd2b 100644
+--- a/dest/entrypoints/server/utils.js
++++ b/dest/entrypoints/server/utils.js
+@@ -80,7 +80,8 @@ export async function createPXE(aztecNode, config, options = {
+         preloadedContractsProvider,
+         config: configWithContracts,
+         loggerOrSuffix: pxeLogger,
+-        hooks: options.hooks
++        hooks: options.hooks,
++        createKeyStore: options.createKeyStore
+     });
+     return pxe;
+ }
+diff --git a/dest/logs/log_service.js b/dest/logs/log_service.js
+index ffcaabcd46fb45f5eb7946e6eba018057f8c267a..a72ee43c7ce9192115300c3240bc7524b0ef2293 100644
+--- a/dest/logs/log_service.js
++++ b/dest/logs/log_service.js
+@@ -174,7 +174,8 @@ export class LogService {
+             this.log.warn(`Skipping sender-derived tag retrieval for ${recipient.toString()} due to unknown address preimage`);
+             return [];
+         }
+-        const recipientIvsk = await this.keyStore.getMasterIncomingViewingSecretKey(recipient);
++        // ome: threshold accounts have no ivsk; their tagging secrets come from the key store below.
++        const recipientIvsk = await this.keyStore.isThresholdAccount?.(recipient) ? undefined : await this.keyStore.getMasterIncomingViewingSecretKey(recipient);
+         const [senderPoints, registeredSecrets] = await allToCompletion([
+             this.#getSecretsForSenders(recipientCompleteAddress, recipientIvsk),
+             this.taggingSecretSourcesStore.getSharedSecretsForRecipient(recipient)
+@@ -206,7 +207,11 @@ export class LogService {
+             ...await this.keyStore.getAccounts()
+         ];
+         return allToCompletion(allSenders.map(async (sender)=>{
+-            const taggingSecretPoint = await computeSharedTaggingSecret(recipientCompleteAddress, recipientIvsk, sender);
++            const taggingSecretPoint = recipientIvsk === undefined ? await sender.isValid() ? (await this.keyStore.addressSecretMul(recipientCompleteAddress.address, [
++                await sender.toAddressPoint()
++            ], {
++                purpose: 'tagging'
++            }))[0] : undefined : await computeSharedTaggingSecret(recipientCompleteAddress, recipientIvsk, sender);
+             if (!taggingSecretPoint) {
+                 // Note that all senders originate from either the TaggingSecretSourcesStore or the KeyStore.
+                 throw new Error(`Failed to compute a tagging secret for sender ${sender} - this implies this is an invalid address, which should not happen as they have been previously registered in PXE.`);
+diff --git a/dest/pxe.js b/dest/pxe.js
+index b4c3cd5337020ddef6a930058e66636d78d3f435..c893403ec60cdc6d16033b81c482cbb741110d04 100644
+--- a/dest/pxe.js
++++ b/dest/pxe.js
+@@ -96,7 +96,7 @@ import { persistSenderTaggingIndexRangesForTx } from './tagging/index.js';
+    * can be contacted.
+    *
+    * @returns A promise that resolves PXE is ready to be used.
+-   */ static async create({ node, nodeDebug, store, proofCreator, simulator, protocolContractsProvider, preloadedContractsProvider, config, loggerOrSuffix, hooks }) {
++   */ static async create({ node, nodeDebug, store, proofCreator, simulator, protocolContractsProvider, preloadedContractsProvider, config, loggerOrSuffix, hooks, createKeyStore }) {
+         // Extract bindings from the logger, or use empty bindings if a string suffix is provided.
+         const bindings = loggerOrSuffix && typeof loggerOrSuffix !== 'string' ? loggerOrSuffix.getBindings() : undefined;
+         const log = !loggerOrSuffix || typeof loggerOrSuffix === 'string' ? createLogger(loggerOrSuffix ? `pxe:service:${loggerOrSuffix}` : `pxe:service`) : loggerOrSuffix;
+@@ -109,7 +109,7 @@ import { persistSenderTaggingIndexRangesForTx } from './tagging/index.js';
+         // not return a genesis block (older node or test fixture) we fall back to the static constant.
+         const initialBlockHash = (await node.getBlock(BlockNumber.ZERO))?.hash ?? GENESIS_BLOCK_HEADER_HASH;
+         const proverEnabled = config.proverEnabled !== undefined ? config.proverEnabled : info.realProofs;
+-        const { addressStore, privateEventStore, contractStore, noteStore, anchorBlockStore, senderTaggingStore, taggingSecretSourcesStore, recipientTaggingStore, capsuleStore, keyStore, l2TipsStore, factStore } = openPxeStores(store, initialBlockHash);
++        const { addressStore, privateEventStore, contractStore, noteStore, anchorBlockStore, senderTaggingStore, taggingSecretSourcesStore, recipientTaggingStore, capsuleStore, keyStore, l2TipsStore, factStore } = openPxeStores(store, initialBlockHash, createKeyStore);
+         // Every PXE consumer reads through this one wrapper, so a read cached by one is served to the rest. Only
+         // immutable, hash-pinned reads are cached (the rule lives on `withCache`), which makes it safe regardless of
+         // the consumer's anchor block; the block synchronizer wipes it on anchor updates to bound memory.
+@@ -628,9 +628,12 @@ import { persistSenderTaggingIndexRangesForTx } from './tagging/index.js';
+         if (!completeAddress || !await this.keyStore.hasAccount(recipient)) {
+             throw new Error(`Recipient ${recipient} is not an account of this PXE. A handshake's shared secret can only be derived for an account whose keys are held.`);
+         }
+-        const ivskM = await this.keyStore.getMasterIncomingViewingSecretKey(recipient);
+-        const addressSecret = await computeAddressSecret(await completeAddress.getPreaddress(), ivskM);
+-        const rawSecret = await deriveEcdhSharedSecretPoint(addressSecret, ephPkPoint);
++        // ome: a threshold account's key store computes `address_secret · ephPk` without holding ivsk.
++        const rawSecret = await this.keyStore.isThresholdAccount?.(recipient) ? (await this.keyStore.addressSecretMul(recipient, [
++            ephPkPoint
++        ], {
++            purpose: 'handshake'
++        }))[0] : await deriveEcdhSharedSecretPoint(await computeAddressSecret(await completeAddress.getPreaddress(), await this.keyStore.getMasterIncomingViewingSecretKey(recipient)), ephPkPoint);
+         return protectFromForgery(rawSecret, ephPkPoint, await recipient.toAddressPoint());
+     }
+     /** Registers a resolved shared secret scoped to a recipient. Returns whether it was newly added. */ async #registerSharedSecret(recipient, kind, secret) {
+diff --git a/dest/storage/open_pxe_stores.js b/dest/storage/open_pxe_stores.js
+index 9a8b0f8a8618f48985fcccf4f9da680c4368b296..6fb74690ae1b227a54153a21a693217d5e8242d6 100644
+--- a/dest/storage/open_pxe_stores.js
++++ b/dest/storage/open_pxe_stores.js
+@@ -11,7 +11,7 @@ import { RecipientTaggingStore, SenderTaggingStore, TaggingSecretSourcesStore }
+ /**
+  * Opens every PXE sub-store against the given backing store. The `initialBlockHash` seeds the
+  * `L2TipsKVStore` so it agrees with the node's archiver on the dynamic genesis header hash.
+- */ export function openPxeStores(store, initialBlockHash) {
++ */ export function openPxeStores(store, initialBlockHash, createKeyStore) {
+     return {
+         addressStore: new AddressStore(store),
+         privateEventStore: new PrivateEventStore(store),
+@@ -22,7 +22,8 @@ import { RecipientTaggingStore, SenderTaggingStore, TaggingSecretSourcesStore }
+         taggingSecretSourcesStore: new TaggingSecretSourcesStore(store),
+         recipientTaggingStore: new RecipientTaggingStore(store),
+         capsuleStore: new CapsuleStore(store),
+-        keyStore: new KeyStore(store),
++        // ome: injectable key store (threshold viewing accounts).
++        keyStore: createKeyStore ? createKeyStore(store) : new KeyStore(store),
+         l2TipsStore: new L2TipsKVStore(store, 'pxe', initialBlockHash),
+         factStore: new FactStore(store)
+     };

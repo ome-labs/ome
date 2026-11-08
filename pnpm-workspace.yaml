@@ -6,10 +6,18 @@ packages:
   - tools/*
 
 catalog:
+  "@aztec-foundation/bb.js": 6.0.0
+  "@aztec-labs/accounts": 6.0.0
+  "@aztec-labs/aztec.js": 6.0.0
   "@aztec-labs/constants": 6.0.0
   "@aztec-labs/entrypoints": 6.0.0
   "@aztec-labs/foundation": 6.0.0
+  "@aztec-labs/key-store": 6.0.0
+  "@aztec-labs/kv-store": 6.0.0
+  "@aztec-labs/noir-contracts.js": 6.0.0
+  "@aztec-labs/pxe": 6.0.0
   "@aztec-labs/stdlib": 6.0.0
+  "@aztec-labs/wallet-sdk": 6.0.0
   "@commitlint/cli": 21.2.4
   "@commitlint/config-conventional": 21.2.4
   "@types/node": 26.6.6
@@ -31,3 +39,6 @@ allowBuilds:
   lmdb: false
   msgpackr-extract: false
   protobufjs: false
+
+patchedDependencies:
+  "@aztec-labs/pxe@6.0.0": patches/@aztec-labs__pxe@6.0.0.patch

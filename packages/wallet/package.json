@@ -1,0 +1,39 @@
+{
+  "name": "@ome-labs/wallet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hosts Aztec's PXE for Ome vaults: the threshold key store, vault deployment and the k-of-n entrypoint",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:e2e": "vitest run -c vitest.e2e.config.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aztec-foundation/bb.js": "catalog:",
+    "@aztec-labs/accounts": "catalog:",
+    "@aztec-labs/aztec.js": "catalog:",
+    "@aztec-labs/entrypoints": "catalog:",
+    "@aztec-labs/foundation": "catalog:",
+    "@aztec-labs/key-store": "catalog:",
+    "@aztec-labs/kv-store": "catalog:",
+    "@aztec-labs/pxe": "catalog:",
+    "@aztec-labs/stdlib": "catalog:",
+    "@aztec-labs/wallet-sdk": "catalog:",
+    "@ome-labs/api": "workspace:*",
+    "@ome-labs/contracts": "workspace:*",
+    "@ome-labs/wasm": "workspace:*"
+  },
+  "devDependencies": {
+    "@aztec-labs/noir-contracts.js": "catalog:",
+    "@types/node": "catalog:",
+    "klarity": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
