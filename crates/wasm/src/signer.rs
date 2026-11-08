@@ -120,9 +120,14 @@ impl UnlockedSigner {
         })
     }
 
-    /// Approves a membership rotation the member reviewed: the payload must be exactly the `rotate_membership` call
-    /// for `rotation`, and the rotation must pass the contract's rules and hold the vault's key.
+    /// Approves a membership rotation the member reviewed: the payload must be the `rotate_membership` call for
+    /// `rotation`, plus at most fee payment calls to one of `feePayers` (the fee payer contracts this member's own
+    /// configuration trusts), and the rotation must pass the contract's rules and hold the vault's key.
     #[wasm_bindgen(js_name = approveRotation, unchecked_return_type = "HexBytes")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "mirrors ome_signer::approve_rotation"
+    )]
     pub fn approve_rotation(
         &self,
         #[wasm_bindgen(unchecked_param_type = "VaultInput")] vault: JsValue,
@@ -130,10 +135,15 @@ impl UnlockedSigner {
         #[wasm_bindgen(unchecked_param_type = "HexBytes")] proposal: &str,
         #[wasm_bindgen(unchecked_param_type = "HexBytes")] payload: &str,
         #[wasm_bindgen(unchecked_param_type = "Rotation")] rotation: JsValue,
+        #[wasm_bindgen(js_name = feePayers, unchecked_param_type = "Hex32[]")] fee_payers: JsValue,
         now: f64,
     ) -> Result<JsValue, JsValue> {
         export(|| {
             let rotation: Rotation = from_js(rotation)?;
+            let fee_payers: Vec<[u8; 32]> = from_js::<Vec<ome_api::Hex32>>(fee_payers)?
+                .into_iter()
+                .map(|address| address.0)
+                .collect();
             let approval = ome_signer::approve_rotation(
                 &self.key,
                 &convert::vault(from_js(vault)?)?,
@@ -141,6 +151,7 @@ impl UnlockedSigner {
                 &convert::proposal(proposal)?,
                 &convert::payload(payload)?,
                 &crate::membership::rotation(rotation)?,
+                &fee_payers,
                 seconds(now)?,
                 &mut rng(),
             )?;

@@ -20,6 +20,7 @@ fn a_reviewed_reshare_is_approved() {
         &proposal,
         &payload,
         &rotation,
+        &[],
         NOW,
         &mut f.rng,
     )
@@ -55,10 +56,43 @@ fn a_rotation_cannot_be_approved_as_an_ordinary_proposal() {
             &proposal,
             &payload,
             &rotation,
+            &[],
             NOW,
             &mut f.rng
         )
         .err(),
+        Some(Error::UnexpectedCall(hex::encode(transfer(1).to)))
+    );
+}
+
+#[test]
+fn a_rotation_may_also_pay_a_trusted_fee_payer_and_nothing_else() {
+    let mut f = fixture();
+    let rotation = rotation(&mut f);
+    let fee = transfer(0);
+    let approve_with = |f: &mut support::Fixture, calls, fee_payers: &[_]| {
+        let (proposal, payload) = propose(f, calls);
+        approve_rotation(
+            &f.members[0],
+            &f.vault,
+            chain(),
+            &proposal,
+            &payload,
+            &rotation,
+            fee_payers,
+            NOW,
+            &mut f.rng,
+        )
+    };
+
+    let call = rotation.to_call(&f.vault);
+    assert!(approve_with(&mut f, vec![fee.clone(), call.clone()], &[fee.to]).is_ok());
+    assert_eq!(
+        approve_with(&mut f, vec![fee.clone(), call.clone()], &[]).err(),
+        Some(Error::UnexpectedCall(hex::encode(fee.to)))
+    );
+    assert_eq!(
+        approve_with(&mut f, vec![call.clone(), call], &[fee.to]).err(),
         Some(Error::NotARotation)
     );
 }
@@ -78,6 +112,7 @@ fn only_the_reviewed_rotation_is_signed() {
             &proposal,
             &payload,
             &reviewed,
+            &[],
             NOW,
             &mut f.rng
         )
@@ -104,6 +139,7 @@ fn a_rotation_that_keeps_the_old_shares_is_not_signed() {
             &proposal,
             &payload,
             &stale,
+            &[],
             NOW,
             &mut f.rng
         )

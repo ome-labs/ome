@@ -28,9 +28,12 @@ pub enum Error {
     /// The payload calls `rotate_membership`; approve it with `approve_rotation` so its shares are checked.
     #[error("this proposal rotates the vault's membership; review it as a rotation")]
     RotationNeedsReview,
-    /// `approve_rotation` was given a proposal that is not exactly one `rotate_membership` call.
+    /// `approve_rotation` was given a proposal without exactly one `rotate_membership` call.
     #[error("this proposal is not a single rotate_membership call")]
     NotARotation,
+    /// A rotation proposal carries a call to this contract (hex), which is neither the rotation nor a trusted fee payer.
+    #[error("a rotation may only also pay its fee; it calls 0x{0}")]
+    UnexpectedCall(String),
     /// The proposal performs a different rotation than the one reviewed.
     #[error("the proposal performs a different rotation than the one reviewed")]
     RotationMismatch,

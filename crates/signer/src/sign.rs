@@ -10,7 +10,7 @@ use ome_protocol::{
 use ome_wire::{
     limits::MAX_REASON_BYTES,
     messages::proposals::{Approval, Proposal, ProposalPayload, Rejection},
-    types::WireSignature,
+    types::{WireField, WireSignature},
 };
 use rand_core::CryptoRng;
 
@@ -47,9 +47,14 @@ pub fn approve<S: Signer>(
 /// one `rotate_membership` call performing `rotation`, and `rotation` passes [`check_rotation`] (the contract's rules,
 /// shares that hold the vault's key, and fresh shares).
 ///
+/// The payload may also carry the fee payment: calls to one of `fee_payers`, the fee payer contracts the member's
+/// own configuration trusts (never the proposer's). A sponsored fee payer is paid through such a call, so without it no
+/// rotation could pay its fee without the vault paying publicly. Any other call is refused, so a rotation cannot carry
+/// a transfer.
+///
 /// # Errors
-/// [`Error::NotASigner`], [`Error::NotARotation`], [`Error::RotationMismatch`], or the protocol error that refused the
-/// proposal or rotation.
+/// [`Error::NotASigner`], [`Error::NotARotation`], [`Error::UnexpectedCall`], [`Error::RotationMismatch`], or the
+/// protocol error that refused the proposal or rotation.
 #[allow(clippy::too_many_arguments)]
 pub fn approve_rotation<S: Signer>(
     signer: &S,
@@ -58,16 +63,21 @@ pub fn approve_rotation<S: Signer>(
     proposal: &Proposal,
     payload: &ProposalPayload,
     rotation: &Rotation,
+    fee_payers: &[WireField],
     now: u64,
     rng: &mut impl CryptoRng,
 ) -> Result<Approval, Error> {
     let slot = slot_of(signer, vault)?;
     let request = check_proposal(vault, chain, proposal, payload, now)?;
-    let [call] = request.calls.as_slice() else {
+    let (rotations, others): (Vec<_>, Vec<_>) = request
+        .calls
+        .iter()
+        .partition(|call| is_rotation_call(call, vault));
+    let [call] = rotations.as_slice() else {
         return Err(Error::NotARotation);
     };
-    if !is_rotation_call(call, vault) {
-        return Err(Error::NotARotation);
+    if let Some(other) = others.iter().find(|call| !fee_payers.contains(&call.to)) {
+        return Err(Error::UnexpectedCall(hex::encode(other.to)));
     }
     if &Rotation::from_call(call, vault)? != rotation {
         return Err(Error::RotationMismatch);
