@@ -65,6 +65,24 @@ jobs:
         run: scripts/wasm-core.sh
       - run: scripts/cargo.sh deny check
 
+  api:
+    name: API types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Regenerates @ome-labs/api from crates/api and fails if the committed declarations differ.
+      - run: pnpm --filter @ome-labs/api generate
+      - run: git diff --exit-code -- packages/api
+
   noir:
     name: Noir
     runs-on: ubuntu-latest

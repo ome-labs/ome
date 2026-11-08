@@ -1,0 +1,20 @@
+{
+  "name": "@ome-labs/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript types of the Ome keeper and daemon APIs, generated from crates/api",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "cargo run --quiet --manifest-path ../../crates/Cargo.toml -p ome-api --example typescript > src/generated/api.ts && oxfmt src/generated",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "klarity": "catalog:",
+    "oxfmt": "catalog:",
+    "typescript": "catalog:"
+  }
+}
