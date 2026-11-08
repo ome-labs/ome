@@ -1,424 +1,180 @@
-use ome_wire::messages::ecdh::EcdhPurpose;
-use serde::Deserialize;
-use serde_json::{Value, json};
+//! Every keeper method except `session.auth` and `events.subscribe`, which the server handles: params and results are
+//! the ome-api types, and a keeper error becomes its API error kind.
 
-use super::json::{
-    JsonCeremony, JsonDkgResult, JsonManifest, JsonMemberPartials, JsonNewMember, JsonParticipant,
-    JsonPoint, JsonReshareResult, hex32, parse_bytes, parse32,
+use std::future::Future;
+
+use ome_api::{
+    API_VERSION, ErrorKind, Method, RpcError,
+    jsonrpc::Request,
+    keeper::{
+        self as api, ApprovalsList, ApprovalsPut, AuditList, CeremonyDkg, CeremonyReshare,
+        CeremonyStatusGet, EcdhBatch, KeeperInfoGet, LobbyClose, LobbyInspect, LobbyJoin,
+        LobbyLeave, LobbyList, LobbyOpen, LobbyStart, LobbyStatusGet, MailboxPoll, PayloadsGet,
+        PayloadsPut, PeersStatus, ProposalsGet, ProposalsList, ProposalsPut, ReceiptsList,
+        ReceiptsPut, RejectionsList, RejectionsPut, VaultList, VaultObserveConfig, VaultObserveTx,
+        VaultRegister, VaultRetire, VaultStatusGet, VaultSync,
+    },
 };
-use crate::{
-    DkgResult, Error, Keeper, MemberReachability, ReshareRequest, ReshareResult, Result, VaultInfo,
-    ceremony::dkg::DkgParams, store::ReceiptEntry,
-};
-use ome_net::identity::peer_id;
 use ome_protocol::vault::Config;
-use ome_wire::types::parse_field;
+use ome_wire::{messages::ecdh::EcdhPurpose, types::parse_field};
+use serde_json::Value;
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct VaultParam {
-    vault: String,
+use super::{convert, lobby};
+use crate::{Keeper, ReshareRequest, Result, ceremony::dkg::DkgParams};
+
+/// Most audit entries one call returns.
+const MAX_AUDIT: u32 = 10_000;
+
+/// Reads `M`'s params, runs `handler` and serializes its result.
+async fn run<M, H, F>(request: &Request, handler: H) -> Result<Value, RpcError>
+where
+    M: Method,
+    H: FnOnce(M::Params) -> F,
+    F: Future<Output = Result<M::Result>>,
+{
+    let params = request
+        .params::<M::Params>()
+        .map_err(|e| RpcError::new(ErrorKind::Invalid, format!("params: {e}")))?;
+    let result = handler(params).await?;
+    serde_json::to_value(result).map_err(|e| RpcError::new(ErrorKind::Failed, e.to_string()))
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SessionParam {
-    session: String,
+macro_rules! route {
+    ($request:ident; $($marker:ident => $handler:expr;)*) => {
+        match $request.method.as_str() {
+            $(<$marker as Method>::NAME => run::<$marker, _, _>($request, $handler).await,)*
+            other => Err(RpcError::new(ErrorKind::MethodNotFound, format!("unknown method {other}"))),
+        }
+    };
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DkgStart {
-    session: String,
-    threshold: u32,
-    members: Vec<JsonParticipant>,
+fn hex_bodies(bodies: Vec<Vec<u8>>) -> Vec<ome_api::HexBytes> {
+    bodies.into_iter().map(Into::into).collect()
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ReshareStart {
-    session: String,
-    vault: String,
-    current: Option<JsonManifest>,
-    dealers: Vec<u32>,
-    new_threshold: u32,
-    new_spending_threshold: u32,
-    new_members: Vec<JsonNewMember>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Register {
-    session: String,
-    manifest: JsonManifest,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ObserveConfig {
-    vault: String,
-    /// The vault's config note as the daemon read it.
-    threshold: u32,
-    signer_count: u32,
-    version: u32,
-    signer_set_commitment: String,
-    viewing_threshold: u32,
-    committee_commitment: String,
-}
-
-impl ObserveConfig {
-    fn config(&self) -> Result<Config> {
-        Ok(Config {
-            threshold: self.threshold,
-            signer_count: self.signer_count,
-            version: self.version,
-            signer_set_commitment: parse_field(&parse32(&self.signer_set_commitment)?)?,
-            viewing_threshold: self.viewing_threshold,
-            committee_commitment: parse_field(&parse32(&self.committee_commitment)?)?,
-        })
+const fn purpose(purpose: api::EcdhPurpose) -> EcdhPurpose {
+    match purpose {
+        api::EcdhPurpose::Decryption => EcdhPurpose::NoteDecryption,
+        api::EcdhPurpose::Tagging => EcdhPurpose::RecipientTag,
+        api::EcdhPurpose::SenderTag => EcdhPurpose::SenderTag,
+        api::EcdhPurpose::Handshake => EcdhPurpose::Handshake,
     }
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PayloadParam {
-    vault: String,
-    hash: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ObserveTx {
-    vault: String,
-    tx_hash: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct EcdhBatch {
-    vault: String,
-    epoch: u32,
-    purpose: String,
-    points: Vec<JsonPoint>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Body {
-    vault: String,
-    body: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdParam {
-    id: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProposalParam {
-    proposal: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Receipt {
-    vault: String,
-    proposal: String,
-    tx_hash: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Audit {
-    vault: String,
-    limit: Option<u32>,
-}
-
-fn params<T: for<'de> Deserialize<'de>>(value: Value) -> Result<T> {
-    serde_json::from_value(value).map_err(|e| Error::Invalid(format!("params: {e}")))
-}
-
-fn vault_json(info: &VaultInfo) -> Value {
-    json!({
-        "manifest": JsonManifest::from(&info.manifest),
-        "status": info.status,
-        "index": info.index,
-        "serving": info.serving,
+fn config(config: api::VaultConfig) -> Result<Config> {
+    Ok(Config {
+        threshold: config.threshold,
+        signer_count: config.signer_count,
+        version: config.version,
+        signer_set_commitment: parse_field(&config.signer_set_commitment.0)?,
+        viewing_threshold: config.viewing_threshold,
+        committee_commitment: parse_field(&config.committee_commitment.0)?,
     })
 }
 
-fn reachability_json(member: &MemberReachability) -> Value {
-    json!({
-        "index": member.index,
-        "identity": hex32(&member.identity.0),
-        "peerId": peer_id(&member.identity).ok().map(|id| id.to_string()),
-        "you": member.you,
-        "connected": member.status.connected,
-        "relayed": member.status.relayed,
-        "lastSeen": member.status.last_seen,
-        "rttMs": member.status.rtt_ms,
-    })
-}
-
-fn receipt_json(receipt: &ReceiptEntry) -> Value {
-    json!({
-        "proposal": hex32(&receipt.proposal),
-        "txHash": hex32(&receipt.tx_hash),
-        "at": receipt.at,
-    })
-}
-
-fn purpose(label: &str) -> Result<EcdhPurpose> {
-    match label {
-        "decryption" => Ok(EcdhPurpose::NoteDecryption),
-        "tagging" => Ok(EcdhPurpose::RecipientTag),
-        "sender-tag" => Ok(EcdhPurpose::SenderTag),
-        "handshake" => Ok(EcdhPurpose::Handshake),
-        other => Err(Error::Invalid(format!("unknown purpose {other}"))),
+fn info(keeper: &Keeper) -> api::KeeperInfo {
+    let identity = keeper.identity();
+    api::KeeperInfo {
+        api_version: API_VERSION,
+        version: env!("CARGO_PKG_VERSION").into(),
+        identity: identity.0.into(),
+        transport: keeper.transport_key().into(),
+        peer_id: convert::identity_peer_id(&identity),
+        addresses: keeper.addresses().to_vec(),
     }
 }
 
-/// Runs one method (everything except `session.auth` and `events.subscribe`, handled by the server).
-#[expect(clippy::too_many_lines, reason = "one arm per RPC method")]
-pub(crate) async fn call(keeper: &Keeper, method: &str, value: Value) -> Result<Value> {
-    if method.starts_with("lobby.") {
-        return super::lobby::call(keeper, method, value).await;
-    }
-    match method {
-        "keeper.info" => Ok(json!({
-            "identity": hex32(&keeper.identity().0),
-            "transport": hex32(&keeper.transport_key()),
-            "addresses": keeper.addresses(),
-            "version": env!("CARGO_PKG_VERSION"),
-        })),
-        "vault.list" => Ok(Value::Array(
-            keeper.vaults().await.iter().map(vault_json).collect(),
-        )),
-        "vault.status" => {
-            let p: VaultParam = params(value)?;
-            Ok(vault_json(&keeper.vault(parse32(&p.vault)?).await?))
-        }
-        "vault.register" => {
-            let p: Register = params(value)?;
-            Ok(vault_json(
-                &keeper
-                    .register_vault(parse32(&p.session)?, p.manifest.to_manifest()?)
-                    .await?,
-            ))
-        }
-        "vault.observeConfig" => {
-            let p: ObserveConfig = params(value)?;
-            let observation = keeper
-                .observe_config(parse32(&p.vault)?, p.config()?)
-                .await?;
-            Ok(json!({ "observation": observation }))
-        }
-        "vault.retire" => {
-            let p: VaultParam = params(value)?;
-            Ok(vault_json(&keeper.retire(parse32(&p.vault)?).await?))
-        }
-        "vault.sync" => {
-            let p: VaultParam = params(value)?;
-            keeper.sync(parse32(&p.vault)?).await?;
-            Ok(Value::Bool(true))
-        }
-        "peers.status" => {
-            let p: VaultParam = params(value)?;
-            Ok(Value::Array(
-                keeper
-                    .peer_status(parse32(&p.vault)?)
-                    .await?
-                    .iter()
-                    .map(reachability_json)
-                    .collect(),
-            ))
-        }
-        "mailbox.poll" => Ok(json!({ "delivered": keeper.poll_mailbox().await? })),
-        "vault.observeTx" => {
-            let p: ObserveTx = params(value)?;
-            Ok(json!({ "known": keeper.observe_tx(parse32(&p.vault)?, parse32(&p.tx_hash)?)? }))
-        }
-        "ecdh.batch" => {
-            let p: EcdhBatch = params(value)?;
-            let points = p
-                .points
-                .iter()
-                .map(JsonPoint::to_wire)
-                .collect::<Result<Vec<_>>>()?;
-            let responses = keeper
-                .ecdh_batch(parse32(&p.vault)?, p.epoch, purpose(&p.purpose)?, points)
-                .await?;
-            Ok(json!({
-                "epoch": p.epoch,
-                "responses": responses.iter().map(JsonMemberPartials::from).collect::<Vec<_>>(),
-            }))
-        }
-        "ceremony.dkg" => {
-            let p: DkgStart = params(value)?;
+/// Runs one method.
+pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, RpcError> {
+    route! { request;
+        KeeperInfoGet => |_| async { Ok(info(keeper)) };
+        VaultList => |_| async { Ok(keeper.vaults().await.iter().map(convert::vault).collect()) };
+        VaultStatusGet => |p: api::VaultParams| async move { Ok(convert::vault(&keeper.vault(p.vault.0).await?)) };
+        VaultRegister => |p: api::RegisterParams| async move {
+            let manifest = convert::wire_manifest(p.manifest)?;
+            Ok(convert::vault(&keeper.register_vault(p.session.0, manifest).await?))
+        };
+        VaultObserveConfig => |p: api::ObserveConfigParams| async move {
+            let observation = keeper.observe_config(p.vault.0, config(p.config)?).await?;
+            Ok(api::Observed { observation })
+        };
+        VaultRetire => |p: api::VaultParams| async move { Ok(convert::vault(&keeper.retire(p.vault.0).await?)) };
+        VaultSync => |p: api::VaultParams| async move { keeper.sync(p.vault.0).await };
+        VaultObserveTx => |p: api::TxParams| async move {
+            Ok(api::TxObserved { known: keeper.observe_tx(p.vault.0, p.tx_hash.0)? })
+        };
+        PeersStatus => |p: api::VaultParams| async move {
+            Ok(keeper.peer_status(p.vault.0).await?.iter().map(convert::reachability).collect())
+        };
+        MailboxPoll => |_| async {
+            let delivered = keeper.poll_mailbox().await?;
+            Ok(api::MailboxPolled { delivered: u32::try_from(delivered).unwrap_or(u32::MAX) })
+        };
+        EcdhBatch => |p: api::EcdhParams| async move {
+            let points = p.points.into_iter().map(convert::wire_point).collect::<Result<Vec<_>>>()?;
+            let responses = keeper.ecdh_batch(p.vault.0, p.epoch, purpose(p.purpose), points).await?;
+            Ok(api::EcdhResult {
+                epoch: p.epoch,
+                responses: responses.iter().map(convert::member_partials).collect(),
+            })
+        };
+        CeremonyDkg => |p: api::DkgParams| async move {
             keeper
                 .start_dkg(DkgParams {
-                    session: parse32(&p.session)?,
+                    session: p.session.0,
                     threshold: p.threshold,
-                    members: p
-                        .members
-                        .iter()
-                        .map(JsonParticipant::to_participant)
-                        .collect::<Result<_>>()?,
+                    members: p.members.into_iter().map(convert::participant).collect(),
                 })
-                .await?;
-            Ok(Value::Bool(true))
-        }
-        "ceremony.reshare" => {
-            let p: ReshareStart = params(value)?;
+                .await
+        };
+        CeremonyReshare => |p: api::ReshareParams| async move {
             keeper
                 .start_reshare(ReshareRequest {
-                    session: parse32(&p.session)?,
-                    vault: parse32(&p.vault)?,
-                    current: p
-                        .current
-                        .as_ref()
-                        .map(JsonManifest::to_manifest)
-                        .transpose()?,
+                    session: p.session.0,
+                    vault: p.vault.0,
+                    current: p.current.map(convert::wire_manifest).transpose()?,
                     dealers: p.dealers,
                     new_threshold: p.new_threshold,
                     new_spending_threshold: p.new_spending_threshold,
-                    new_members: p
-                        .new_members
-                        .iter()
-                        .map(JsonNewMember::to_new_member)
-                        .collect::<Result<_>>()?,
+                    new_members: p.new_members.into_iter().map(convert::new_member).collect::<Result<_>>()?,
                 })
-                .await?;
-            Ok(Value::Bool(true))
-        }
-        "ceremony.status" => {
-            let p: SessionParam = params(value)?;
-            let info = keeper.ceremony(parse32(&p.session)?)?;
-            let result = match (info.kind.as_str(), info.result) {
-                ("dkg", Some(result)) => serde_json::from_value::<DkgResult>(result)
-                    .ok()
-                    .map(|r| serde_json::to_value(JsonDkgResult::from(&r)))
-                    .transpose()
-                    .map_err(|e| Error::Storage(e.to_string()))?,
-                ("reshare", Some(result)) => serde_json::from_value::<ReshareResult>(result)
-                    .ok()
-                    .map(|r| serde_json::to_value(JsonReshareResult::from(&r)))
-                    .transpose()
-                    .map_err(|e| Error::Storage(e.to_string()))?,
-                _ => None,
-            };
-            serde_json::to_value(JsonCeremony {
-                kind: info.kind,
-                status: info.status,
-                failure: info.failure,
-                result,
-            })
-            .map_err(|e| Error::Storage(e.to_string()))
-        }
-        "proposals.put" => {
-            let p: Body = params(value)?;
-            let id = keeper
-                .put_proposal(parse32(&p.vault)?, &parse_bytes(&p.body)?)
-                .await?;
-            Ok(json!({ "id": hex32(&id) }))
-        }
-        "proposals.list" => {
-            let p: VaultParam = params(value)?;
-            Ok(json!(
-                keeper
-                    .proposals(parse32(&p.vault)?)?
-                    .iter()
-                    .map(|b| format!("0x{}", hex::encode(b)))
-                    .collect::<Vec<_>>()
-            ))
-        }
-        "proposals.get" => {
-            let p: IdParam = params(value)?;
-            Ok(json!(
-                keeper
-                    .proposal(parse32(&p.id)?)?
-                    .map(|b| format!("0x{}", hex::encode(b)))
-            ))
-        }
-        "payloads.put" => {
-            let p: Body = params(value)?;
-            let hash = keeper
-                .put_payload(parse32(&p.vault)?, &parse_bytes(&p.body)?)
-                .await?;
-            Ok(json!({ "hash": hex32(&hash) }))
-        }
-        "payloads.get" => {
-            let p: PayloadParam = params(value)?;
-            Ok(json!(
-                keeper
-                    .payload(parse32(&p.vault)?, parse32(&p.hash)?)?
-                    .map(|b| format!("0x{}", hex::encode(b)))
-            ))
-        }
-        "approvals.put" => {
-            let p: Body = params(value)?;
-            keeper
-                .put_approval(parse32(&p.vault)?, &parse_bytes(&p.body)?)
-                .await?;
-            Ok(Value::Bool(true))
-        }
-        "approvals.list" => {
-            let p: ProposalParam = params(value)?;
-            Ok(json!(
-                keeper
-                    .approvals(parse32(&p.proposal)?)?
-                    .iter()
-                    .map(|b| format!("0x{}", hex::encode(b)))
-                    .collect::<Vec<_>>()
-            ))
-        }
-        "rejections.put" => {
-            let p: Body = params(value)?;
-            keeper
-                .put_rejection(parse32(&p.vault)?, &parse_bytes(&p.body)?)
-                .await?;
-            Ok(Value::Bool(true))
-        }
-        "rejections.list" => {
-            let p: ProposalParam = params(value)?;
-            Ok(json!(
-                keeper
-                    .rejections(parse32(&p.proposal)?)?
-                    .iter()
-                    .map(|b| format!("0x{}", hex::encode(b)))
-                    .collect::<Vec<_>>()
-            ))
-        }
-        "receipts.put" => {
-            let p: Receipt = params(value)?;
-            keeper
-                .put_receipt(
-                    parse32(&p.vault)?,
-                    parse32(&p.proposal)?,
-                    parse32(&p.tx_hash)?,
-                )
-                .await?;
-            Ok(Value::Bool(true))
-        }
-        "receipts.list" => {
-            let p: VaultParam = params(value)?;
-            Ok(Value::Array(
-                keeper
-                    .receipts(parse32(&p.vault)?)?
-                    .iter()
-                    .map(receipt_json)
-                    .collect(),
-            ))
-        }
-        "audit.list" => {
-            let p: Audit = params(value)?;
-            serde_json::to_value(
-                keeper.audit_log(parse32(&p.vault)?, p.limit.unwrap_or(100).min(10_000))?,
-            )
-            .map_err(|e| Error::Storage(e.to_string()))
-        }
-        _ => Err(Error::Invalid(format!("unknown method {method}"))),
+                .await
+        };
+        CeremonyStatusGet => |p: api::SessionParams| async move { convert::ceremony(keeper.ceremony(p.session.0)?) };
+        ProposalsPut => |p: api::BodyParams| async move {
+            Ok(api::ProposalStored { id: keeper.put_proposal(p.vault.0, &p.body.0).await?.into() })
+        };
+        ProposalsList => |p: api::VaultParams| async move { Ok(hex_bodies(keeper.proposals(p.vault.0)?)) };
+        ProposalsGet => |p: api::IdParams| async move { Ok(keeper.proposal(p.id.0)?.map(Into::into)) };
+        PayloadsPut => |p: api::BodyParams| async move {
+            Ok(api::PayloadStored { hash: keeper.put_payload(p.vault.0, &p.body.0).await?.into() })
+        };
+        PayloadsGet => |p: api::PayloadParams| async move {
+            Ok(keeper.payload(p.vault.0, p.hash.0)?.map(Into::into))
+        };
+        ApprovalsPut => |p: api::BodyParams| async move { keeper.put_approval(p.vault.0, &p.body.0).await };
+        ApprovalsList => |p: api::ProposalParams| async move { Ok(hex_bodies(keeper.approvals(p.proposal.0)?)) };
+        RejectionsPut => |p: api::BodyParams| async move { keeper.put_rejection(p.vault.0, &p.body.0).await };
+        RejectionsList => |p: api::ProposalParams| async move {
+            Ok(hex_bodies(keeper.rejections(p.proposal.0)?))
+        };
+        ReceiptsPut => |p: api::ReceiptParams| async move {
+            keeper.put_receipt(p.vault.0, p.proposal.0, p.tx_hash.0).await
+        };
+        ReceiptsList => |p: api::VaultParams| async move {
+            Ok(keeper.receipts(p.vault.0)?.iter().map(convert::receipt).collect())
+        };
+        AuditList => |p: api::AuditParams| async move {
+            let limit = p.limit.unwrap_or(100).min(MAX_AUDIT);
+            Ok(keeper.audit_log(p.vault.0, limit)?.into_iter().map(convert::audit).collect())
+        };
+        LobbyOpen => |p| lobby::open(keeper, p);
+        LobbyJoin => |p| lobby::join(keeper, p);
+        LobbyInspect => |p| async move { lobby::inspect(&p) };
+        LobbyStatusGet => |p: api::LobbyParams| async move { lobby::status(keeper, p).await };
+        LobbyList => |_| lobby::list(keeper);
+        LobbyStart => |p| lobby::start(keeper, p);
+        LobbyClose => |p: api::LobbyParams| lobby::close(keeper, p, api::LobbyRole::Host);
+        LobbyLeave => |p: api::LobbyParams| lobby::close(keeper, p, api::LobbyRole::Guest);
     }
 }

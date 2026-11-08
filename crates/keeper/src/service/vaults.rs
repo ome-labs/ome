@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use ome_api::keeper::{KeeperEvent, Observation};
 use ome_crypto::{Point, threshold::ecdh::AddressSecretShare};
 use ome_protocol::{membership::Vault as ProtocolVault, vault::Config};
 use ome_wire::{
@@ -16,7 +17,6 @@ use crate::{
     Error, Result,
     committee::Committee,
     custody::{ShareSlot, StoredShare},
-    events::Event,
     keeper::{Keeper, State, VaultState},
     store::{ManifestStatus, from_json},
 };
@@ -32,23 +32,6 @@ pub struct VaultInfo {
     pub index: Option<u32>,
     /// Whether this keeper holds its share for the current epoch.
     pub serving: bool,
-}
-
-/// What an observed on-chain config meant.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Observation {
-    /// The config names the committee this keeper serves.
-    Current,
-    /// The config is older than the committee this keeper serves; nothing changes.
-    Outdated,
-    /// The committee of this keeper's own completed reshare became active; the new share replaced the old one.
-    Activated,
-    /// The committee of this keeper's own completed reshare became active without this keeper; its share was destroyed.
-    Removed,
-    /// The config names a committee this keeper cannot verify. It keeps its share, acts on nothing and raises
-    /// [`Event::ConfigMismatch`].
-    Unknown,
 }
 
 impl Keeper {
@@ -159,8 +142,8 @@ impl Keeper {
         self.refresh_allowlist(&state);
         let info = Self::info(&state, &vault, &self.identity()).ok_or(Error::UnknownVault)?;
         drop(state);
-        self.emit(Event::CommitteeActivated {
-            vault: hex::encode(vault),
+        self.emit(KeeperEvent::CommitteeActivated {
+            vault: vault.into(),
             epoch,
         });
         Ok(info)
@@ -175,7 +158,7 @@ impl Keeper {
     ///   `ome_protocol::membership::Vault::from_manifest` against the whole config: the new share becomes active, and
     ///   only then is the old one destroyed;
     /// - the committee of its own completed reshare that leaves this keeper out: its share is destroyed;
-    /// - anything else: the share is kept, nothing changes, and [`Event::ConfigMismatch`] is raised. Holding a share
+    /// - anything else: the share is kept, nothing changes, and [`KeeperEvent::ConfigMismatch`] is raised. Holding a share
     ///   that is no longer needed is recoverable; destroying one that is still needed is not.
     ///
     /// # Errors
@@ -221,8 +204,8 @@ impl Keeper {
         }
         drop(state);
         tracing::warn!(vault = %hex::encode(vault), version = config.version, %reason, "unverifiable config");
-        self.emit(Event::ConfigMismatch {
-            vault: hex::encode(vault),
+        self.emit(KeeperEvent::ConfigMismatch {
+            vault: vault.into(),
             version: config.version,
             reason,
         });
@@ -260,8 +243,8 @@ impl Keeper {
         self.refresh_allowlist(&state);
         let info = Self::info(&state, &vault, &self.identity()).ok_or(Error::UnknownVault)?;
         drop(state);
-        self.emit(Event::Retired {
-            vault: hex::encode(vault),
+        self.emit(KeeperEvent::Retired {
+            vault: vault.into(),
         });
         Ok(info)
     }
@@ -290,9 +273,9 @@ impl Keeper {
             match outcome {
                 Ok(()) => {
                     self.emit_ceremony(session, "reshare", "expired");
-                    self.emit(Event::PendingExpired {
-                        vault: hex::encode(vault),
-                        session: hex::encode(session),
+                    self.emit(KeeperEvent::PendingExpired {
+                        vault: vault.into(),
+                        session: session.into(),
                     });
                 }
                 Err(error) => tracing::error!(%error, "cannot expire a pending share"),
@@ -338,8 +321,8 @@ impl Keeper {
         }
         self.refresh_allowlist(state);
         self.emit_ceremony(session, "reshare", "activated");
-        self.emit(Event::CommitteeActivated {
-            vault: hex::encode(vault),
+        self.emit(KeeperEvent::CommitteeActivated {
+            vault: vault.into(),
             epoch,
         });
         Ok(())
@@ -362,8 +345,8 @@ impl Keeper {
             .store
             .update_ceremony(&session, "activated", None::<&()>, self.now())?;
         self.refresh_allowlist(state);
-        self.emit(Event::Removed {
-            vault: hex::encode(vault),
+        self.emit(KeeperEvent::Removed {
+            vault: vault.into(),
         });
         Ok(())
     }

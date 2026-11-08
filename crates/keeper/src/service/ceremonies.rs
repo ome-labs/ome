@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use ome_api::keeper::{CeremonyKind, CeremonyStatus, KeeperEvent};
 use ome_crypto::threshold::shamir::MemberIndex;
 use ome_net::{Inbound, Peer};
 use ome_protocol::vault::Committee as Viewers;
@@ -20,7 +21,6 @@ use crate::{
     },
     committee::Committee,
     custody::{ShareSlot, StoredShare},
-    events::Event,
     random::os_rng,
     store::from_json,
 };
@@ -461,10 +461,10 @@ impl Keeper {
     }
 
     pub(super) fn emit_ceremony(&self, session: [u8; 32], kind: &str, status: &str) {
-        self.emit(Event::Ceremony {
-            session: hex::encode(session),
-            kind: kind.to_owned(),
-            status: status.to_owned(),
+        self.emit(KeeperEvent::Ceremony {
+            session: session.into(),
+            kind: ceremony_kind(kind),
+            status: ceremony_status(status),
         });
     }
 
@@ -597,4 +597,24 @@ fn participant(member: &Member) -> Participant {
 
 fn failure_like(value: Option<&serde_json::Value>) -> bool {
     value.is_some_and(|v| v.get("reason").is_some() && v.get("blamed").is_some())
+}
+
+/// The API's name for a stored ceremony kind label.
+pub(crate) fn ceremony_kind(label: &str) -> CeremonyKind {
+    if label == "dkg" {
+        CeremonyKind::Dkg
+    } else {
+        CeremonyKind::Reshare
+    }
+}
+
+/// The API's name for a stored ceremony status label.
+pub(crate) fn ceremony_status(label: &str) -> CeremonyStatus {
+    match label {
+        "running" => CeremonyStatus::Running,
+        "completed" => CeremonyStatus::Completed,
+        "activated" => CeremonyStatus::Activated,
+        "expired" => CeremonyStatus::Expired,
+        _ => CeremonyStatus::Aborted,
+    }
 }

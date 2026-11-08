@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+use ome_api::keeper::KeeperEvent;
 use ome_crypto::threshold::ecdh::AddressSecretShare;
 use ome_net::{Channel, Inbound, Mailbox, Peer, Transport};
 use ome_wire::{
@@ -21,7 +22,6 @@ use crate::{
     clock::Clock,
     committee::Committee,
     custody::{KeeperKeys, SecretStore},
-    events::Event,
     limits::RateLimiter,
     random::random_bytes,
     service::{
@@ -107,7 +107,7 @@ pub(crate) struct Inner {
     pub(crate) mailbox: Option<Arc<dyn Mailbox>>,
     pub(crate) state: Mutex<State>,
     pub(crate) pending: SyncMutex<HashMap<[u8; 16], Waiting>>,
-    pub(crate) events: broadcast::Sender<Event>,
+    pub(crate) events: broadcast::Sender<KeeperEvent>,
 }
 
 pub(crate) struct State {
@@ -248,11 +248,11 @@ impl Keeper {
 
     /// Subscribes to events.
     #[must_use]
-    pub fn subscribe(&self) -> broadcast::Receiver<Event> {
+    pub fn subscribe(&self) -> broadcast::Receiver<KeeperEvent> {
         self.0.events.subscribe()
     }
 
-    pub(crate) fn emit(&self, event: Event) {
+    pub(crate) fn emit(&self, event: KeeperEvent) {
         let _ = self.0.events.send(event);
     }
 

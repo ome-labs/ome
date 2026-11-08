@@ -1,0 +1,283 @@
+//! Conversions between the keeper's types and the ome-api shapes it serves. Points are checked to be on the curve on
+//! the way in.
+
+use ome_api::{
+    Point,
+    keeper::{self as api, VaultStatus},
+};
+use ome_crypto::threshold::ecdh::Partial;
+use ome_net::identity::peer_id;
+use ome_wire::{
+    IdentityPublic,
+    messages::{
+        ceremony::{Manifest, Member},
+        lobby::{Invite, KeeperContact},
+    },
+    types::{Bytes64, WirePoint, scalar},
+};
+
+use crate::{
+    DkgResult, Error, LobbyInfo, MemberPartials, MemberReachability, NewMember, ReshareResult,
+    Result, VaultInfo,
+    ceremony::{Failure, Participant},
+    service::ceremonies::{ceremony_kind, ceremony_status},
+    store::{AuditEntry, ReceiptEntry},
+};
+
+pub(super) fn point(point: &WirePoint) -> Point {
+    Point {
+        x: point.x.into(),
+        y: point.y.into(),
+    }
+}
+
+pub(super) fn wire_point(point: Point) -> Result<WirePoint> {
+    let point = WirePoint {
+        x: point.x.0,
+        y: point.y.0,
+    };
+    ome_crypto::Point::try_from(&point)?;
+    Ok(point)
+}
+
+fn transcript(bytes: &Bytes64) -> ome_api::Hex64 {
+    ome_api::Hex64(bytes.to_array())
+}
+
+pub(super) fn identity_peer_id(identity: &IdentityPublic) -> String {
+    peer_id(identity)
+        .map(|id| id.to_string())
+        .unwrap_or_default()
+}
+
+pub(super) fn manifest(m: &Manifest) -> api::Manifest {
+    api::Manifest {
+        protocol_version: m.protocol_version,
+        vault: m.vault.into(),
+        epoch: m.epoch,
+        threshold: m.threshold,
+        viewing_threshold: m.viewing_threshold,
+        preaddress: m.preaddress.into(),
+        group_key: point(&m.group_key),
+        members: m
+            .members
+            .iter()
+            .map(|member| api::Member {
+                index: member.index,
+                signer_key: point(&member.signer_key),
+                verification_share: point(&member.verification_share),
+                identity: member.identity.0.into(),
+                transport: member.transport.into(),
+                addresses: member.addresses.clone(),
+            })
+            .collect(),
+    }
+}
+
+pub(super) fn wire_manifest(m: api::Manifest) -> Result<Manifest> {
+    Ok(Manifest {
+        protocol_version: m.protocol_version,
+        vault: m.vault.0,
+        epoch: m.epoch,
+        threshold: m.threshold,
+        viewing_threshold: m.viewing_threshold,
+        preaddress: m.preaddress.0,
+        group_key: wire_point(m.group_key)?,
+        members: m
+            .members
+            .into_iter()
+            .map(|member| {
+                Ok(Member {
+                    index: member.index,
+                    signer_key: wire_point(member.signer_key)?,
+                    verification_share: wire_point(member.verification_share)?,
+                    identity: IdentityPublic(member.identity.0),
+                    transport: member.transport.0,
+                    addresses: member.addresses,
+                })
+            })
+            .collect::<Result<_>>()?,
+    })
+}
+
+pub(super) fn participant(contact: api::KeeperContact) -> Participant {
+    Participant {
+        identity: IdentityPublic(contact.identity.0),
+        transport: contact.transport.0,
+        addresses: contact.addresses,
+    }
+}
+
+pub(super) fn new_member(member: api::NewMember) -> Result<NewMember> {
+    Ok(NewMember {
+        identity: IdentityPublic(member.identity.0),
+        transport: member.transport.0,
+        addresses: member.addresses,
+        signer_key: wire_point(member.signer_key)?,
+    })
+}
+
+pub(super) fn contact(contact: &KeeperContact) -> api::KeeperContact {
+    api::KeeperContact {
+        identity: contact.identity.0.into(),
+        transport: contact.transport.into(),
+        addresses: contact.addresses.clone(),
+    }
+}
+
+pub(super) fn vault(info: &VaultInfo) -> api::Vault {
+    api::Vault {
+        manifest: manifest(&info.manifest),
+        status: match info.status {
+            "retired" => VaultStatus::Retired,
+            "removed" => VaultStatus::Removed,
+            _ => VaultStatus::Active,
+        },
+        index: info.index,
+        serving: info.serving,
+    }
+}
+
+pub(super) fn reachability(member: &MemberReachability) -> api::Reachability {
+    api::Reachability {
+        index: member.index,
+        identity: member.identity.0.into(),
+        peer_id: identity_peer_id(&member.identity),
+        you: member.you,
+        connected: member.status.connected,
+        relayed: member.status.relayed,
+        last_seen: member.status.last_seen,
+        rtt_ms: member.status.rtt_ms,
+    }
+}
+
+pub(super) fn receipt(receipt: &ReceiptEntry) -> api::Receipt {
+    api::Receipt {
+        proposal: receipt.proposal.into(),
+        tx_hash: receipt.tx_hash.into(),
+        at: receipt.at,
+    }
+}
+
+pub(super) fn audit(entry: AuditEntry) -> api::AuditEntry {
+    api::AuditEntry {
+        at: entry.at,
+        requester: entry.requester,
+        purpose: entry.purpose,
+        points: entry.points,
+        outcome: entry.outcome,
+    }
+}
+
+fn partial(p: &Partial) -> api::Partial {
+    api::Partial {
+        point: point(&WirePoint::from(&p.point)),
+        challenge: scalar(&p.proof.challenge).into(),
+        response: scalar(&p.proof.response).into(),
+    }
+}
+
+pub(super) fn member_partials(m: &MemberPartials) -> api::MemberPartials {
+    api::MemberPartials {
+        member: m.member,
+        partials: m.partials.iter().map(partial).collect(),
+    }
+}
+
+fn failure(failure: Failure) -> api::Failure {
+    api::Failure {
+        reason: failure.reason,
+        blamed: failure.blamed,
+    }
+}
+
+fn dkg_result(r: &DkgResult) -> api::DkgResult {
+    api::DkgResult {
+        index: r.index,
+        threshold: r.threshold,
+        group_key: point(&r.group_key),
+        verification_shares: r.verification_shares.iter().map(point).collect(),
+        transcript: transcript(&r.transcript),
+    }
+}
+
+fn reshare_result(r: &ReshareResult) -> api::ReshareResult {
+    api::ReshareResult {
+        committee_commitment: r.committee_commitment.into(),
+        new_index: r.new_index,
+        manifest: r.manifest.as_ref().map(manifest),
+        transcript: r.transcript.as_ref().map(transcript),
+    }
+}
+
+pub(super) fn ceremony(info: crate::CeremonyInfo) -> Result<api::Ceremony> {
+    let kind = ceremony_kind(&info.kind);
+    let stored = |e: serde_json::Error| Error::Storage(format!("ceremony result: {e}"));
+    let result = match (kind, info.result) {
+        (_, None) => None,
+        (api::CeremonyKind::Dkg, Some(value)) => Some(api::CeremonyResult::Dkg(dkg_result(
+            &serde_json::from_value(value).map_err(stored)?,
+        ))),
+        (api::CeremonyKind::Reshare, Some(value)) => Some(api::CeremonyResult::Reshare(
+            reshare_result(&serde_json::from_value(value).map_err(stored)?),
+        )),
+    };
+    Ok(api::Ceremony {
+        kind,
+        status: ceremony_status(&info.status),
+        failure: info.failure.map(failure),
+        result,
+    })
+}
+
+pub(super) fn invite(invite: &Invite) -> api::Invite {
+    api::Invite {
+        lobby: invite.lobby.into(),
+        name: invite.name.clone(),
+        host_name: invite.host_name.clone(),
+        threshold: invite.threshold,
+        viewing_threshold: invite.viewing_threshold,
+        network: invite.network.clone(),
+        host: contact(&invite.host),
+    }
+}
+
+pub(super) fn lobby(me: &IdentityPublic, info: &LobbyInfo) -> api::Lobby {
+    api::Lobby {
+        lobby: info.lobby.into(),
+        role: info.role,
+        status: info.status,
+        name: info.name.clone(),
+        host_name: info.host_name.clone(),
+        threshold: info.threshold,
+        viewing_threshold: info.viewing_threshold,
+        network: info.network.clone(),
+        host: contact(&info.host),
+        members: info
+            .members
+            .iter()
+            .zip(1u32..)
+            .map(|(m, index)| api::LobbyMember {
+                index,
+                name: m.name.clone(),
+                signer_key: point(&m.signer_key),
+                identity: m.keeper.identity.0.into(),
+                transport: m.keeper.transport.into(),
+                addresses: m.keeper.addresses.clone(),
+                you: m.keeper.identity == *me,
+            })
+            .collect(),
+        plan: info.plan.as_ref().map(|plan| api::LobbyPlan {
+            session: plan.session.into(),
+            threshold: plan.threshold,
+            viewing_threshold: plan.viewing_threshold,
+            salt: plan.salt.into(),
+            secrets: plan
+                .secrets
+                .as_ref()
+                .map(|secrets| secrets.as_slice().to_vec().into()),
+            protocol_version: plan.protocol_version,
+        }),
+        invite: info.invite.clone(),
+    }
+}

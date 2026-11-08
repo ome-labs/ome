@@ -5,7 +5,7 @@
 
 mod support;
 
-use ome_keeper::events::Event;
+use ome_api::{Hex32, keeper::KeeperEvent};
 use ome_wire::{Message, messages::proposals::ProposalPayload};
 use support::{body, fast_config, frame_is, vault, wait_for};
 
@@ -36,7 +36,7 @@ async fn a_proposal_its_payload_and_its_votes_reach_every_member() {
         .unwrap();
 
     wait_for(&mut third, |e| {
-        matches!(e, Event::Approval { slot: 1, .. }).then_some(())
+        matches!(e, KeeperEvent::Approval { slot: 1, .. }).then_some(())
     })
     .await;
     let keeper = &v.keepers[2].keeper;
@@ -72,7 +72,7 @@ async fn a_payload_is_fetched_from_whichever_member_sent_the_proposal() {
         .await
         .unwrap();
     wait_for(&mut second, |e| {
-        matches!(e, Event::Payload { .. }).then_some(())
+        matches!(e, KeeperEvent::Payload { .. }).then_some(())
     })
     .await;
 
@@ -84,7 +84,7 @@ async fn a_payload_is_fetched_from_whichever_member_sent_the_proposal() {
     v.keepers[2].keeper.sync(v.address).await.unwrap();
 
     wait_for(&mut third, |e| {
-        matches!(e, Event::Payload { .. }).then_some(())
+        matches!(e, KeeperEvent::Payload { .. }).then_some(())
     })
     .await;
     assert!(
@@ -121,7 +121,7 @@ async fn a_vote_that_arrives_before_its_proposal_is_held_until_it_does() {
         .await
         .unwrap();
     wait_for(&mut first, |e| {
-        matches!(e, Event::Approval { .. }).then_some(())
+        matches!(e, KeeperEvent::Approval { .. }).then_some(())
     })
     .await;
     assert_eq!(
@@ -138,7 +138,7 @@ async fn a_vote_that_arrives_before_its_proposal_is_held_until_it_does() {
         .unwrap();
 
     wait_for(&mut third, |e| {
-        matches!(e, Event::Approval { slot: 1, .. }).then_some(())
+        matches!(e, KeeperEvent::Approval { slot: 1, .. }).then_some(())
     })
     .await;
     assert_eq!(v.keepers[2].keeper.approvals(id).unwrap().len(), 1);
@@ -213,15 +213,15 @@ async fn receipts_replicate_and_an_unknown_spend_raises_an_alarm() {
         .unwrap();
 
     wait_for(&mut second, |e| {
-        matches!(e, Event::Receipt { .. }).then_some(())
+        matches!(e, KeeperEvent::Receipt { .. }).then_some(())
     })
     .await;
     assert!(v.keepers[1].keeper.observe_tx(v.address, [7; 32]).unwrap());
     assert!(!v.keepers[1].keeper.observe_tx(v.address, [8; 32]).unwrap());
     let spend = wait_for(&mut second, |e| match e {
-        Event::UnexpectedSpend { tx_hash, .. } => Some(tx_hash.clone()),
+        KeeperEvent::UnexpectedSpend { tx_hash, .. } => Some(*tx_hash),
         _ => None,
     })
     .await;
-    assert_eq!(spend, hex::encode([8; 32]));
+    assert_eq!(spend, Hex32([8; 32]));
 }

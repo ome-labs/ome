@@ -1,7 +1,11 @@
 use std::path::PathBuf;
 
-use serde::Deserialize;
-use serde_json::{Value, json};
+use ome_api::{
+    AuthParams, ErrorKind, Method, RpcError,
+    jsonrpc::{Notification, Request, Response},
+    keeper::{EventsSubscribe, SessionAuth},
+};
+use serde_json::Value;
 use subtle::ConstantTimeEq;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
@@ -14,21 +18,6 @@ use crate::{Error, Keeper, Result};
 
 /// Largest accepted request line (an ECDH batch of 4096 points is about 600 KiB).
 const MAX_LINE: usize = 8 << 20;
-
-const PARSE_ERROR: i64 = -32_700;
-const INVALID_REQUEST: i64 = -32_600;
-const METHOD_NOT_FOUND: i64 = -32_601;
-const UNAUTHORIZED: i64 = -32_001;
-const KEEPER_ERROR: i64 = -32_000;
-
-#[derive(Deserialize)]
-struct Request {
-    #[serde(default)]
-    id: Value,
-    method: String,
-    #[serde(default)]
-    params: Value,
-}
 
 /// The token every RPC session must present first (`session.auth`). Compared in constant time.
 #[derive(Clone)]
@@ -138,61 +127,54 @@ where
             Ok(_) => {}
         }
         let Ok(request) = serde_json::from_slice::<Request>(&line) else {
-            let _ = out
-                .send(error(&Value::Null, PARSE_ERROR, "parse error"))
-                .await;
+            let error = RpcError::new(ErrorKind::Parse, "parse error");
+            let _ = out.send(reply(Response::err(Value::Null, error))).await;
             continue;
         };
-        let reply = if request.method == "session.auth" {
-            let given = request
-                .params
-                .get("token")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            authenticated = token.matches(given);
+        let id = request.id.clone();
+        let response = if request.method == SessionAuth::NAME {
+            authenticated = request
+                .params::<AuthParams>()
+                .is_ok_and(|p| token.matches(&p.token));
             if authenticated {
-                ok(&request.id, &Value::Bool(true))
+                Response::ok(id, Value::Null)
             } else {
-                error(&request.id, UNAUTHORIZED, "invalid token")
+                Response::err(id, RpcError::new(ErrorKind::Unauthorized, "invalid token"))
             }
         } else if !authenticated {
-            error(
-                &request.id,
-                UNAUTHORIZED,
+            let error = RpcError::new(
+                ErrorKind::Unauthorized,
                 "authenticate with session.auth first",
-            )
-        } else if request.method == "events.subscribe" {
+            );
+            Response::err(id, error)
+        } else if request.jsonrpc != "2.0" || request.method.is_empty() {
+            let error = RpcError::new(ErrorKind::InvalidRequest, "not a JSON-RPC 2.0 request");
+            Response::err(id, error)
+        } else if request.method == EventsSubscribe::NAME {
             let mut events = keeper.subscribe();
             let out = out.clone();
             tokio::spawn(async move {
                 while let Ok(event) = events.recv().await {
-                    let notification =
-                        json!({ "jsonrpc": "2.0", "method": "event", "params": event });
-                    if out.send(notification).await.is_err() {
+                    if out.send(reply(Notification::event(event))).await.is_err() {
                         break;
                     }
                 }
             });
-            ok(&request.id, &Value::Bool(true))
-        } else if request.method.is_empty() {
-            error(&request.id, INVALID_REQUEST, "missing method")
+            Response::ok(id, Value::Null)
         } else {
             // Methods run concurrently so a slow ECDH batch does not block the session.
             let keeper = keeper.clone();
             let out = out.clone();
             tokio::spawn(async move {
-                let reply = match methods::call(&keeper, &request.method, request.params).await {
-                    Ok(result) => ok(&request.id, &result),
-                    Err(Error::Invalid(message)) if message.starts_with("unknown method") => {
-                        error(&request.id, METHOD_NOT_FOUND, &message)
-                    }
-                    Err(e) => error(&request.id, KEEPER_ERROR, &e.to_string()),
+                let response = match methods::call(&keeper, &request).await {
+                    Ok(result) => Response::ok(id, result),
+                    Err(error) => Response::err(id, error),
                 };
-                let _ = out.send(reply).await;
+                let _ = out.send(reply(response)).await;
             });
             continue;
         };
-        if out.send(reply).await.is_err() {
+        if out.send(reply(response)).await.is_err() {
             break;
         }
     }
@@ -200,10 +182,6 @@ where
     let _ = writing.await;
 }
 
-fn ok(id: &Value, result: &Value) -> Value {
-    json!({ "jsonrpc": "2.0", "id": id, "result": result })
-}
-
-fn error(id: &Value, code: i64, message: &str) -> Value {
-    json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+fn reply(message: impl serde::Serialize) -> Value {
+    serde_json::to_value(message).unwrap_or(Value::Null)
 }

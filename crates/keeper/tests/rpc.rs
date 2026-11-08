@@ -1,5 +1,5 @@
-//! The local RPC over a real Unix socket: sessions authenticate first, methods answer for a live vault, and errors
-//! come back as JSON-RPC errors.
+//! The local RPC over a real Unix socket, on the wire: sessions authenticate first, methods answer for a live vault,
+//! and errors come back with their ome-api kind and code. `ome-client` tests the same keeper through typed calls.
 #![cfg(unix)]
 // Helpers outside `#[test]` unwrap like the tests do.
 #![allow(clippy::unwrap_used)]
@@ -114,9 +114,11 @@ async fn sessions_must_authenticate_first_and_the_socket_is_owner_only() {
     );
     assert_eq!(
         client.ok("session.auth", json!({ "token": TOKEN })).await,
-        json!(true)
+        Value::Null
     );
-    let info = client.ok("keeper.info", json!({})).await;
+    // Params may be left out of a method that takes none.
+    let info = client.ok("keeper.info", Value::Null).await;
+    assert_eq!(info["apiVersion"], json!(ome_api::API_VERSION));
     assert_eq!(info["identity"], hex(&v.keepers[0].keeper.identity().0));
     assert_eq!(
         std::fs::metadata(&socket).unwrap().permissions().mode() & 0o777,
@@ -151,12 +153,14 @@ async fn a_daemon_drives_a_live_vault_over_the_socket() {
             "vault.observeConfig",
             json!({
                 "vault": vault,
-                "threshold": config.threshold,
-                "signerCount": config.signer_count,
-                "version": config.version,
-                "signerSetCommitment": hex(&field(&config.signer_set_commitment)),
-                "viewingThreshold": config.viewing_threshold,
-                "committeeCommitment": hex(&field(&config.committee_commitment)),
+                "config": {
+                    "threshold": config.threshold,
+                    "signerCount": config.signer_count,
+                    "version": config.version,
+                    "signerSetCommitment": hex(&field(&config.signer_set_commitment)),
+                    "viewingThreshold": config.viewing_threshold,
+                    "committeeCommitment": hex(&field(&config.committee_commitment)),
+                },
             }),
         )
         .await;
@@ -211,24 +215,25 @@ async fn keeper_errors_and_unknown_methods_come_back_as_errors() {
     let retire = client
         .call("vault.retire", json!({ "vault": hex(&v.address) }))
         .await;
-    assert_eq!(retire["error"]["code"], -32_000);
+    assert_eq!(retire["error"]["data"]["kind"], "invalid");
+    assert_eq!(retire["error"]["code"], -32_602);
     assert!(
         retire["error"]["message"]
             .as_str()
             .unwrap()
             .contains("has not moved past")
     );
+    let unknown = client
+        .call("vault.status", json!({ "vault": hex(&[9; 32]) }))
+        .await;
+    assert_eq!(unknown["error"]["data"]["kind"], "not-found");
+    assert_eq!(unknown["error"]["code"], -32_014);
+    let malformed = client
+        .call("vault.status", json!({ "vault": "0x12" }))
+        .await;
+    assert_eq!(malformed["error"]["data"]["kind"], "invalid");
     assert_eq!(
-        client
-            .call("vault.status", json!({ "vault": hex(&[9; 32]) }))
-            .await["error"]["code"],
-        -32_000
-    );
-    assert!(
-        client
-            .call("no.such", json!({}))
-            .await
-            .get("error")
-            .is_some()
+        client.call("no.such", json!({})).await["error"]["code"],
+        -32_601
     );
 }

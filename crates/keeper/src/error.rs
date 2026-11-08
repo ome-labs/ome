@@ -1,3 +1,4 @@
+use ome_api::{ErrorKind, RpcError};
 use ome_wire::IdentityPublic;
 
 /// Keeper errors. Messages never contain secret material.
@@ -70,6 +71,39 @@ pub enum Error {
     /// Filesystem failure.
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
+}
+
+impl Error {
+    /// What a client should make of it.
+    #[must_use]
+    pub const fn kind(&self) -> ErrorKind {
+        match self {
+            Self::UnknownVault | Self::UnknownCeremony => ErrorKind::NotFound,
+            Self::WrongEpoch { .. }
+            | Self::NotMember(_)
+            | Self::Invalid(_)
+            | Self::Removed
+            | Self::CeremonyExists
+            | Self::Crypto(_)
+            | Self::Wire(_)
+            | Self::Protocol(_) => ErrorKind::Invalid,
+            Self::RateLimited | Self::Unavailable { .. } | Self::Transport(_) => {
+                ErrorKind::NotReady
+            }
+            Self::DataDir(_)
+            | Self::Unseal(_)
+            | Self::MissingSecret(_)
+            | Self::Storage(_)
+            | Self::Net(_)
+            | Self::Io(_) => ErrorKind::Failed,
+        }
+    }
+}
+
+impl From<Error> for RpcError {
+    fn from(error: Error) -> Self {
+        Self::new(error.kind(), error.to_string())
+    }
 }
 
 impl From<rusqlite::Error> for Error {

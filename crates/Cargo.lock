@@ -2656,6 +2656,7 @@ dependencies = [
  "clap",
  "getrandom 0.4.3",
  "hex",
+ "ome-api",
  "ome-crypto",
  "ome-net",
  "ome-protocol",

@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+use ome_api::keeper::{KeeperEvent, LobbyRole, LobbyStatus};
 use ome_crypto::{
     Point,
     sealing::envelope::{Envelope, TransportPublic},
@@ -27,7 +28,6 @@ use zeroize::Zeroizing;
 use crate::{
     Error, Result,
     ceremony::Participant,
-    events::Event,
     keeper::{Keeper, State},
     random::{os_rng, random_bytes},
     store::from_json,
@@ -36,46 +36,20 @@ use crate::{
 /// How long a guest retries its join, and the host its roster and plan sends.
 const LOBBY_SEND_WINDOW: Duration = Duration::from_secs(30);
 
-/// This keeper's role in a lobby.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum LobbyRole {
-    /// It opened the lobby (member 1).
-    Host,
-    /// It joined with an invite.
-    Guest,
-}
-
-/// Where a lobby stands.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum LobbyStatus {
-    /// Accepting members (host) or waiting for the plan (guest).
-    Open,
-    /// The plan is fixed.
-    Started,
-    /// Cancelled by the host, or left by this guest.
-    Closed,
-}
-
-impl LobbyRole {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::Host => "host",
-            Self::Guest => "guest",
-        }
+/// A lobby role as the store names it.
+const fn role_label(role: LobbyRole) -> &'static str {
+    match role {
+        LobbyRole::Host => "host",
+        LobbyRole::Guest => "guest",
     }
 }
 
-impl LobbyStatus {
-    /// Label used in RPC results and events.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Open => "open",
-            Self::Started => "started",
-            Self::Closed => "closed",
-        }
+/// A lobby status as the store and messages name it.
+const fn status_label(status: LobbyStatus) -> &'static str {
+    match status {
+        LobbyStatus::Open => "open",
+        LobbyStatus::Started => "started",
+        LobbyStatus::Closed => "closed",
     }
 }
 
@@ -267,17 +241,17 @@ impl Keeper {
     fn persist_lobby(&self, record: &LobbyRecord) -> Result<()> {
         self.0.store.put_lobby(
             &record.lobby,
-            record.role.as_str(),
-            record.status.as_str(),
+            role_label(record.role),
+            status_label(record.status),
             record,
             self.now(),
         )
     }
 
     fn emit_lobby(&self, record: &LobbyRecord) {
-        self.emit(Event::Lobby {
-            lobby: hex::encode(record.lobby),
-            status: record.status.as_str().to_owned(),
+        self.emit(KeeperEvent::Lobby {
+            lobby: record.lobby.into(),
+            status: record.status,
             members: u32::try_from(record.members.len()).unwrap_or(u32::MAX),
         });
     }
@@ -393,7 +367,7 @@ impl Keeper {
                 {
                     return Err(Error::Invalid(format!(
                         "lobby is already {}",
-                        existing.status.as_str()
+                        status_label(existing.status)
                     )));
                 }
                 Some(existing) => LobbyRecord {
@@ -544,7 +518,7 @@ impl Keeper {
         if record.status != LobbyStatus::Open {
             return Err(Error::Invalid(format!(
                 "lobby is already {}",
-                record.status.as_str()
+                status_label(record.status)
             )));
         }
         let peers = record.peers(&self.identity());

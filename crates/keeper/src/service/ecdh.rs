@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, PoisonError},
 };
 
+use ome_api::keeper::KeeperEvent;
 use ome_crypto::{
     Point,
     threshold::ecdh::{self, AddressSecretShare, EcdhContext, Partial},
@@ -19,7 +20,6 @@ use crate::committee::Committee;
 use crate::keeper::Keeper;
 use crate::{
     Error, Result,
-    events::Event,
     random::os_rng,
     store::{AuditEntry, ManifestStatus},
 };
@@ -307,8 +307,8 @@ impl Keeper {
                     member: member.index,
                     partials,
                 }),
-                None => self.emit(Event::InvalidPartials {
-                    vault: hex::encode(vault),
+                None => self.emit(KeeperEvent::InvalidPartials {
+                    vault: vault.into(),
                     member: member.index,
                 }),
             }

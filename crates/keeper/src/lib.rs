@@ -14,7 +14,6 @@ pub mod committee;
 pub mod config;
 pub mod custody;
 mod error;
-pub mod events;
 mod keeper;
 mod limits;
 mod random;
@@ -25,10 +24,11 @@ pub mod store;
 pub use clock::{Clock, SystemClock};
 pub use error::{Error, Result};
 pub use keeper::{Keeper, KeeperConfig, KeeperParts};
+pub use ome_api::keeper::{LobbyRole, LobbyStatus, Observation};
 pub use service::{
     ceremonies::{CeremonyInfo, DkgResult, NewMember, ReshareRequest, ReshareResult},
     ecdh::MemberPartials,
-    lobby::{LobbyInfo, LobbyOpen, LobbyPlanInfo, LobbyRole, LobbyStatus},
+    lobby::{LobbyInfo, LobbyOpen, LobbyPlanInfo},
     peers::MemberReachability,
-    vaults::{Observation, VaultInfo},
+    vaults::VaultInfo,
 };

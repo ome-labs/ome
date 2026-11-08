@@ -5,7 +5,8 @@
 
 mod support;
 
-use ome_keeper::{Keeper, LobbyInfo, LobbyOpen, LobbyRole, LobbyStatus, events::Event};
+use ome_api::keeper::KeeperEvent;
+use ome_keeper::{Keeper, LobbyInfo, LobbyOpen, LobbyRole, LobbyStatus};
 use ome_wire::{
     messages::lobby::{Invite, JoinSecret},
     version::PROTOCOL_VERSION,
@@ -31,13 +32,17 @@ async fn info(keeper: &Keeper, lobby: [u8; 16]) -> LobbyInfo {
 }
 
 /// Waits for a lobby event with `members` on the roster and `status`.
-async fn lobby_event(events: &mut broadcast::Receiver<Event>, status: &str, members: u32) {
+async fn lobby_event(
+    events: &mut broadcast::Receiver<KeeperEvent>,
+    status: LobbyStatus,
+    members: u32,
+) {
     wait_for(events, |e| match e {
-        Event::Lobby {
+        KeeperEvent::Lobby {
             status: s,
             members: m,
             ..
-        } if s == status && *m == members => Some(()),
+        } if *s == status && *m == members => Some(()),
         _ => None,
     })
     .await;
@@ -62,7 +67,7 @@ async fn lobby_of_three(harness: &Harness) -> ([TestKeeper; 3], [u8; 16], String
         );
     }
     for events in &mut guests {
-        lobby_event(events, "open", 3).await;
+        lobby_event(events, LobbyStatus::Open, 3).await;
     }
     (keepers, lobby, invite)
 }
@@ -92,7 +97,7 @@ async fn guests_see_the_roster_and_receive_the_same_plan_and_secrets() {
     let plan = started.plan.unwrap();
     assert_eq!(plan.secrets.as_deref().map(Vec::as_slice), Some(SECRETS));
     for (events, k) in guests.iter_mut().zip(&keepers[1..]) {
-        lobby_event(events, "started", 3).await;
+        lobby_event(events, LobbyStatus::Started, 3).await;
         let received = info(&k.keeper, lobby).await.plan.unwrap();
         assert_eq!((received.session, received.salt), (plan.session, [7; 32]));
         assert_eq!(
@@ -125,7 +130,7 @@ async fn a_join_with_the_wrong_invite_secret_is_refused() {
         .await
         .unwrap();
 
-    lobby_event(&mut host_events, "open", 2).await;
+    lobby_event(&mut host_events, LobbyStatus::Open, 2).await;
     let names: Vec<String> = info(&host.keeper, lobby)
         .await
         .members
@@ -148,14 +153,14 @@ async fn a_guest_leaves_and_the_host_closes() {
         .await
         .unwrap();
 
-    lobby_event(&mut host, "open", 2).await;
-    lobby_event(&mut remaining, "open", 2).await;
+    lobby_event(&mut host, LobbyStatus::Open, 2).await;
+    lobby_event(&mut remaining, LobbyStatus::Open, 2).await;
     keepers[0]
         .keeper
         .close_lobby(lobby, LobbyRole::Host)
         .await
         .unwrap();
-    lobby_event(&mut remaining, "closed", 2).await;
+    lobby_event(&mut remaining, LobbyStatus::Closed, 2).await;
     assert_eq!(
         info(&keepers[1].keeper, lobby).await.status,
         LobbyStatus::Closed

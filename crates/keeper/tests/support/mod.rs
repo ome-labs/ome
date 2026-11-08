@@ -7,6 +7,10 @@
     clippy::missing_panics_doc
 )]
 
+use ome_api::{
+    Hex32,
+    keeper::{CeremonyStatus, KeeperEvent},
+};
 use std::{
     path::Path,
     sync::{
@@ -26,7 +30,6 @@ use ome_keeper::{
     Clock, DkgResult, Keeper, KeeperConfig, KeeperParts, NewMember, ReshareRequest, ReshareResult,
     ceremony::{Participant, dkg::DkgParams},
     custody::{KeeperKeys, MasterKey, SecretStore},
-    events::Event,
     store::Store,
 };
 use ome_net::{Mailbox, MemoryMailbox, MemoryNetwork, Peer};
@@ -174,8 +177,8 @@ impl Harness {
 
 /// The first event matching `wanted`, failing the test after [`WAIT`].
 pub async fn wait_for<T>(
-    events: &mut broadcast::Receiver<Event>,
-    mut wanted: impl FnMut(&Event) -> Option<T>,
+    events: &mut broadcast::Receiver<KeeperEvent>,
+    mut wanted: impl FnMut(&KeeperEvent) -> Option<T>,
 ) -> T {
     tokio::time::timeout(WAIT, async {
         loop {
@@ -196,17 +199,17 @@ pub async fn wait_for<T>(
 
 /// Waits until a ceremony `session` reaches `status` on the keeper behind `events`.
 pub async fn ceremony_reaches(
-    events: &mut broadcast::Receiver<Event>,
+    events: &mut broadcast::Receiver<KeeperEvent>,
     session: [u8; 32],
-    status: &str,
+    status: CeremonyStatus,
 ) {
-    let session = hex::encode(session);
+    let session = Hex32(session);
     wait_for(events, |event| match event {
-        Event::Ceremony {
+        KeeperEvent::Ceremony {
             session: s,
             status: got,
             ..
-        } if *s == session && got == status => Some(()),
+        } if *s == session && *got == status => Some(()),
         _ => None,
     })
     .await;
@@ -224,7 +227,7 @@ pub async fn run_dkg(keepers: &[&TestKeeper], threshold: u32, session: [u8; 32])
         k.keeper.start_dkg(params.clone()).await.unwrap();
     }
     for events in &mut events {
-        ceremony_reaches(events, session, "completed").await;
+        ceremony_reaches(events, session, CeremonyStatus::Completed).await;
     }
     serde_json::from_value(keepers[0].keeper.ceremony(session).unwrap().result.unwrap()).unwrap()
 }
@@ -323,7 +326,7 @@ pub async fn run_reshare(
             .unwrap();
     }
     for events in &mut events {
-        ceremony_reaches(events, request.session, "completed").await;
+        ceremony_reaches(events, request.session, CeremonyStatus::Completed).await;
     }
     serde_json::from_value(
         participants[0]

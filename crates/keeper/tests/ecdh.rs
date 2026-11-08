@@ -6,8 +6,9 @@
 
 mod support;
 
+use ome_api::keeper::KeeperEvent;
 use ome_crypto::{SecretScalar, threshold::ecdh::AddressSecretShare};
-use ome_keeper::{Clock, Error, KeeperConfig, committee::Committee, events::Event};
+use ome_keeper::{Clock, Error, KeeperConfig, committee::Committee};
 use ome_net::Transport;
 use ome_wire::{
     Header, Message, SignedMessage, decode, encode,
@@ -121,7 +122,7 @@ async fn a_lying_member_is_reported_and_routed_around() {
         })
     ));
     let reported = wait_for(&mut events, |e| match e {
-        Event::InvalidPartials { member, .. } => Some(*member),
+        KeeperEvent::InvalidPartials { member, .. } => Some(*member),
         _ => None,
     })
     .await;

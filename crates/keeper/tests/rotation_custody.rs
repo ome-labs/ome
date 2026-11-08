@@ -6,10 +6,12 @@
 
 mod support;
 
-use ome_crypto::Base;
-use ome_keeper::{
-    Error, KeeperConfig, Observation, ReshareRequest, ceremony::dkg::DkgParams, events::Event,
+use ome_api::{
+    Hex32,
+    keeper::{CeremonyStatus, KeeperEvent},
 };
+use ome_crypto::Base;
+use ome_keeper::{Error, KeeperConfig, Observation, ReshareRequest, ceremony::dkg::DkgParams};
 use ome_wire::{messages::ecdh::EcdhPurpose, types::parse_field};
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
@@ -113,7 +115,7 @@ async fn an_unverifiable_config_keeps_the_share_and_raises_an_alarm() {
 
     assert_eq!(observed, Observation::Unknown);
     let version = wait_for(&mut events, |e| match e {
-        Event::ConfigMismatch { version, .. } => Some(*version),
+        KeeperEvent::ConfigMismatch { version, .. } => Some(*version),
         _ => None,
     })
     .await;
@@ -185,11 +187,11 @@ async fn a_pending_share_whose_rotation_never_lands_expires() {
     v.harness.clock.advance(601);
 
     let session = wait_for(&mut events, |e| match e {
-        Event::PendingExpired { session, .. } => Some(session.clone()),
+        KeeperEvent::PendingExpired { session, .. } => Some(*session),
         _ => None,
     })
     .await;
-    assert_eq!(session, hex::encode(request.session));
+    assert_eq!(session, Hex32(request.session));
     assert_eq!(v.keepers[0].secrets("pending-"), Vec::<String>::new());
     assert_eq!(
         v.keepers[0]
@@ -249,7 +251,7 @@ async fn a_silent_member_times_the_ceremony_out_and_is_blamed() {
 
     harness.clock.advance(31);
 
-    ceremony_reaches(&mut events, [3; 32], "aborted").await;
+    ceremony_reaches(&mut events, [3; 32], CeremonyStatus::Aborted).await;
     let failure = keepers[0]
         .keeper
         .ceremony([3; 32])

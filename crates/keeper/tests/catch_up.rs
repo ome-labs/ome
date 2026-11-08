@@ -5,10 +5,10 @@
 
 mod support;
 
+use ome_api::keeper::{CeremonyStatus, KeeperEvent};
 use ome_keeper::{
     Clock,
     ceremony::dkg::{Dkg, DkgParams},
-    events::Event,
 };
 use ome_net::Transport;
 use ome_wire::{Header, Message, SignedMessage, encode, version::PROTOCOL_VERSION};
@@ -43,7 +43,7 @@ async fn records_while_member_3_is_away(v: &support::Vault) -> [u8; 32] {
         .await
         .unwrap();
     wait_for(&mut first, |e| {
-        matches!(e, Event::Approval { .. }).then_some(())
+        matches!(e, KeeperEvent::Approval { .. }).then_some(())
     })
     .await;
     assert_eq!(
@@ -65,8 +65,8 @@ async fn an_offline_member_catches_up_through_sync() {
     // The approval and the payload arrive in either order.
     let (mut approval, mut payload) = (false, false);
     wait_for(&mut third, |e| {
-        approval |= matches!(e, Event::Approval { .. });
-        payload |= matches!(e, Event::Payload { .. });
+        approval |= matches!(e, KeeperEvent::Approval { .. });
+        payload |= matches!(e, KeeperEvent::Payload { .. });
         (approval && payload).then_some(())
     })
     .await;
@@ -138,7 +138,7 @@ async fn an_equivocating_dealer_is_caught_by_the_echo() {
 
     // Every honest member aborts; the one that compares the two signed packages blames the dealer.
     for events in &mut events {
-        support::ceremony_reaches(events, [5; 32], "aborted").await;
+        support::ceremony_reaches(events, [5; 32], CeremonyStatus::Aborted).await;
     }
     let blamed = hex::encode(keys.identity.public().0);
     let attributed = keepers[..2]

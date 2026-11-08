@@ -3,6 +3,7 @@
 //! proposal is held until the proposal does. Payloads are fetched by hash: a keeper that receives a proposal whose
 //! payload it lacks asks the sender for it.
 
+use ome_api::keeper::KeeperEvent;
 use ome_crypto::{Point, schnorr};
 use ome_net::Peer;
 use ome_protocol::vault::{approval_message, rejection_message};
@@ -16,7 +17,6 @@ use ome_wire::{
 
 use crate::{
     Error, Result,
-    events::Event,
     keeper::Keeper,
     store::{ManifestStatus, ReceiptEntry},
 };
@@ -113,16 +113,16 @@ impl Keeper {
     }
 
     /// Checks a vault transaction the daemon observed against known executions; an unknown one raises
-    /// [`Event::UnexpectedSpend`]. Returns whether it was known.
+    /// [`KeeperEvent::UnexpectedSpend`]. Returns whether it was known.
     ///
     /// # Errors
     /// Storage errors.
     pub fn observe_tx(&self, vault: [u8; 32], tx_hash: [u8; 32]) -> Result<bool> {
         let known = self.0.store.has_receipt(&vault, &tx_hash)?;
         if !known {
-            self.emit(Event::UnexpectedSpend {
-                vault: hex::encode(vault),
-                tx_hash: hex::encode(tx_hash),
+            self.emit(KeeperEvent::UnexpectedSpend {
+                vault: vault.into(),
+                tx_hash: tx_hash.into(),
             });
         }
         Ok(known)
@@ -328,9 +328,9 @@ impl Keeper {
         let id = proposal.id()?;
         let body = encode_body(&Message::Proposal(proposal.clone()))?;
         if self.0.store.put_proposal(&id, &vault, &body, self.now())? {
-            self.emit(Event::Proposal {
-                vault: hex::encode(vault),
-                id: hex::encode(id),
+            self.emit(KeeperEvent::Proposal {
+                vault: vault.into(),
+                id: id.into(),
             });
         }
         Ok(id)
@@ -343,9 +343,9 @@ impl Keeper {
             .store
             .put_payload(&hash, &vault, &payload.bytes, self.now())?
         {
-            self.emit(Event::Payload {
-                vault: hex::encode(vault),
-                hash: hex::encode(hash),
+            self.emit(KeeperEvent::Payload {
+                vault: vault.into(),
+                hash: hash.into(),
             });
         }
         Ok(hash)
@@ -373,10 +373,10 @@ impl Keeper {
             .store
             .put_receipt(&proposal, &vault, &tx_hash, self.now())?
         {
-            self.emit(Event::Receipt {
-                vault: hex::encode(vault),
-                proposal: hex::encode(proposal),
-                tx_hash: hex::encode(tx_hash),
+            self.emit(KeeperEvent::Receipt {
+                vault: vault.into(),
+                proposal: proposal.into(),
+                tx_hash: tx_hash.into(),
             });
         }
         Ok(())
@@ -443,9 +443,9 @@ impl Keeper {
             .store
             .put_approval(&approval.proposal, approval.slot, &body, self.now())?
         {
-            self.emit(Event::Approval {
-                vault: hex::encode(vault),
-                proposal: hex::encode(approval.proposal),
+            self.emit(KeeperEvent::Approval {
+                vault: vault.into(),
+                proposal: approval.proposal.into(),
                 slot: approval.slot,
             });
         }
@@ -463,9 +463,9 @@ impl Keeper {
             .store
             .put_rejection(&rejection.proposal, rejection.slot, &body, self.now())?
         {
-            self.emit(Event::Rejection {
-                vault: hex::encode(vault),
-                proposal: hex::encode(rejection.proposal),
+            self.emit(KeeperEvent::Rejection {
+                vault: vault.into(),
+                proposal: rejection.proposal.into(),
                 slot: rejection.slot,
             });
         }
