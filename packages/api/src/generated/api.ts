@@ -2901,6 +2901,11 @@ export type MembershipPlan = {
    * Why it cannot run, if it cannot.
    */
   failure: string | null;
+  /**
+   * The plan to hand every member who stays and every joiner (`ome-rotation-v0:…`); each passes it to
+   * `membership.begin`. It carries the reshare's parameters and the vault's deployment, no secrets.
+   */
+  share: string;
 };
 
 /**
@@ -2915,6 +2920,16 @@ export type RotationRef = {
    * Rotation id.
    */
   id: Hex32;
+};
+
+/**
+ * Params of `membership.begin`.
+ */
+export type RotationPlanText = {
+  /**
+   * A plan from `membership.plan`, on this or another member's daemon.
+   */
+  plan: string;
 };
 
 /**
@@ -3205,7 +3220,7 @@ export interface DaemonMethods {
   "contacts.remove": { params: AddressParams; result: Array<Contact> };
   "membership.request": { params: Empty; result: JoinRequestText };
   "membership.plan": { params: MembershipParams; result: MembershipPlan };
-  "membership.begin": { params: RotationRef; result: RotationState };
+  "membership.begin": { params: RotationPlanText; result: RotationState };
   "membership.get": { params: RotationRef; result: RotationState | null };
   "membership.list": { params: VaultParams; result: Array<RotationState> };
 }

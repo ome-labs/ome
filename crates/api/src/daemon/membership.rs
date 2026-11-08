@@ -67,6 +67,16 @@ pub struct MembershipPlan {
     pub within_removal_limit: bool,
     /// Why it cannot run, if it cannot.
     pub failure: Option<String>,
+    /// The plan to hand every member who stays and every joiner (`ome-rotation-v0:…`); each passes it to
+    /// `membership.begin`. It carries the reshare's parameters and the vault's deployment, no secrets.
+    pub share: String,
+}
+
+/// Params of `membership.begin`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct RotationPlanText {
+    /// A plan from `membership.plan`, on this or another member's daemon.
+    pub plan: String,
 }
 
 /// Params naming a rotation.

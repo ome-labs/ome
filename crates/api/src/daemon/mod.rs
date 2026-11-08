@@ -13,8 +13,8 @@ pub use founding::{
     LobbyCreateParams, LobbyView, LobbyViewMember, StartLobbyParams, StepStatus,
 };
 pub use membership::{
-    CommitteeShape, Joiner, MembershipParams, MembershipPlan, RotationRef, RotationState,
-    RotationStep, RotationStepId,
+    CommitteeShape, Joiner, MembershipParams, MembershipPlan, RotationPlanText, RotationRef,
+    RotationState, RotationStep, RotationStepId,
 };
 pub use proposals::{
     ApproveParams, ContractFunction, DecodedCall, Execution, ExecutionPhase, ExecutionProgress,
@@ -191,12 +191,12 @@ methods! {
     ContactsRemove = "contacts.remove" (AddressParams) -> Vec<Contact>;
     /// A join request for this member, to hand to a member of a vault it should join.
     MembershipRequest = "membership.request" (Empty) -> crate::keeper::JoinRequestText;
-    /// Plans a membership change (draft).
+    /// Plans a membership change.
     MembershipPlanGet = "membership.plan" (MembershipParams) -> MembershipPlan;
-    /// Starts a planned rotation (draft).
-    MembershipBegin = "membership.begin" (RotationRef) -> RotationState;
-    /// A rotation's state (draft).
+    /// Takes part in a planned rotation: reshare through the keeper, then propose or approve `rotate_membership`.
+    MembershipBegin = "membership.begin" (RotationPlanText) -> RotationState;
+    /// A rotation's state .
     MembershipGet = "membership.get" (RotationRef) -> Option<RotationState>;
-    /// The vault's rotations (draft).
+    /// The vault's rotations .
     MembershipList = "membership.list" (VaultParams) -> Vec<RotationState>;
 }

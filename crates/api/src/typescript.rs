@@ -64,7 +64,7 @@ fn types(cfg: &Config) -> Vec<Declared> {
         d::Signs, d::Review, d::ProposalPreview, d::ProposalRef, d::ProposeParams, d::ApproveParams,
         d::RejectParams, d::ExecutionPhase, d::ExecutionProgress, d::ContractFunction, d::FunctionKind,
         d::FunctionParam, d::Joiner, d::MembershipParams, d::CommitteeShape, d::MembershipPlan,
-        d::RotationRef, d::RotationStepId, d::RotationStep, d::RotationState, d::DaemonEvent,
+        d::RotationRef, d::RotationPlanText, d::RotationStepId, d::RotationStep, d::RotationState, d::DaemonEvent,
         d::VaultAuditParams, d::AliasParams, d::TokenParams, d::ContractParams, d::ContactParams,
         d::AddressParams,
     ]
