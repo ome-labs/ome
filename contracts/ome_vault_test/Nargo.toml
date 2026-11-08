@@ -1,0 +1,8 @@
+[package]
+name = "ome_vault_test"
+type = "lib"
+
+[dependencies]
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "aztec" }
+ome_vault = { path = "../ome_vault" }
+test_signer = { path = "../test_signer" }
