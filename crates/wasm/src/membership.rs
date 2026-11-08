@@ -7,9 +7,11 @@ use ome_protocol::{
 };
 use wasm_bindgen::prelude::*;
 
+use ome_api::Hex64;
+
 use crate::{
     convert,
-    error::Result,
+    error::{Result, WasmError},
     js::{export, from_js},
     types::{Rotation, Warning},
 };
@@ -72,6 +74,24 @@ pub fn rotation_call(
         Ok(convert::call_out(
             &self::rotation(from_js(rotation)?)?.to_call(&vault),
         ))
+    })
+}
+
+/// The tagging secret for the vault's own unconstrained notes in committee epoch `epoch`, derived from that epoch's
+/// ceremony transcript (the founding DKG, then each reshare), so a member removed earlier cannot derive it.
+#[wasm_bindgen(js_name = epochTaggingSecret, unchecked_return_type = "Point")]
+pub fn epoch_tagging_secret(
+    #[wasm_bindgen(unchecked_param_type = "Hex32")] vault: &str,
+    epoch: u32,
+    #[wasm_bindgen(unchecked_param_type = "Hex64")] transcript: &str,
+) -> Result<JsValue, JsValue> {
+    export(|| {
+        let transcript: Hex64 = transcript
+            .parse()
+            .map_err(|e: ome_api::HexError| WasmError::invalid(e.to_string()))?;
+        let secret =
+            membership::epoch_tagging_secret(convert::field(vault)?, epoch, &transcript.0)?;
+        Ok(ome_api::Point::from_core(&secret))
     })
 }
 

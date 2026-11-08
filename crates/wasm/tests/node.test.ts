@@ -11,6 +11,7 @@ import {
   decodeApproval,
   decodeProposal,
   decodeRejection,
+  epochTaggingSecret,
   generateSigner,
   outerHash,
   policyWarnings,
@@ -228,6 +229,15 @@ describe("membership", () => {
         checkRotation(f.vault, { ...rotation, verificationShares: f.committee.verificationShares }),
       ).kind,
     ).toBe("invalid");
+  });
+
+  it("derives a different self-send tagging secret per epoch", () => {
+    const vault = randomField();
+    const transcript = `0x${"07".repeat(64)}`;
+    const first = epochTaggingSecret(vault, 1, transcript);
+    expect(epochTaggingSecret(vault, 1, transcript)).toEqual(first);
+    expect(epochTaggingSecret(vault, 2, transcript)).not.toEqual(first);
+    expect(thrown(() => epochTaggingSecret(vault, 1, "0x07")).kind).toBe("invalid");
   });
 
   it("warns about risky thresholds", () => {
