@@ -1,0 +1,35 @@
+# systemd unit for a member's keeper on their own server. The passphrase that seals the keeper's secrets comes from a
+# credentials file readable only by root (systemd-creds); the RPC socket and token live in the state directory.
+# Add `--relay <multiaddr>/p2p/<peer id>` (repeat) for the relays the vault's members use.
+[Unit]
+Description=Ome keeper (viewing-share custody)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=ome-keeper
+StateDirectoryMode=0700
+LoadCredential=passphrase:/etc/ome/keeper-passphrase
+Environment=OME_KEEPER_DATA=/var/lib/ome-keeper
+ExecStart=/bin/sh -c 'OME_KEEPER_PASSPHRASE="$(cat "$CREDENTIALS_DIRECTORY/passphrase")" exec /usr/local/bin/ome-keeper run --listen /ip4/0.0.0.0/udp/4001/quic-v1 --listen /ip4/0.0.0.0/tcp/4001 --log-format json'
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,33 @@
+# systemd unit for an Ome relay. Install the binary at /usr/local/bin/ome-relay. Add `--allow-peer <peer id>` (repeat)
+# to serve only your own keepers, and `--external <multiaddr>` for the public address keepers dial.
+[Unit]
+Description=Ome relay (circuit relay and ciphertext mailbox)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=ome-relay
+StateDirectoryMode=0700
+Environment=OME_RELAY_DATA=/var/lib/ome-relay
+ExecStart=/usr/local/bin/ome-relay run --health 127.0.0.1:9090 --log-format json
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
