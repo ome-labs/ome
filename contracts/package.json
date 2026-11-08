@@ -5,6 +5,9 @@
   "description": "Ome contracts (Aztec.nr 6.0.0, Noir)",
   "license": "Apache-2.0",
   "type": "module",
+  "exports": {
+    "./OmeVault.json": "./target/ome_vault-OmeVault.json"
+  },
   "scripts": {
     "build": "aztec compile",
     "codegen": "aztec codegen target -o artifacts",

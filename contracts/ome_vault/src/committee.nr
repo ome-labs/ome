@@ -1,0 +1,46 @@
+use crate::{
+    constants::{DOM_SEP__COMMITTEE, MAX_SIGNERS, MIN_VIEWING_THRESHOLD, POINT_LEN},
+    point::{assert_ordered_points, Point},
+};
+use aztec::protocol::hash::poseidon2_hash_with_separator;
+
+/// Viewing committee: the threshold `t_v` and each member's public verification share `Y_i = s_i · G` from the
+/// distributed key generation. Member `i` of the committee is signer `i` of the vault.
+///
+/// Only the commitment is stored on-chain; keepers check every threshold ECDH request and reshare against it.
+pub struct Committee {
+    pub viewing_threshold: u32,
+    pub shares: [Point; MAX_SIGNERS],
+    pub member_count: u32,
+}
+
+impl Committee {
+    /// Builds a committee for `member_count` members and asserts it is well formed.
+    pub fn new(viewing_threshold: u32, shares: [Point; MAX_SIGNERS], member_count: u32) -> Self {
+        let committee = Self { viewing_threshold, shares, member_count };
+        committee.assert_valid();
+        committee
+    }
+
+    /// Asserts `MIN_VIEWING_THRESHOLD <= t_v <= member_count` and that shares are ordered, distinct, on-curve and
+    /// zero-padded.
+    pub fn assert_valid(self) {
+        assert(
+            (self.viewing_threshold >= MIN_VIEWING_THRESHOLD)
+                & (self.viewing_threshold <= self.member_count),
+            "viewing threshold out of range",
+        );
+        assert_ordered_points(self.shares, self.member_count, "committee");
+    }
+
+    /// `Poseidon2("ome.committee.v0", t_v, Y_0.x, Y_0.y, ..., Y_{MAX-1}.y)`.
+    pub fn commitment(self) -> Field {
+        let mut fields = [0; MAX_SIGNERS * POINT_LEN + 1];
+        fields[0] = self.viewing_threshold as Field;
+        for i in 0..MAX_SIGNERS {
+            fields[1 + i * POINT_LEN] = self.shares[i].x;
+            fields[1 + i * POINT_LEN + 1] = self.shares[i].y;
+        }
+        poseidon2_hash_with_separator(fields, DOM_SEP__COMMITTEE)
+    }
+}
