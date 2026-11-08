@@ -51,8 +51,12 @@ pub(crate) fn canonical<T: Serialize>(value: &T) -> Result<Vec<u8>, Error> {
     postcard::to_allocvec(value).map_err(|_| Error::Malformed)
 }
 
-/// Canonical bytes, refused above `limit`.
-pub(crate) fn to_canonical<T: Serialize>(value: &T, limit: usize) -> Result<Vec<u8>, Error> {
+/// Canonical bytes of any wire value, refused above `limit`. Other Ome formats built on this encoding (such as the
+/// proposal payload in `ome-protocol`) use it so they share the one-byte-form rule.
+///
+/// # Errors
+/// [`Error::TooLarge`] above `limit`, [`Error::Malformed`] if the value cannot be encoded.
+pub fn to_canonical<T: Serialize>(value: &T, limit: usize) -> Result<Vec<u8>, Error> {
     let bytes = canonical(value)?;
     if bytes.len() > limit {
         return Err(Error::TooLarge(bytes.len()));
@@ -61,7 +65,10 @@ pub(crate) fn to_canonical<T: Serialize>(value: &T, limit: usize) -> Result<Vec<
 }
 
 /// Parses exactly one canonical value of at most `limit` bytes.
-pub(crate) fn from_canonical<T: Serialize + DeserializeOwned>(
+///
+/// # Errors
+/// [`Error::TooLarge`] above `limit`, [`Error::Malformed`] for invalid, trailing or non-canonical bytes.
+pub fn from_canonical<T: Serialize + DeserializeOwned>(
     bytes: &[u8],
     limit: usize,
 ) -> Result<T, Error> {
