@@ -7,6 +7,9 @@ pub mod point;
 pub mod signer_set;
 pub mod witness;
 
+// Unit, integration and end-to-end tests live beside the code so coverage reports measure the contract itself.
+mod test;
+
 use aztec::macros::aztec;
 
 /// Ome vault: private k-of-n account contract.

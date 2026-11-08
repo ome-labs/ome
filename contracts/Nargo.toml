@@ -1,3 +1,3 @@
 [workspace]
 # Add each contract package here as it lands.
-members = ["ome_vault", "ome_vault_test", "test_signer"]
+members = ["ome_vault", "test_signer"]

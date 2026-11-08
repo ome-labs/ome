@@ -5,3 +5,6 @@ type = "contract"
 [dependencies]
 aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "aztec" }
 schnorr = { git = "https://github.com/noir-lang/schnorr", tag = "v0.4.0" }
+# Test-only: the vault tests deploy TestSigner to obtain TXE Schnorr signatures. It is never part of the OmeVault
+# artifact, and Nargo has no dev-dependency section to hold it instead.
+test_signer = { path = "../test_signer" }
