@@ -12,7 +12,7 @@ use ome_api::{
     },
     jsonrpc::{Notification, Request, Response},
 };
-use ome_client::{ADDR_FILE, ClientError, DaemonClient, Home, TOKEN_FILE};
+use ome_client::{ADDR_FILE, ClientError, DaemonClient, Home, Profile, TOKEN_FILE};
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -109,20 +109,23 @@ fn fake_daemon(socket: &Path) {
     });
 }
 
-/// A home whose files point at a running stand-in daemon.
-fn home_with_daemon(dir: &Path) -> Home {
+/// A profile whose files point at a running stand-in daemon.
+fn profile_with_daemon(home: &Path) -> Profile {
+    let profile = Home::at(home).profile("alice").unwrap();
+    let dir = profile.dir();
+    std::fs::create_dir_all(dir).unwrap();
     fake_daemon(&dir.join("omed.sock"));
     std::fs::write(dir.join(ADDR_FILE), "omed.sock\n").unwrap();
     let token = dir.join(TOKEN_FILE);
     std::fs::write(&token, format!("{TOKEN}\n")).unwrap();
     std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
-    Home::at(dir)
+    profile
 }
 
 #[tokio::test]
 async fn a_client_discovers_the_daemon_and_calls_it() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DaemonClient::discover(&home_with_daemon(dir.path()))
+    let client = DaemonClient::discover(&profile_with_daemon(dir.path()))
         .await
         .unwrap();
 
@@ -181,7 +184,7 @@ impl ome_api::daemon::DaemonMethod for HangUp {}
 #[tokio::test]
 async fn a_dropped_connection_fails_the_waiting_call() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DaemonClient::discover(&home_with_daemon(dir.path()))
+    let client = DaemonClient::discover(&profile_with_daemon(dir.path()))
         .await
         .unwrap();
     let closed = client
@@ -198,17 +201,20 @@ async fn a_dropped_connection_fails_the_waiting_call() {
 
 #[tokio::test]
 async fn discovery_refuses_missing_files_and_a_shared_token() {
-    let dir = tempfile::tempdir().unwrap();
-    let home = Home::at(dir.path());
-    let missing = home.daemon().err().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let profile = Home::at(home.path()).profile("bob").unwrap();
+    let missing = profile.daemon().err().unwrap();
     assert_eq!(missing.kind(), ErrorKind::NotReady);
 
-    std::fs::write(dir.path().join(ADDR_FILE), "omed.sock").unwrap();
-    let token = dir.path().join(TOKEN_FILE);
+    let dir = profile.dir();
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(dir.join(ADDR_FILE), "omed.sock").unwrap();
+    let token = dir.join(TOKEN_FILE);
     std::fs::write(&token, TOKEN).unwrap();
     std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o644)).unwrap();
     assert!(
-        home.daemon()
+        profile
+            .daemon()
             .err()
             .unwrap()
             .to_string()
@@ -216,7 +222,7 @@ async fn discovery_refuses_missing_files_and_a_shared_token() {
     );
 
     std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
-    let endpoint = home.daemon().unwrap();
+    let endpoint = profile.daemon().unwrap();
     assert_eq!(endpoint.token, TOKEN);
     assert!(!format!("{endpoint:?}").contains(TOKEN));
 }
@@ -239,4 +245,16 @@ fn the_home_is_ome_home_or_dot_ome() {
         Home::at("/home/a/.ome")
     );
     assert!(resolve(None, None).is_err());
+}
+
+#[test]
+fn profile_names_cannot_leave_the_home() {
+    let home = Home::at("/srv/ome");
+    assert_eq!(
+        home.profile("work-2").unwrap().dir(),
+        Path::new("/srv/ome/profiles/work-2")
+    );
+    for bad in ["", "../x", "a/b", "Work", "-x", &"x".repeat(33)] {
+        assert!(home.profile(bad).is_err(), "{bad:?}");
+    }
 }

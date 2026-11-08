@@ -4,7 +4,7 @@ use std::{path::Path, sync::Arc};
 
 use ome_api::daemon::{DaemonEvent, DaemonMethod};
 
-use crate::{Events, Home, Result, session::Session};
+use crate::{Events, Profile, Result, session::Session};
 
 /// A session with a daemon. Cloning shares the session; calls on clones run concurrently.
 #[derive(Clone)]
@@ -13,12 +13,12 @@ pub struct DaemonClient {
 }
 
 impl DaemonClient {
-    /// Connects to the daemon `home` names.
+    /// Connects to `profile`'s daemon.
     ///
     /// # Errors
-    /// No daemon is running there, or it refuses the token.
-    pub async fn discover(home: &Home) -> Result<Self> {
-        let endpoint = home.daemon()?;
+    /// The profile's daemon is not running, or refuses the token.
+    pub async fn discover(profile: &Profile) -> Result<Self> {
+        let endpoint = profile.daemon()?;
         Self::connect(&endpoint.socket, &endpoint.token).await
     }
 
