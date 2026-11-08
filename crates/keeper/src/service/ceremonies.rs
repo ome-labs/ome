@@ -300,17 +300,21 @@ impl Keeper {
         session: [u8; 32],
         sealed: &SealedSecrets,
     ) {
-        let Some(reshare) = state.reshares.get(&session) else {
-            return;
+        let (params, new_index) = match (
+            state.reshares.get(&session),
+            state.finished_reshares.get(&session),
+        ) {
+            (Some(reshare), _) => (reshare.params(), reshare.new_index()),
+            (None, Some((_, params, new_index))) => (params, *new_index),
+            (None, None) => return,
         };
-        let params = reshare.params();
         let dealer = params
             .old_members
             .iter()
             .zip(1u32..)
             .find(|(m, index)| m.identity == from && params.dealers.contains(index));
         let me = self.identity();
-        let joiner = reshare.new_index() == Some(u32::from(sealed.index))
+        let joiner = new_index == Some(u32::from(sealed.index))
             && !params.old_members.iter().any(|m| m.identity == me);
         let (Some((dealer, _)), true) = (dealer, joiner) else {
             tracing::warn!("ignoring protocol secrets from a non-dealer or for a non-joiner");
@@ -429,6 +433,9 @@ impl Keeper {
         }
         let before = state.lingering.len();
         state.lingering.retain(|_, (until, _)| *until > now);
+        state
+            .finished_reshares
+            .retain(|_, (until, _, _)| *until > now);
         if state.lingering.len() != before {
             self.refresh_allowlist(&state);
         }
@@ -497,7 +504,14 @@ impl Keeper {
                     now,
                 ),
             }
-            state.reshares.remove(&session);
+            if let Some(finished) = state.reshares.remove(&session) {
+                // A dealer's hand-off of the protocol secrets may still arrive after this joiner finished.
+                let new_index = finished.new_index();
+                let until = now + self.0.config.round_timeout_secs;
+                state
+                    .finished_reshares
+                    .insert(session, (until, finished.params().clone(), new_index));
+            }
         } else {
             return;
         }

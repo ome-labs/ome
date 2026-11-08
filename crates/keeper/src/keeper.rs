@@ -18,7 +18,11 @@ use tokio::sync::{Mutex, broadcast, mpsc};
 
 use crate::{
     Result,
-    ceremony::{Participant, dkg::Dkg, reshare::Reshare},
+    ceremony::{
+        Participant,
+        dkg::Dkg,
+        reshare::{Reshare, ReshareParams},
+    },
     clock::Clock,
     committee::Committee,
     custody::{KeeperKeys, SecretStore},
@@ -123,6 +127,9 @@ pub(crate) struct State {
     /// Participants of finished ceremonies with the time they stay reachable: a member that finishes first must still
     /// deliver its last messages (and accept retries) to members that are not in any of its committees yet.
     pub(crate) lingering: HashMap<[u8; 32], (u64, Vec<Participant>)>,
+    /// Reshares that finished recently, until when, their parameters and this keeper's new index: a joiner may still
+    /// receive a dealer's hand-off of the protocol secrets.
+    pub(crate) finished_reshares: HashMap<[u8; 32], (u64, ReshareParams, Option<u32>)>,
     /// Last sync per vault (unix seconds).
     pub(crate) last_sync: HashMap<[u8; 32], u64>,
     /// Last mailbox poll (unix seconds).
@@ -196,6 +203,7 @@ impl Keeper {
             limiter: RateLimiter::new(config.ecdh_points_per_minute),
             echoed: HashSet::new(),
             lingering: HashMap::new(),
+            finished_reshares: HashMap::new(),
             last_sync: HashMap::new(),
             last_mailbox_poll: 0,
             orphans: HashMap::new(),
