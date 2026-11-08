@@ -77,6 +77,28 @@ pub fn rotation_call(
     })
 }
 
+/// The signer slot a payload's `rotate_membership` call swaps, if it is a signer swap of the vault (one key replaced,
+/// the committee and thresholds unchanged); `null` for a payload that rotates nothing or reshares.
+#[wasm_bindgen(js_name = signerSwapSlot, unchecked_return_type = "number | null")]
+pub fn signer_swap_slot(
+    #[wasm_bindgen(unchecked_param_type = "VaultInput")] vault: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "HexBytes")] payload: &str,
+) -> Result<JsValue, JsValue> {
+    export(|| {
+        let vault = convert::vault(from_js(vault)?)?;
+        let request =
+            ome_protocol::payload::ExecutionRequest::from_payload(&convert::payload(payload)?)?;
+        Ok(request
+            .calls
+            .iter()
+            .filter(|call| membership::is_rotation_call(call, &vault))
+            .find_map(|call| {
+                let rotation = membership::Rotation::from_call(call, &vault).ok()?;
+                membership::signer_swap_slot(&vault, &rotation).ok()
+            }))
+    })
+}
+
 /// The tagging secret for the vault's own unconstrained notes in committee epoch `epoch`, derived from that epoch's
 /// ceremony transcript (the founding DKG, then each reshare), so a member removed earlier cannot derive it.
 #[wasm_bindgen(js_name = epochTaggingSecret, unchecked_return_type = "Point")]

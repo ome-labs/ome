@@ -16,14 +16,14 @@ browser. It is one module for every platform.
 
 ### Surface
 
-| Area              | Exports                                                                                                                               |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Threshold reading | `preaddress`, `addressContext`, `addressPublicShares`, `verifyAndCombine`                                                             |
-| Contract mirror   | `approvalMessage`, `rejectionMessage`, `signerSetCommitment`, `committeeCommitment`, `encodeWitness`                                  |
-| Payloads          | `outerHash`, `appPayloadHash`, `selector`                                                                                             |
-| Proposals         | `buildProposal`, `checkProposal`, `decodeProposal`, `decodeApproval`, `decodeRejection`, `verifyApproval`, `verifyRejection`, `tally` |
-| Signer            | `generateSigner`, `sealedPublicKey`, `sealingKey`, and `UnlockedSigner` (`open`, `publicKey`, `approve`, `approveRotation`, `reject`) |
-| Membership        | `verifyRotationShares`, `checkRotation`, `rotationCall`, `policyWarnings`                                                             |
+| Area              | Exports                                                                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Threshold reading | `preaddress`, `addressContext`, `addressPublicShares`, `verifyAndCombine`                                                                                  |
+| Contract mirror   | `approvalMessage`, `rejectionMessage`, `signerSetCommitment`, `committeeCommitment`, `encodeWitness`                                                       |
+| Payloads          | `outerHash`, `appPayloadHash`, `selector`                                                                                                                  |
+| Proposals         | `buildProposal`, `checkProposal`, `decodeProposal`, `decodeApproval`, `decodeRejection`, `verifyApproval`, `verifyRejection`, `tally`                      |
+| Signer            | `generateSigner`, `sealedPublicKey`, `sealingKey`, and `UnlockedSigner` (`open`, `publicKey`, `approve`, `approveRotation`, `approveSignerSwap`, `reject`) |
+| Membership        | `verifyRotationShares`, `checkRotation`, `rotationCall`, `signerSwapSlot`, `policyWarnings`                                                                |
 
 - **`verifyAndCombine`** takes the keeper's `ecdh.batch` responses as they come back, with the committee's
   verification shares. It returns `address_secret · P` for every input, and names any member whose partials were
@@ -109,6 +109,7 @@ secrets, which production code never does:
   - the signer refuses expired or mismatched proposals;
   - a passphrase seals and opens, the sealing key opens, and a wrong passphrase is `auth`;
   - a reshared committee passes the rotation checks, and its `rotate_membership` call is built;
+  - a signer swap is recognised and approved, and a payment is not a swap;
   - unrelated shares and unrefreshed shares are refused;
   - threshold warnings;
   - malformed input throws `OmeWasmError`.

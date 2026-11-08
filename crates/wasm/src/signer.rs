@@ -159,6 +159,38 @@ impl UnlockedSigner {
         })
     }
 
+    /// Approves a signer swap: the payload must be one `rotate_membership` call that replaces one member's key and
+    /// changes nothing else, plus at most fee payment calls to one of `feePayers`. Returns the approval to store with
+    /// the keeper.
+    #[wasm_bindgen(js_name = approveSignerSwap, unchecked_return_type = "HexBytes")]
+    pub fn approve_signer_swap(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "VaultInput")] vault: JsValue,
+        #[wasm_bindgen(unchecked_param_type = "Chain")] chain: JsValue,
+        #[wasm_bindgen(unchecked_param_type = "HexBytes")] proposal: &str,
+        #[wasm_bindgen(unchecked_param_type = "HexBytes")] payload: &str,
+        #[wasm_bindgen(js_name = feePayers, unchecked_param_type = "Hex32[]")] fee_payers: JsValue,
+        now: f64,
+    ) -> Result<JsValue, JsValue> {
+        export(|| {
+            let fee_payers: Vec<[u8; 32]> = from_js::<Vec<ome_api::Hex32>>(fee_payers)?
+                .into_iter()
+                .map(|address| address.0)
+                .collect();
+            let (approval, _) = ome_signer::approve_signer_swap(
+                &self.key,
+                &convert::vault(from_js(vault)?)?,
+                convert::chain(from_js(chain)?)?,
+                &convert::proposal(proposal)?,
+                &convert::payload(payload)?,
+                &fee_payers,
+                seconds(now)?,
+                &mut rng(),
+            )?;
+            convert::body(&Message::Approval(approval))
+        })
+    }
+
     /// Rejects a proposal with a reason shown to the other members. Returns the rejection to store with the keeper.
     #[wasm_bindgen(unchecked_return_type = "HexBytes")]
     pub fn reject(

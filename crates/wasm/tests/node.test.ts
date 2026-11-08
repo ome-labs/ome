@@ -19,6 +19,7 @@ import {
   sealedPublicKey,
   sealingKey,
   selector,
+  signerSwapSlot,
   tally,
   verifyAndCombine,
   verifyApproval,
@@ -229,6 +230,51 @@ describe("membership", () => {
         checkRotation(f.vault, { ...rotation, verificationShares: f.committee.verificationShares }),
       ).kind,
     ).toBe("invalid");
+  });
+
+  it("recognises and approves a signer swap, and only a swap", () => {
+    const f = fixture();
+    const key = randomField();
+    const phone = UnlockedSigner.open(generateSigner({ key }), { key });
+    const keys = f.signers.map((s) => s.publicKey());
+    const swap = {
+      signers: keys.map((k, i) => (i === 2 ? phone.publicKey() : k)),
+      threshold: 2,
+      viewingThreshold: 2,
+      verificationShares: f.committee.verificationShares,
+    };
+    const built = buildProposal(f.vault, chain, {
+      calls: [rotationCall(f.vault, swap)],
+      extras: "0x",
+      txNonce: randomField(),
+      expiresAt: NOW + 3600,
+      summary: "move member 3 to a phone",
+      proposer: 1,
+    });
+    expect(signerSwapSlot(f.vault, built.payload)).toBe(2);
+    const approval = at(f.signers, 0).approveSignerSwap(
+      f.vault,
+      chain,
+      built.proposal,
+      built.payload,
+      [],
+      NOW,
+    );
+    verifyApproval(f.vault, built.proposal, approval);
+    expect(signerSwapSlot(f.vault, proposal(f).payload)).toBeNull();
+    expect(
+      thrown(() =>
+        at(f.signers, 0).approveSignerSwap(
+          f.vault,
+          chain,
+          proposal(f).proposal,
+          proposal(f).payload,
+          [],
+          NOW,
+        ),
+      ).kind,
+    ).toBe("invalid");
+    phone.free();
   });
 
   it("derives a different self-send tagging secret per epoch", () => {
