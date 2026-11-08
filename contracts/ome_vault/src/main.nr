@@ -7,7 +7,7 @@ pub mod point;
 pub mod signer_set;
 pub mod witness;
 
-// Unit, integration and end-to-end tests live beside the code so coverage reports measure the contract itself.
+// Unit, integration and end-to-end tests. Test functions are compiled out of the OmeVault artifact.
 mod test;
 
 use aztec::macros::aztec;

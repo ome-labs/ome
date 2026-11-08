@@ -22,10 +22,6 @@
     "format:check": {
       "inputs": ["*/src/**/*.nr"]
     },
-    "coverage": {
-      "dependsOn": ["build"],
-      "cache": false
-    },
     "profile:flamegraphs": {
       "dependsOn": ["build"],
       "cache": false
