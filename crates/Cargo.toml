@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 # Add each crate folder here as it lands (folders carry no `ome` prefix; package names do: `crypto` builds `ome-crypto`).
-members = []
+members = ["crypto"]
 
 [workspace.package]
 version = "0.0.0"
@@ -20,41 +20,45 @@ publish = false
 # Randomness reaches core code only as `rand_core` trait parameters.
 [workspace.dependencies]
 # Curve and field arithmetic (Grumpkin over BN254) and Aztec's Poseidon2.
-ark-ec = { version = "0.6", default-features = false }
-ark-ff = { version = "0.6", default-features = false }
-ark-grumpkin = { version = "0.6", default-features = false }
-taceo-poseidon2 = { version = "0.3", default-features = false, features = ["bn254", "t4"] }
+ark-ec = { version = "0.6.0", default-features = false }
+ark-ff = { version = "0.6.0", default-features = false }
+ark-grumpkin = { version = "0.6.0", default-features = false }
+taceo-poseidon2 = { version = "0.3.1", default-features = false, features = ["bn254", "t4"] }
 
 # Secret handling.
-subtle = { version = "2.6", default-features = false }
-zeroize = { version = "1.9", default-features = false, features = ["derive"] }
+subtle = { version = "2.6.1", default-features = false }
+zeroize = { version = "1.9.1", default-features = false, features = ["alloc", "derive"] }
 
-# Randomness. `getrandom` 0.2 is only the WebAssembly backend for ark-std (see above).
-getrandom = { version = "0.2", features = ["js"] }
-rand_core = { version = "0.10", default-features = false }
-rand_chacha = { version = "0.10", default-features = false }
+# Randomness. `getrandom` is pinned to the 0.2 series on purpose: it is the version ark-std 0.6 depends on, and only
+# that version's `js` feature reaches it (the latest getrandom, 0.4, would be a separate, unused copy).
+getrandom = { version = "0.2.17", features = ["js"] }
+rand_core = { version = "0.10.1", default-features = false }
+rand_chacha = { version = "0.10.0", default-features = false }
 
 # Encryption, signatures and hashing.
-ed25519-dalek = { version = "3", default-features = false }
-hmac = { version = "0.13", default-features = false }
-hpke = { version = "0.15", default-features = false, features = [
+ed25519-dalek = { version = "3.0.0", default-features = false }
+hmac = { version = "0.13.0", default-features = false }
+hpke = { version = "0.15.1", default-features = false, features = [
   "alloc",
   "chacha",
   "hkdfsha2",
   "x25519",
 ] }
-sha2 = { version = "0.11", default-features = false }
-x25519-dalek = { version = "3", default-features = false, features = ["static_secrets", "zeroize"] }
+sha2 = { version = "0.11.1", default-features = false }
+x25519-dalek = { version = "3.0.0", default-features = false, features = [
+  "static_secrets",
+  "zeroize",
+] }
 
 # Encoding and errors.
-postcard = { version = "1.1", default-features = false, features = ["alloc"] }
-serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
-thiserror = { version = "2", default-features = false }
+postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }
+serde = { version = "1.0.229", default-features = false, features = ["derive", "alloc"] }
+thiserror = { version = "2.0.21", default-features = false }
 
 # Test-only.
-hex = "0.4"
-proptest = "1.12"
-serde_json = "1"
+hex = "0.4.3"
+proptest = "1.12.0"
+serde_json = "1.0.154"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

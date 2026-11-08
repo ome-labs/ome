@@ -1,0 +1,36 @@
+[package]
+name = "ome-crypto"
+description = "Threshold viewing-key cryptography for Ome vaults, byte-compatible with Aztec 6.0.0"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+ark-grumpkin = { workspace = true }
+hmac = { workspace = true }
+hpke = { workspace = true }
+rand_core = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+taceo-poseidon2 = { workspace = true }
+thiserror = { workspace = true }
+x25519-dalek = { workspace = true }
+zeroize = { workspace = true }
+
+# taceo-poseidon2 always enables ark-std's `getrandom`; on WebAssembly that needs its `js` backend.
+[target.'cfg(target_family = "wasm")'.dependencies]
+getrandom = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+proptest = { workspace = true }
+rand_chacha = { workspace = true }
+serde_json = { workspace = true }
