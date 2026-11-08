@@ -229,6 +229,43 @@ impl Keeper {
         Ok(Observation::Unknown)
     }
 
+    /// Destroys a share this keeper kept because it could not verify the config that replaced its committee: the
+    /// member has looked at the alarm and decided the share is no longer needed. Refused while the chain still names
+    /// the committee the share serves, so a mistaken call cannot break a working vault.
+    ///
+    /// # Errors
+    /// [`Error::UnknownVault`], [`Error::Invalid`] while the committee is still current, custody or storage errors.
+    pub async fn retire(&self, vault: [u8; 32]) -> Result<VaultInfo> {
+        let mut state = self.0.state.lock().await;
+        let current = state.vaults.get_mut(&vault).ok_or(Error::UnknownVault)?;
+        let epoch = current.committee.epoch();
+        let superseded = self
+            .0
+            .store
+            .latest_observed_version(&vault)?
+            .is_some_and(|version| version > epoch);
+        if current.status != ManifestStatus::Active || !superseded {
+            return Err(Error::Invalid(
+                "the chain has not moved past the committee this share serves".into(),
+            ));
+        }
+        current.share = None;
+        current.status = ManifestStatus::Removed;
+        self.0
+            .secrets
+            .destroy(&ShareSlot::Active(vault, epoch).name())?;
+        self.0
+            .store
+            .set_manifest_status(&vault, epoch, ManifestStatus::Removed, self.now())?;
+        self.refresh_allowlist(&state);
+        let info = Self::info(&state, &vault, &self.identity()).ok_or(Error::UnknownVault)?;
+        drop(state);
+        self.emit(Event::Retired {
+            vault: hex::encode(vault),
+        });
+        Ok(info)
+    }
+
     /// Destroys the pending shares of reshares that completed more than the configured lifetime ago and never became
     /// active.
     pub(crate) fn expire_pending(&self, now: u64) {

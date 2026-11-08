@@ -1,5 +1,6 @@
-//! Local `SQLite` database for public, non-secret state: committee manifests, ceremony status and results, the ECDH
-//! audit log and observed vault configs. Secrets never go here (see [`crate::custody`]).
+//! Local `SQLite` database for public, non-secret state: committee manifests, ceremony status and results, proposals,
+//! payloads, votes and receipts, lobbies, the ECDH audit log and observed vault configs. Secrets never go here (see
+//! [`crate::custody`]).
 
 mod migrations;
 
@@ -46,6 +47,17 @@ pub struct CeremonyRow {
     pub params: String,
     /// Outcome (JSON), once finished.
     pub result: Option<String>,
+}
+
+/// A stored execution receipt.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReceiptEntry {
+    /// Proposal id.
+    pub proposal: [u8; 32],
+    /// Transaction that executed it.
+    pub tx_hash: [u8; 32],
+    /// Unix seconds it was stored.
+    pub at: u64,
 }
 
 /// One ECDH audit entry.
@@ -306,6 +318,348 @@ impl Store {
         })
     }
 
+    // --- Proposals, approvals, receipts -----------------------------------------------------------------------------
+
+    /// Stores a proposal body (idempotent).
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn put_proposal(
+        &self,
+        id: &[u8; 32],
+        vault: &[u8; 32],
+        body: &[u8],
+        now: u64,
+    ) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "INSERT OR IGNORE INTO proposals (id, vault, body, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![id, vault, body, ts(now)],
+            )
+            .map(|n| n > 0)
+        })
+    }
+
+    /// A proposal body and its vault.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn proposal(&self, id: &[u8; 32]) -> Result<Option<([u8; 32], Vec<u8>)>> {
+        self.with(|c| {
+            c.query_row(
+                "SELECT vault, body FROM proposals WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+        })
+    }
+
+    /// Proposal bodies of `vault`, oldest first.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn proposals(&self, vault: &[u8; 32]) -> Result<Vec<Vec<u8>>> {
+        self.with(|c| {
+            let mut statement =
+                c.prepare("SELECT body FROM proposals WHERE vault = ?1 ORDER BY created_at, id")?;
+            statement
+                .query_map(params![vault], |row| row.get(0))?
+                .collect()
+        })
+    }
+
+    /// Stores an approval body (one per slot; idempotent).
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn put_approval(
+        &self,
+        proposal: &[u8; 32],
+        slot: u32,
+        body: &[u8],
+        now: u64,
+    ) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "INSERT OR IGNORE INTO approvals (proposal, slot, body, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![proposal, slot, body, ts(now)],
+            )
+            .map(|n| n > 0)
+        })
+    }
+
+    /// Approval bodies of a proposal, by slot.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn approvals(&self, proposal: &[u8; 32]) -> Result<Vec<Vec<u8>>> {
+        self.with(|c| {
+            let mut statement =
+                c.prepare("SELECT body FROM approvals WHERE proposal = ?1 ORDER BY slot")?;
+            statement
+                .query_map(params![proposal], |row| row.get(0))?
+                .collect()
+        })
+    }
+
+    /// Ids of every proposal of `vault`.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn proposal_ids(&self, vault: &[u8; 32]) -> Result<Vec<[u8; 32]>> {
+        self.with(|c| {
+            let mut statement =
+                c.prepare("SELECT id FROM proposals WHERE vault = ?1 ORDER BY created_at, id")?;
+            statement
+                .query_map(params![vault], |row| row.get(0))?
+                .collect()
+        })
+    }
+
+    /// `(proposal, slot)` of every approval of `vault`.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn approval_refs(&self, vault: &[u8; 32]) -> Result<Vec<([u8; 32], u32)>> {
+        self.with(|c| {
+            let mut statement = c.prepare(
+                "SELECT a.proposal, a.slot FROM approvals a JOIN proposals p ON p.id = a.proposal WHERE p.vault = ?1
+                 ORDER BY a.created_at",
+            )?;
+            statement.query_map(params![vault], |row| Ok((row.get(0)?, row.get(1)?)))?.collect()
+        })
+    }
+
+    /// One approval body.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn approval(&self, proposal: &[u8; 32], slot: u32) -> Result<Option<Vec<u8>>> {
+        self.with(|c| {
+            c.query_row(
+                "SELECT body FROM approvals WHERE proposal = ?1 AND slot = ?2",
+                params![proposal, slot],
+                |row| row.get(0),
+            )
+            .optional()
+        })
+    }
+
+    /// Stores a rejection body (one per slot; idempotent).
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn put_rejection(
+        &self,
+        proposal: &[u8; 32],
+        slot: u32,
+        body: &[u8],
+        now: u64,
+    ) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "INSERT OR IGNORE INTO rejections (proposal, slot, body, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![proposal, slot, body, ts(now)],
+            )
+            .map(|n| n > 0)
+        })
+    }
+
+    /// Rejection bodies of a proposal, by slot.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn rejections(&self, proposal: &[u8; 32]) -> Result<Vec<Vec<u8>>> {
+        self.with(|c| {
+            let mut statement =
+                c.prepare("SELECT body FROM rejections WHERE proposal = ?1 ORDER BY slot")?;
+            statement
+                .query_map(params![proposal], |row| row.get(0))?
+                .collect()
+        })
+    }
+
+    /// `(proposal, slot)` of every rejection of `vault`.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn rejection_refs(&self, vault: &[u8; 32]) -> Result<Vec<([u8; 32], u32)>> {
+        self.with(|c| {
+            let mut statement = c.prepare(
+                "SELECT r.proposal, r.slot FROM rejections r JOIN proposals p ON p.id = r.proposal WHERE p.vault = ?1
+                 ORDER BY r.created_at",
+            )?;
+            statement.query_map(params![vault], |row| Ok((row.get(0)?, row.get(1)?)))?.collect()
+        })
+    }
+
+    /// One rejection body.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn rejection(&self, proposal: &[u8; 32], slot: u32) -> Result<Option<Vec<u8>>> {
+        self.with(|c| {
+            c.query_row(
+                "SELECT body FROM rejections WHERE proposal = ?1 AND slot = ?2",
+                params![proposal, slot],
+                |row| row.get(0),
+            )
+            .optional()
+        })
+    }
+
+    /// `(proposal, tx_hash)` of every receipt of `vault`.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn receipts(&self, vault: &[u8; 32]) -> Result<Vec<([u8; 32], [u8; 32])>> {
+        self.with(|c| {
+            let mut statement = c.prepare(
+                "SELECT proposal, tx_hash FROM receipts WHERE vault = ?1 ORDER BY created_at",
+            )?;
+            statement
+                .query_map(params![vault], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect()
+        })
+    }
+
+    /// Records that `proposal` executed in `tx_hash`. Returns whether anything changed (a new receipt, or one that
+    /// replaces a different transaction); storing the same receipt again keeps its original time.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn put_receipt(
+        &self,
+        proposal: &[u8; 32],
+        vault: &[u8; 32],
+        tx_hash: &[u8; 32],
+        now: u64,
+    ) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "INSERT INTO receipts (proposal, vault, tx_hash, created_at) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT (proposal) DO UPDATE SET
+                    vault = excluded.vault, tx_hash = excluded.tx_hash, created_at = excluded.created_at
+                 WHERE receipts.vault IS NOT excluded.vault OR receipts.tx_hash IS NOT excluded.tx_hash",
+                params![proposal, vault, tx_hash, ts(now)],
+            )
+            .map(|n| n > 0)
+        })
+    }
+
+    /// Every receipt of `vault` with the time it was stored, newest first.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn receipt_entries(&self, vault: &[u8; 32]) -> Result<Vec<ReceiptEntry>> {
+        self.with(|c| {
+            let mut statement = c.prepare(
+                "SELECT proposal, tx_hash, created_at FROM receipts WHERE vault = ?1
+                 ORDER BY created_at DESC, rowid DESC",
+            )?;
+            statement
+                .query_map(params![vault], |row| {
+                    Ok(ReceiptEntry {
+                        proposal: row.get(0)?,
+                        tx_hash: row.get(1)?,
+                        at: u64::try_from(row.get::<_, i64>(2)?).unwrap_or(0),
+                    })
+                })?
+                .collect()
+        })
+    }
+
+    /// Whether some known proposal of `vault` executed in `tx_hash`.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn has_receipt(&self, vault: &[u8; 32], tx_hash: &[u8; 32]) -> Result<bool> {
+        self.with(|c| {
+            c.query_row(
+                "SELECT 1 FROM receipts WHERE vault = ?1 AND tx_hash = ?2",
+                params![vault, tx_hash],
+                |_| Ok(()),
+            )
+            .optional()
+            .map(|r| r.is_some())
+        })
+    }
+
+    // --- Lobbies -----------------------------------------------------------------------------------------------------
+
+    /// Inserts or replaces a lobby with its role, status and record (JSON).
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn put_lobby(
+        &self,
+        lobby: &[u8; 16],
+        role: &str,
+        status: &str,
+        record: &impl Serialize,
+        now: u64,
+    ) -> Result<()> {
+        let record = json(record)?;
+        self.with(|c| {
+            c.execute(
+                "INSERT INTO lobbies (lobby, role, status, record, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT (lobby) DO UPDATE SET role = excluded.role, status = excluded.status,
+                 record = excluded.record, updated_at = excluded.updated_at",
+                params![lobby, role, status, record, ts(now)],
+            )
+            .map(drop)
+        })
+    }
+
+    /// Every lobby record (JSON), oldest first.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn lobbies(&self) -> Result<Vec<String>> {
+        self.with(|c| {
+            let mut statement = c.prepare("SELECT record FROM lobbies ORDER BY rowid")?;
+            statement.query_map([], |row| row.get(0))?.collect()
+        })
+    }
+
+    // --- Payloads ---------------------------------------------------------------------------------------------------
+
+    /// Stores a proposal payload under its hash (idempotent). Returns whether it was new.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn put_payload(
+        &self,
+        hash: &[u8; 32],
+        vault: &[u8; 32],
+        bytes: &[u8],
+        now: u64,
+    ) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "INSERT OR IGNORE INTO payloads (hash, vault, bytes, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![hash, vault, bytes, ts(now)],
+            )
+            .map(|changed| changed > 0)
+        })
+    }
+
+    /// A stored payload of `vault`.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn payload(&self, vault: &[u8; 32], hash: &[u8; 32]) -> Result<Option<Vec<u8>>> {
+        self.with(|c| {
+            c.query_row(
+                "SELECT bytes FROM payloads WHERE vault = ?1 AND hash = ?2",
+                params![vault, hash],
+                |row| row.get(0),
+            )
+            .optional()
+        })
+    }
+
     // --- Audit and observations --------------------------------------------------------------------------------------
 
     /// Appends an ECDH audit entry.
@@ -342,6 +696,20 @@ impl Store {
                     })
                 })?
                 .collect()
+        })
+    }
+
+    /// The newest config version observed for `vault`.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn latest_observed_version(&self, vault: &[u8; 32]) -> Result<Option<u32>> {
+        self.with(|c| {
+            c.query_row(
+                "SELECT MAX(version) FROM observations WHERE vault = ?1",
+                params![vault],
+                |row| row.get(0),
+            )
         })
     }
 

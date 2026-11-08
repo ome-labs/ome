@@ -183,7 +183,7 @@ impl Keeper {
         }
     }
 
-    /// Gathers `t_v` members' verified partials for `points` (this keeper's own plus peers'), for its owner's engine.
+    /// Gathers `t_v` members' verified partials for `points` (this keeper's own plus peers'), for its member's daemon.
     ///
     /// # Errors
     /// [`Error::UnknownVault`], [`Error::WrongEpoch`], point errors, or [`Error::Unavailable`] if fewer than `t_v`

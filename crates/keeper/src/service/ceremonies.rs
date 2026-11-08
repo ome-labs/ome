@@ -25,7 +25,7 @@ use crate::{
     store::from_json,
 };
 
-/// A finished DKG, as reported to the engine.
+/// A finished DKG, as reported to the daemon.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DkgResult {
     /// This keeper's member index.
@@ -60,7 +60,7 @@ pub struct ReshareRequest {
     pub session: [u8; 32],
     /// Vault.
     pub vault: [u8; 32],
-    /// The current manifest, for a joining member whose keeper does not hold the vault (verified by its engine
+    /// The current manifest, for a joining member whose keeper does not hold the vault (verified by its daemon
     /// against the on-chain committee commitment).
     pub current: Option<Manifest>,
     /// Exactly `t_v` current members who deal.
@@ -292,6 +292,7 @@ impl Keeper {
         drop(state);
         self.dispatch(sends);
         self.expire_pending(now);
+        self.periodic(now).await;
     }
 
     /// Persists a finished ceremony and drops its in-memory state.

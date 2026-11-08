@@ -8,7 +8,7 @@ use std::{
 };
 
 use ome_crypto::threshold::ecdh::AddressSecretShare;
-use ome_net::{Channel, Inbound, Peer, Transport};
+use ome_net::{Channel, Inbound, Mailbox, Peer, Transport};
 use ome_wire::{
     Header, IdentityPublic, Message, ReplayGuard, SignedMessage, decode, encode,
     messages::ecdh::EcdhResponse, version::PROTOCOL_VERSION,
@@ -24,6 +24,10 @@ use crate::{
     events::Event,
     limits::RateLimiter,
     random::random_bytes,
+    service::{
+        lobby::{LobbyRecord, is_lobby_message, lobby_admission},
+        proposals::Vote,
+    },
     store::{ManifestStatus, Store},
 };
 
@@ -42,6 +46,12 @@ pub struct KeeperConfig {
     pub replay_capacity: usize,
     /// Seconds a completed reshare's pending share waits for its rotation to land before it is destroyed.
     pub pending_share_ttl_secs: u64,
+    /// Seconds between proposal syncs with the other members.
+    pub sync_interval_secs: u64,
+    /// Seconds between mailbox polls, with a mailbox.
+    pub mailbox_interval_secs: u64,
+    /// Days a mailbox envelope lives at the relay.
+    pub mailbox_ttl_days: u32,
 }
 
 impl Default for KeeperConfig {
@@ -53,6 +63,9 @@ impl Default for KeeperConfig {
             max_skew_secs: 300,
             replay_capacity: 65_536,
             pending_share_ttl_secs: 7 * 24 * 3600,
+            sync_interval_secs: 60,
+            mailbox_interval_secs: 30,
+            mailbox_ttl_days: 7,
         }
     }
 }
@@ -75,6 +88,8 @@ pub struct KeeperParts {
     pub config: KeeperConfig,
     /// Addresses this keeper is reachable at (published in manifests).
     pub addresses: Vec<String>,
+    /// Relay mailboxes for members who are offline, if any relay is configured.
+    pub mailbox: Option<Arc<dyn Mailbox>>,
 }
 
 /// A running keeper (cheap to clone).
@@ -89,6 +104,7 @@ pub(crate) struct Inner {
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) config: KeeperConfig,
     pub(crate) addresses: Vec<String>,
+    pub(crate) mailbox: Option<Arc<dyn Mailbox>>,
     pub(crate) state: Mutex<State>,
     pub(crate) pending: SyncMutex<HashMap<[u8; 16], Waiting>>,
     pub(crate) events: broadcast::Sender<Event>,
@@ -107,6 +123,14 @@ pub(crate) struct State {
     /// Participants of finished ceremonies with the time they stay reachable: a member that finishes first must still
     /// deliver its last messages (and accept retries) to members that are not in any of its committees yet.
     pub(crate) lingering: HashMap<[u8; 32], (u64, Vec<Participant>)>,
+    /// Last sync per vault (unix seconds).
+    pub(crate) last_sync: HashMap<[u8; 32], u64>,
+    /// Last mailbox poll (unix seconds).
+    pub(crate) last_mailbox_poll: u64,
+    /// Replicated votes whose proposal has not arrived yet, by proposal id.
+    pub(crate) orphans: HashMap<[u8; 32], Vec<([u8; 32], Vote)>>,
+    /// Lobbies this keeper hosts or joined.
+    pub(crate) lobbies: HashMap<[u8; 16], LobbyRecord>,
 }
 
 pub(crate) struct VaultState {
@@ -139,6 +163,7 @@ impl Keeper {
             clock,
             config,
             addresses,
+            mailbox,
         } = parts;
         let now = clock.now();
         for session in store.running_ceremonies()? {
@@ -162,6 +187,10 @@ impl Keeper {
             limiter: RateLimiter::new(config.ecdh_points_per_minute),
             echoed: HashSet::new(),
             lingering: HashMap::new(),
+            last_sync: HashMap::new(),
+            last_mailbox_poll: 0,
+            orphans: HashMap::new(),
+            lobbies: HashMap::new(),
         };
         let (events, _) = broadcast::channel(1024);
         let keeper = Self(Arc::new(Inner {
@@ -172,10 +201,12 @@ impl Keeper {
             clock,
             config,
             addresses,
+            mailbox,
             state: Mutex::new(state),
             pending: SyncMutex::new(HashMap::new()),
             events,
         }));
+        keeper.load_lobbies()?;
         keeper.load_vaults()?;
 
         let receiver = keeper.clone();
@@ -283,10 +314,23 @@ impl Keeper {
         }
     }
 
-    /// Refreshes transport admission from every committee and ceremony.
+    fn load_lobbies(&self) -> Result<()> {
+        let records = self.stored_lobbies()?;
+        let mut state = self
+            .0
+            .state
+            .try_lock()
+            .map_err(|_| crate::Error::Storage("state busy at start".into()))?;
+        state
+            .lobbies
+            .extend(records.into_iter().map(|r| (r.lobby, r)));
+        Ok(())
+    }
+
+    /// Refreshes transport admission from every committee, ceremony and open lobby.
     pub(crate) fn refresh_allowlist(&self, state: &State) {
         let me = self.identity();
-        let mut peers = Vec::new();
+        let (mut peers, hosting) = lobby_admission(state, &me);
         for vault in state
             .vaults
             .values()
@@ -324,7 +368,7 @@ impl Keeper {
         }
         peers.sort_by_key(|p| p.transport);
         peers.dedup_by_key(|p| p.transport);
-        self.0.transport.set_admission(peers, false);
+        self.0.transport.set_admission(peers, hosting);
     }
 
     /// The transport key a known participant must use, if `identity` is known.
@@ -364,6 +408,10 @@ impl Keeper {
             tracing::debug!("dropped frame with an invalid signature");
             return;
         }
+        if is_lobby_message(&message.body) {
+            self.on_lobby_frame(message, frame.channel).await;
+            return;
+        }
         let signer = message.signer;
         let scope = message.header.scope;
         let mut state = self.0.state.lock().await;
@@ -390,14 +438,18 @@ impl Keeper {
             }
             None => return,
         }
-        let expected_epoch = Self::expected_epoch(&state, &message);
-        let now = self.now();
-        if let Err(error) = state
-            .replay
-            .check(&signer, &message.header, expected_epoch, now)
-        {
-            tracing::debug!(%error, "dropped frame");
-            return;
+        // Replicated records are idempotent and verified on their own, and may arrive late through a mailbox or a
+        // sync: they skip the freshness window. Everything else must be fresh and unseen.
+        if !is_replicated(&message.body) {
+            let expected_epoch = Self::expected_epoch(&state, &message);
+            let now = self.now();
+            if let Err(error) = state
+                .replay
+                .check(&signer, &message.header, expected_epoch, now)
+            {
+                tracing::debug!(%error, "dropped frame");
+                return;
+            }
         }
         drop(state);
         if matches!(
@@ -411,6 +463,14 @@ impl Keeper {
                 self.on_ecdh_request(signer, message.header, request).await;
             }
             Message::EcdhResponse(response) => self.on_ecdh_response(signer, response),
+            body if is_replicated(&body) => self.on_replicated(signer, message.header, body).await,
+            Message::SyncRequest(request) => {
+                self.on_sync_request(signer, message.header, request).await;
+            }
+            Message::PayloadRequest(request) => {
+                self.on_payload_request(signer, message.header, request)
+                    .await;
+            }
             Message::Echo(echo) => self.on_echo(scope, &echo).await,
             body if is_ceremony_message(&body) => {
                 self.on_ceremony_message(signer, scope, body).await;
@@ -461,5 +521,17 @@ fn is_ceremony_message(body: &Message) -> bool {
             | Message::Justification(_)
             | Message::Abort(_)
             | Message::Echo(_)
+    )
+}
+
+/// Records that replicate between members: idempotent, verified on their own, possibly late.
+fn is_replicated(body: &Message) -> bool {
+    matches!(
+        body,
+        Message::Proposal(_)
+            | Message::Payload(_)
+            | Message::Approval(_)
+            | Message::Rejection(_)
+            | Message::ExecutionReceipt(_)
     )
 }

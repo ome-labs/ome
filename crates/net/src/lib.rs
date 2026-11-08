@@ -19,6 +19,7 @@ mod transport;
 
 pub use error::Error;
 pub use gate::{Admission, LOBBY_REQUESTS_PER_MINUTE};
+pub use libp2p::Multiaddr;
 pub use mailbox::{Mailbox, MailboxFuture, MemoryMailbox, RelayMailbox};
 pub use transport::{
     Channel, Inbound, Libp2pConfig, Libp2pTransport, MemoryNetwork, MemoryTransport, Peer,

@@ -43,4 +43,48 @@ pub(super) const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (vault, version)
     );
     ",
+    // 2: spending records and founding lobbies (public roster and plan; the invite secret lives in custody).
+    "
+    CREATE TABLE proposals (
+        id BLOB PRIMARY KEY,
+        vault BLOB NOT NULL,
+        body BLOB NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX proposals_by_vault ON proposals (vault, created_at);
+    CREATE TABLE payloads (
+        hash BLOB PRIMARY KEY,
+        vault BLOB NOT NULL,
+        bytes BLOB NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE TABLE approvals (
+        proposal BLOB NOT NULL,
+        slot INTEGER NOT NULL,
+        body BLOB NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (proposal, slot)
+    );
+    CREATE TABLE rejections (
+        proposal BLOB NOT NULL,
+        slot INTEGER NOT NULL,
+        body BLOB NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (proposal, slot)
+    );
+    CREATE TABLE receipts (
+        proposal BLOB PRIMARY KEY,
+        vault BLOB NOT NULL,
+        tx_hash BLOB NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX receipts_by_tx ON receipts (tx_hash);
+    CREATE TABLE lobbies (
+        lobby BLOB PRIMARY KEY,
+        role TEXT NOT NULL CHECK (role IN ('host', 'guest')),
+        status TEXT NOT NULL CHECK (status IN ('open', 'started', 'closed')),
+        record TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    ",
 ];

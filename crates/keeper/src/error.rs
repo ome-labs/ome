@@ -52,6 +52,12 @@ pub enum Error {
     /// A ceremony with this session id already exists.
     #[error("ceremony already exists")]
     CeremonyExists,
+    /// A peer did not acknowledge in time.
+    #[error("transport: {0}")]
+    Transport(String),
+    /// The network layer failed (relay mailboxes, the node).
+    #[error(transparent)]
+    Net(#[from] ome_net::Error),
     /// A cryptographic check failed.
     #[error(transparent)]
     Crypto(#[from] ome_crypto::Error),
