@@ -16,7 +16,7 @@ use ome_wire::{
     version::PROTOCOL_VERSION,
 };
 use serde_json::{Value, json};
-use support::{invite, relay_envelope, samples, signed};
+use support::{invite, pair_offer, relay_envelope, samples, signed};
 
 const VECTORS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/vectors/wire.json");
 
@@ -47,6 +47,7 @@ fn current() -> Value {
         "protocolVersion": PROTOCOL_VERSION,
         "messages": messages,
         "invite": invite().encode().unwrap(),
+        "pairOffer": pair_offer().encode().unwrap(),
         "mailbox": mailbox,
     })
 }

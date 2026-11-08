@@ -3,6 +3,7 @@
 //! conversions to `ome-crypto` types that validate the cryptographic content.
 
 pub mod ceremony;
+pub mod device;
 pub mod ecdh;
 pub mod lobby;
 pub mod mailbox;
@@ -15,6 +16,7 @@ use crate::Error;
 use ceremony::{
     Abort, Complaint, Confirm, DkgRound1, Echo, Justification, Manifest, ReshareDeal, SealedShare,
 };
+use device::{DevicePair, DevicePaired, DeviceReview, DeviceUnpair, DeviceVote, DeviceVoted};
 use ecdh::{EcdhRequest, EcdhResponse};
 use lobby::{LobbyJoin, LobbyLeave, LobbyPlan, LobbyState, SealedSecrets};
 use proposals::{Approval, ExecutionReceipt, PayloadRequest, Proposal, ProposalPayload, Rejection};
@@ -73,6 +75,18 @@ pub enum Message {
     LobbyLeave(LobbyLeave),
     /// A reshare dealer hands a joining member the vault's shared protocol secrets, sealed to its keeper.
     ReshareSecrets(SealedSecrets),
+    /// A signing device asks its member's keeper to pair, answering a pairing offer.
+    DevicePair(DevicePair),
+    /// The keeper accepted a device's pairing.
+    DevicePaired(DevicePaired),
+    /// The keeper asks its paired device to review a proposal.
+    DeviceReview(Box<DeviceReview>),
+    /// A paired device votes on a proposal.
+    DeviceVote(DeviceVote),
+    /// The keeper's answer to a device's vote.
+    DeviceVoted(DeviceVoted),
+    /// A device or its keeper ends the pairing.
+    DeviceUnpair(DeviceUnpair),
 }
 
 impl Message {
@@ -98,6 +112,12 @@ impl Message {
             Self::LobbyState(m) => m.validate(),
             Self::LobbyPlan(m) => m.validate(),
             Self::ReshareSecrets(m) => m.validate(),
+            Self::DevicePair(m) => m.validate(),
+            Self::DevicePaired(m) => m.validate(),
+            Self::DeviceReview(m) => m.validate(),
+            Self::DeviceVote(m) => m.validate(),
+            Self::DeviceVoted(m) => m.validate(),
+            Self::DeviceUnpair(m) => m.validate(),
             Self::DkgConfirm(_)
             | Self::ReshareConfirm(_)
             | Self::Complaint(_)

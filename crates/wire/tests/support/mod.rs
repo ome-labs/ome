@@ -16,6 +16,10 @@ use ome_wire::{
             Abort, AbortReason, Ceremony, Complaint, Confirm, DkgRound1, Echo, Justification,
             Manifest, Member, ReshareDeal, SealedShare,
         },
+        device::{
+            Ballot, DeviceChain, DeviceConfig, DeviceLabel, DevicePair, DevicePaired, DeviceReview,
+            DeviceRotation, DeviceUnpair, DeviceVote, DeviceVoted, PairOffer, PairSecret,
+        },
         ecdh::{EcdhPurpose, EcdhRequest, EcdhResponse, WirePartial},
         lobby::{
             Invite, JoinSecret, KeeperContact, LobbyJoin, LobbyLeave, LobbyMember, LobbyPlan,
@@ -311,5 +315,107 @@ pub fn samples() -> Vec<(&'static str, Message)> {
             "lobby_leave",
             Message::LobbyLeave(LobbyLeave { lobby: [0x31; 16] }),
         ),
+        (
+            "reshare_secrets",
+            Message::ReshareSecrets(SealedSecrets {
+                index: 3,
+                encapsulated_key: [0x41; 32],
+                ciphertext: vec![0x42; 48],
+            }),
+        ),
+        (
+            "device_pair",
+            Message::DevicePair(DevicePair {
+                offer: [0x51; 16],
+                name: "Alice's phone".to_owned(),
+                transport: [0x52; 32],
+                signer_key: wire_point(9),
+            }),
+        ),
+        (
+            "device_paired",
+            Message::DevicePaired(DevicePaired {
+                offer: [0x51; 16],
+                member: "Alice".to_owned(),
+                network: "aztec:31337:0".to_owned(),
+                fee_payers: vec![[0x53; 32]],
+            }),
+        ),
+        (
+            "device_review",
+            Message::DeviceReview(Box::new(device_review())),
+        ),
+        (
+            "device_vote",
+            Message::DeviceVote(DeviceVote {
+                vault: [0x0a; 32],
+                ballot: Ballot::Approval(Approval {
+                    proposal: proposal_id,
+                    slot: 0,
+                    signature,
+                }),
+            }),
+        ),
+        (
+            "device_voted",
+            Message::DeviceVoted(DeviceVoted {
+                proposal: proposal_id,
+                refused: Some("vote for an unknown proposal".to_owned()),
+            }),
+        ),
+        (
+            "device_unpair",
+            Message::DeviceUnpair(DeviceUnpair {
+                reason: "revoked".to_owned(),
+            }),
+        ),
     ]
+}
+
+/// A review of the sample proposal, with a rotation.
+pub fn device_review() -> DeviceReview {
+    DeviceReview {
+        vault: [0x0a; 32],
+        vault_name: "Treasury".to_owned(),
+        manifest: manifest(),
+        config: DeviceConfig {
+            threshold: 2,
+            signer_count: 3,
+            version: 4,
+            signer_set_commitment: [0x54; 32],
+            viewing_threshold: 2,
+            committee_commitment: [0x55; 32],
+        },
+        chain: DeviceChain {
+            chain_id: [0x56; 32],
+            version: [0x57; 32],
+        },
+        proposal: proposal(),
+        payload: payload(),
+        labels: vec![DeviceLabel {
+            address: [0x58; 32],
+            label: "Token".to_owned(),
+        }],
+        simulation: Some("ok".to_owned()),
+        rotation: Some(DeviceRotation {
+            signers: vec![wire_point(1), wire_point(2)],
+            threshold: 2,
+            viewing_threshold: 2,
+            verification_shares: vec![wire_point(3), wire_point(4)],
+        }),
+    }
+}
+
+/// A sample pairing offer.
+pub fn pair_offer() -> PairOffer {
+    PairOffer {
+        offer: [0x51; 16],
+        keeper: identity(1).public(),
+        transport: [0x52; 32],
+        relays: vec!["/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExample".to_owned()],
+        secret: PairSecret([0x59; 32]),
+        expires_at: NOW + 600,
+        member: "Alice".to_owned(),
+        network: "aztec:31337:0".to_owned(),
+    }
 }

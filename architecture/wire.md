@@ -71,6 +71,7 @@ signature     = Ed25519(keeper identity, "ome.wire.v0" ‖ canonical(version, he
 | `sync`      | `SyncRequest` (`VoteRef`)                                                                                                                                                                               | catching up after being offline                       |
 | `lobby`     | `LobbyJoin`, `LobbyState`, `LobbyPlan`, `LobbyLeave`; `Invite` (string form, not a message)                                                                                                             | founding a vault                                      |
 | `mailbox`   | `MailboxRequest`, `MailboxResponse`, `RelayEnvelope`, `StoredEnvelope` (unsigned)                                                                                                                       | store-and-forward through an untrusted relay          |
+| `device`    | `DevicePair`, `DevicePaired`, `DeviceReview`, `DeviceVote` (`Ballot`), `DeviceVoted`, `DeviceUnpair`; `PairOffer` (string form, not a message)                                                          | a member's paired signing device                      |
 
 `Echo` forwards a dealer's signed broadcast verbatim. If a dealer signed two different broadcasts, that proves it
 equivocated.
@@ -107,6 +108,18 @@ needs the approval message, a protocol rule, so that check lives in `ome-protoco
 An invite's string form is `ome-invite-v0:` followed by base64url, without padding, of the canonical bytes. Decoding
 refuses base64 with non-zero trailing bits and non-canonical bytes, so every invite has exactly one string form. The
 join secret is zeroized on drop and left out of `Debug`.
+
+### Pairing offers and device messages
+
+A pairing offer's string form is `ome-pair-v0:` followed by base64url of the canonical bytes, with the same canonical
+rules as invites. It holds the keeper's identity and transport key, the relays, a one-time 32-byte secret (zeroized,
+left out of `Debug`), an expiry, the member's name and the network label. It must name at least one relay.
+
+Device messages are ordinary signed messages: the device signs with its own Ed25519 identity. A pairing's messages
+use the header scope of the offer id zero-padded to 32 bytes; reviews and votes use the vault address. A review
+carries the manifest, the config note (`DeviceConfig`), the chain (`DeviceChain`), the proposal and its payload, up to
+16 labels, the daemon's simulation outcome (up to 4 KiB) and, for a rotation, the rotation the member's keeper
+reshared. The flows are in `architecture/mobile.md`.
 
 ### Mailbox
 
@@ -151,6 +164,7 @@ envelope id = SHA-256("ome.mailbox.envelope.v0" ‖ canonical(envelope))
 | `ome.proposal.payload.v0` | payload hashes            |
 | `ome.mailbox.envelope.v0` | relay envelope ids        |
 | `ome-invite-v0:`          | invite string prefix      |
+| `ome-pair-v0:`            | pairing offer prefix      |
 
 ## Tests
 
@@ -162,7 +176,8 @@ envelope id = SHA-256("ome.mailbox.envelope.v0" ‖ canonical(envelope))
 - `tests/version.rs`: version negotiation.
 - `tests/messages.rs`: conversions to `ome-crypto` types, manifest faults, and payload binding.
 - `tests/lobby.rs` and `tests/mailbox.rs`: invites, lobby plans and the relay protocol.
-- `tests/vectors.rs`: pins the encoding of every message kind, the invite string and the mailbox messages in
+- `tests/device.rs`: pairing offers round-trip, need a relay, and keep their secret out of `Debug`.
+- `tests/vectors.rs`: pins the encoding of every message kind, the invite and pairing offer strings and the mailbox messages in
   `tests/vectors/wire.json`. The TypeScript and wasm encoders check against the same file. Regenerate with
   `OME_UPDATE_VECTORS=1 cargo test -p ome-wire --test vectors` and review the diff.
 - `fuzz/` (nightly, `cargo +nightly fuzz run decode`): arbitrary bytes never panic a decoder, and any accepted input
