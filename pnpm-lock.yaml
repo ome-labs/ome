@@ -167,6 +167,9 @@ catalogs:
     '@aztec-labs/constants':
       specifier: 6.0.0
       version: 6.0.0
+    '@aztec-labs/entrypoints':
+      specifier: 6.0.0
+      version: 6.0.0
     '@aztec-labs/foundation':
       specifier: 6.0.0
       version: 6.0.0
@@ -242,6 +245,9 @@ importers:
       '@aztec-labs/constants':
         specifier: 'catalog:'
         version: 6.0.0
+      '@aztec-labs/entrypoints':
+        specifier: 'catalog:'
+        version: 6.0.0(debug@4.4.3)(typescript@7.0.2)
       '@aztec-labs/foundation':
         specifier: 'catalog:'
         version: 6.0.0
@@ -357,12 +363,20 @@ packages:
     resolution: {integrity: sha512-ujwYIkjQ3LRUkKS9rILoWubUDMo8xp+vzfvFMbxS/VPPpJNMG5H0E7aTVzSeu4vKfTGQRmnBiqNnLv2UUy40ZQ==}
     engines: {node: '>=20.16'}
 
+  '@aztec-labs/entrypoints@6.0.0':
+    resolution: {integrity: sha512-Vedf41EDsxu1Fd0Ei16gQlEmEYaI2doThJOxuo0SznJjK68I8PpP7d9FYV48eXpbwG41vIwKR7W4UWXNsujG2Q==}
+    engines: {node: '>=20.16'}
+
   '@aztec-labs/ethereum@6.0.0':
     resolution: {integrity: sha512-DttZqb+vXuixgD9LEtR3gyLit+3Z20gh7KA9Jyc+T/JkCVmiz8ZfyLkfjlxEoA2N24IjzljB8zFgk0iHXg9aKQ==}
     engines: {node: '>=20.16'}
 
   '@aztec-labs/foundation@6.0.0':
     resolution: {integrity: sha512-eEsU2yIm12w9VEJAxSyLOwDXdZeojGqS/gxqa+oUGI3NP+hXPzN6NOb6ztIDvBojox+hEWp4ykdA/KfK9oQOhA==}
+    engines: {node: '>=20.16'}
+
+  '@aztec-labs/standard-contracts@6.0.0':
+    resolution: {integrity: sha512-Mm5oi7A5nkj+GOhchRm6ZOdt1Y8LuczcaQflenRxmmaqdxE2NlwE/mR6jXLL9rSkLy80Tb8cW8CHkVv/2fso2A==}
     engines: {node: '>=20.16'}
 
   '@aztec-labs/stdlib@6.0.0':
@@ -2392,6 +2406,22 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@aztec-labs/entrypoints@6.0.0(debug@4.4.3)(typescript@7.0.2)':
+    dependencies:
+      '@aztec-labs/constants': 6.0.0
+      '@aztec-labs/foundation': 6.0.0
+      '@aztec-labs/standard-contracts': 6.0.0(debug@4.4.3)(typescript@7.0.2)
+      '@aztec-labs/stdlib': 6.0.0(debug@4.4.3)(typescript@7.0.2)
+      tslib: 2.9.1
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - encoding
+      - supports-color
+      - typescript
+      - utf-8-validate
+
   '@aztec-labs/ethereum@6.0.0(typescript@7.0.2)':
     dependencies:
       '@aztec-foundation/l1-artifacts': 6.0.0
@@ -2438,6 +2468,20 @@ snapshots:
       zod: 4.4.3
     transitivePeerDependencies:
       - supports-color
+
+  '@aztec-labs/standard-contracts@6.0.0(debug@4.4.3)(typescript@7.0.2)':
+    dependencies:
+      '@aztec-labs/foundation': 6.0.0
+      '@aztec-labs/stdlib': 6.0.0(debug@4.4.3)(typescript@7.0.2)
+      buffer: 6.0.3
+      tslib: 2.9.1
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - encoding
+      - supports-color
+      - typescript
+      - utf-8-validate
 
   '@aztec-labs/stdlib@6.0.0(debug@4.4.3)(typescript@7.0.2)':
     dependencies:

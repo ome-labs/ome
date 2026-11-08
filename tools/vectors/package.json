@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@aztec-labs/constants": "catalog:",
+    "@aztec-labs/entrypoints": "catalog:",
     "@aztec-labs/foundation": "catalog:",
     "@aztec-labs/stdlib": "catalog:"
   },

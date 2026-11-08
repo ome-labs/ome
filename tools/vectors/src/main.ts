@@ -8,6 +8,7 @@ import { header, matches, readCommitted, target, write } from "./files.ts";
 import { accountVectors } from "./sets/accounts.ts";
 import { contractVectors } from "./sets/contract.ts";
 import { curveVectors } from "./sets/curve.ts";
+import { payloadVectors } from "./sets/payload.ts";
 import { poseidon2Vectors } from "./sets/poseidon2.ts";
 import { type SchnorrCase, schnorrVectors } from "./sets/schnorr.ts";
 
@@ -33,6 +34,10 @@ const FILES: VectorFile[] = [
   {
     path: "crates/protocol/tests/vectors/contract.json",
     build: async () => ({ ...header, ...(await contractVectors()) }),
+  },
+  {
+    path: "crates/protocol/tests/vectors/payload.json",
+    build: async () => ({ ...header, ...(await payloadVectors()) }),
   },
 ];
 
