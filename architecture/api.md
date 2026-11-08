@@ -9,6 +9,9 @@ hosts the PXE and the sealed signer and drives the keeper. Their APIs are define
 `@ome-labs/api` carries the same types as TypeScript, and `crates/client` (`ome-client`) is the typed Rust client.
 No API type is written by hand anywhere else.
 
+The `core` feature converts the shapes to and from the core types (points, fields, manifests, configs), checking
+points and fields on the way in. The keeper RPC and `ome-wasm` both use it.
+
 ## Conventions
 
 - **Transport**: JSON-RPC 2.0, one JSON object per line. The connection is an owner-only Unix socket (`0600`), or a
