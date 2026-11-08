@@ -91,9 +91,12 @@ pub struct AddressParams {
     pub address: Hex32,
 }
 
+/// A method the daemon serves.
+pub trait DaemonMethod: crate::Method {}
+
 methods! {
     /// Every daemon method, in table order.
-    METHODS;
+    METHODS: DaemonMethod;
     /// Presents the session token. Must be the first call.
     SessionAuth = "session.auth" (AuthParams) -> ();
     /// Streams [`DaemonEvent`]s on this session.

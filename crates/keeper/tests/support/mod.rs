@@ -7,10 +7,6 @@
     clippy::missing_panics_doc
 )]
 
-use ome_api::{
-    Hex32,
-    keeper::{CeremonyStatus, KeeperEvent},
-};
 use std::{
     path::Path,
     sync::{
@@ -20,6 +16,10 @@ use std::{
     time::Duration,
 };
 
+use ome_api::{
+    Hex32,
+    keeper::{CeremonyStatus, KeeperEvent},
+};
 use ome_crypto::{
     Base, Point, SecretScalar,
     aztec::AddressContext,

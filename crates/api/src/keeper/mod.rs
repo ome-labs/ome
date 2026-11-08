@@ -72,9 +72,12 @@ pub struct AuditParams {
     pub limit: Option<u32>,
 }
 
+/// A method the keeper serves.
+pub trait KeeperMethod: crate::Method {}
+
 methods! {
     /// Every keeper method, in table order.
-    METHODS;
+    METHODS: KeeperMethod;
     /// Presents the session token. Must be the first call.
     SessionAuth = "session.auth" (AuthParams) -> ();
     /// Streams [`KeeperEvent`]s on this session.

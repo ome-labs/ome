@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 # Add each crate folder here as it lands (folders carry no `ome` prefix; package names do: `crypto` builds `ome-crypto`).
-members = ["api", "crypto", "keeper", "net", "protocol", "relay", "signer", "wire"]
+members = ["api", "client", "crypto", "keeper", "net", "protocol", "relay", "signer", "wire"]
 # The fuzz crate needs nightly and has its own workspace.
 exclude = ["wire/fuzz"]
 
@@ -23,7 +23,9 @@ publish = false
 [workspace.dependencies]
 # Ome crates.
 ome-api = { path = "api" }
+ome-client = { path = "client" }
 ome-crypto = { path = "crypto" }
+ome-keeper = { path = "keeper" }
 ome-net = { path = "net" }
 ome-protocol = { path = "protocol" }
 ome-wire = { path = "wire" }

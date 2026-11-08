@@ -163,7 +163,7 @@ pub struct AuthParams {
 
 /// Declares method markers and the table of them.
 macro_rules! methods {
-    ($(#[$list_doc:meta])* $list:ident; $( $(#[$doc:meta])* $marker:ident = $name:literal ($params:ty) -> $result:ty; )*) => {
+    ($(#[$list_doc:meta])* $list:ident: $service:ident; $( $(#[$doc:meta])* $marker:ident = $name:literal ($params:ty) -> $result:ty; )*) => {
         $(
             $(#[$doc])*
             #[derive(Clone, Copy, Debug)]
@@ -174,6 +174,8 @@ macro_rules! methods {
                 type Params = $params;
                 type Result = $result;
             }
+
+            impl $service for $marker {}
         )*
 
         $(#[$list_doc])*

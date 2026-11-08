@@ -2625,6 +2625,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ome-client"
+version = "0.0.0"
+dependencies = [
+ "ome-api",
+ "ome-crypto",
+ "ome-keeper",
+ "ome-net",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "ome-crypto"
 version = "0.0.0"
 dependencies = [

@@ -1,0 +1,26 @@
+[package]
+name = "ome-client"
+description = "Typed clients of an Ome member's keeper and daemon over their local sockets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ome-api = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync"] }
+
+[dev-dependencies]
+ome-crypto = { workspace = true }
+ome-keeper = { workspace = true }
+ome-net = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
