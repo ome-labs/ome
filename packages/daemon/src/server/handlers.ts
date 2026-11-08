@@ -113,7 +113,8 @@ export const handlers: Handlers = {
   },
   "vault.retire": async (d, p) => {
     const record = d.vaults.record(lower(p.vault));
-    await d.keeper.client.call("vault.retire", { vault: record.address });
+    // The member decides: one removed by a rotation its keeper took no part in cannot read the new config to show it.
+    await d.keeper.client.call("vault.retire", { vault: record.address, force: true });
     record.status = "removed";
     await d.vaults.save(record);
     return vaultList(d);

@@ -29,6 +29,7 @@ import { DaemonError, require } from "../errors.ts";
 import { readAllJson, writeJson } from "../profile/files.ts";
 import { summaryOf } from "../proposals/intents.ts";
 import type { Stored } from "../proposals/views.ts";
+import { decodeHandoff, encodeHandoff } from "../secrets/handoff.ts";
 import type { DeploymentRecord, VaultRecord } from "../vaults/records.ts";
 import { secretsName } from "../vaults/records.ts";
 
@@ -381,7 +382,8 @@ export class MembershipService {
     if (dealer && joining) {
       const sealed = await this.#context.secrets().get(secretsName(plan.vault));
       if (!sealed) throw new DaemonError("failed", "this vault's protocol secrets are missing");
-      secrets = `0x${sealed.toString("hex")}`;
+      const { transcripts } = this.#context.vaults.record(plan.vault);
+      secrets = `0x${encodeHandoff(sealed, transcripts).toString("hex")}`;
     }
     await keeper.call("ceremony.reshare", {
       session: plan.session,
@@ -399,7 +401,19 @@ export class MembershipService {
         throw new DaemonError("failed", `the reshare aborted: ${c.failure?.reason}`);
       return c.status === "completed" || c.status === "activated" ? c : undefined;
     }, "the reshare");
-    const result = ceremony.result as ReshareResult;
+    let result = ceremony.result as ReshareResult;
+    if (role === "joins" && !result.secrets) {
+      // The dealers' hand-off travels beside the sub-shares and may land just after the reshare completes.
+      result = await until(
+        async () => {
+          const c = await keeper.call("ceremony.status", { session: plan.session });
+          const r = c.result as ReshareResult | null;
+          return r?.secrets ? r : undefined;
+        },
+        "the dealers' hand-off of the protocol secrets",
+        60_000,
+      );
+    }
     rotating.result = result;
     const epoch = String(plan.config.version + 1);
     if (!result.transcript) throw new DaemonError("failed", "the reshare left this member out");
@@ -409,6 +423,7 @@ export class MembershipService {
           "failed",
           "no dealer handed this member the vault's protocol secrets",
         );
+      const handoff = decodeHandoff(Buffer.from(result.secrets.slice(2), "hex"));
       const record: VaultRecord = {
         address: plan.vault,
         name: plan.name,
@@ -416,13 +431,11 @@ export class MembershipService {
         founding: { lobby: null, session: plan.session, deployTx: null },
         deployment: plan.deployment,
         names: plan.names,
-        transcripts: { [epoch]: result.transcript },
+        transcripts: { ...handoff.transcripts, [epoch]: result.transcript },
         config: null,
         status: "active",
       };
-      await this.#context
-        .secrets()
-        .put(secretsName(plan.vault), Buffer.from(result.secrets.slice(2), "hex"));
+      await this.#context.secrets().put(secretsName(plan.vault), handoff.protocolSecrets);
       await this.#context.vaults.save({ ...record, status: "joining" });
     } else {
       const record = this.#context.vaults.record(plan.vault);

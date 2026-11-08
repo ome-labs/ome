@@ -9,10 +9,19 @@ import { DaemonError } from "../errors.ts";
 /** The local network's L1 chain id: test tokens are deployed only there. */
 const LOCAL_CHAIN_ID = 31_337;
 
-/** A token's name, symbol and decimals, read through the vault (so the token is visible to its PXE). */
+/**
+ * A token's name, symbol and decimals. They are public, so they are read from the member's own account: a private call
+ * as the vault would need an approved proposal. The token's published instance is registered in the member's PXE
+ * first, so a member who did not deploy it can still read and transfer it.
+ */
 export async function tokenInfo(context: Context, vault: Hex32, token: Hex32): Promise<TokenInfo> {
-  const from = context.vaults.address(vault);
-  const contract = TokenContract.at(AztecAddress.fromStringUnsafe(token), context.wallet());
+  context.vaults.record(vault);
+  const from = context.account();
+  const address = AztecAddress.fromStringUnsafe(token);
+  const instance = await context.node.node.getContract(address);
+  if (!instance) throw new DaemonError("not-found", `no published token at ${token}`);
+  await context.wallet().registerContract(instance, TokenContract.artifact);
+  const contract = TokenContract.at(address, context.wallet());
   const read = async (method: "private_get_name" | "private_get_symbol" | "private_get_decimals") =>
     (await contract.methods[method]().simulate({ from })).result as unknown;
   const [name, symbol, decimals] = await Promise.all([

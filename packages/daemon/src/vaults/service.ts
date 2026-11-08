@@ -113,6 +113,12 @@ export class VaultService {
       throw new DaemonError("failed", "the recorded deployment derives another address");
     await wallet.registerVault(deployment, viewing);
     this.#deployments.set(record.address, deployment);
+    // Earlier epochs' self-sends (a joiner received their transcripts in the reshare).
+    for (const [epoch, earlier] of Object.entries(record.transcripts)) {
+      if (Number(epoch) === manifest.epoch) continue;
+      // oxlint-disable-next-line no-await-in-loop
+      await wallet.addEpochSecret(this.address(vault), Number(epoch), earlier);
+    }
   }
 
   /**
