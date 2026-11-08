@@ -214,11 +214,16 @@ impl Keeper {
 
     /// Destroys a share this keeper kept because it could not verify the config that replaced its committee: the
     /// member has looked at the alarm and decided the share is no longer needed. Refused while the chain still names
-    /// the committee the share serves, so a mistaken call cannot break a working vault.
+    /// the committee the share serves, so a mistaken call cannot break a working vault, unless `force`.
+    ///
+    /// `force` is for a member removed by a rotation its keeper took no part in: the new config is encrypted to the new
+    /// committee, so this member cannot read it to show the keeper. A member may always destroy its own share; doing so
+    /// costs only its own access.
     ///
     /// # Errors
-    /// [`Error::UnknownVault`], [`Error::Invalid`] while the committee is still current, custody or storage errors.
-    pub async fn retire(&self, vault: [u8; 32]) -> Result<VaultInfo> {
+    /// [`Error::UnknownVault`], [`Error::Invalid`] while the committee is still current and not `force`, custody or
+    /// storage errors.
+    pub async fn retire(&self, vault: [u8; 32], force: bool) -> Result<VaultInfo> {
         let mut state = self.0.state.lock().await;
         let current = state.vaults.get_mut(&vault).ok_or(Error::UnknownVault)?;
         let epoch = current.committee.epoch();
@@ -227,7 +232,7 @@ impl Keeper {
             .store
             .latest_observed_version(&vault)?
             .is_some_and(|version| version > epoch);
-        if current.status != ManifestStatus::Active || !superseded {
+        if current.status != ManifestStatus::Active || !(superseded || force) {
             return Err(Error::Invalid(
                 "the chain has not moved past the committee this share serves".into(),
             ));

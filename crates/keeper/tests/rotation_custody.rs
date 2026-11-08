@@ -309,17 +309,37 @@ async fn a_joining_member_receives_the_protocol_secrets_from_the_dealers() {
         ceremony_reaches(events, request.session, CeremonyStatus::Completed).await;
     }
 
-    assert_eq!(
-        newcomer
-            .keeper
-            .joiner_secrets(request.session)
-            .unwrap()
-            .as_deref(),
-        Some(&secrets)
-    );
+    // The hand-off travels beside the sub-shares and may land just after the joiner completes.
+    let received = tokio::time::timeout(support::WAIT, async {
+        loop {
+            if let Some(received) = newcomer.keeper.joiner_secrets(request.session).unwrap() {
+                return received;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(received.as_slice(), secrets.as_slice());
     // A member who stays already holds them and is sent nothing.
     assert_eq!(
         v.keepers[1].keeper.joiner_secrets(request.session).unwrap(),
         None
     );
+}
+
+/// A member removed by a rotation its keeper took no part in cannot read the new config to show its keeper; it can
+/// still destroy its own share, deliberately.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_member_can_force_the_retirement_of_its_own_share() {
+    let v = vault(fast_config()).await;
+    let keeper = &v.keepers[2].keeper;
+    assert!(matches!(
+        keeper.retire(v.address, false).await,
+        Err(Error::Invalid(_))
+    ));
+    let retired = keeper.retire(v.address, true).await.unwrap();
+    assert_eq!(retired.status, "removed");
+    assert!(!retired.serving);
+    assert_eq!(v.keepers[2].secrets("share-"), Vec::<String>::new());
 }

@@ -399,6 +399,21 @@ export type ObserveConfigParams = {
 };
 
 /**
+ * Params of `vault.retire`.
+ */
+export type RetireParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * Retire even though this keeper has not seen a newer config: for a member removed by a rotation its keeper took
+   * no part in, which cannot read the new config.
+   */
+  force?: boolean;
+};
+
+/**
  * Params of `audit.list`.
  */
 export type AuditParams = {
@@ -3139,7 +3154,7 @@ export interface KeeperMethods {
   "vault.status": { params: VaultParams; result: Vault };
   "vault.register": { params: RegisterParams; result: Vault };
   "vault.observeConfig": { params: ObserveConfigParams; result: Observed };
-  "vault.retire": { params: VaultParams; result: Vault };
+  "vault.retire": { params: RetireParams; result: Vault };
   "vault.sync": { params: VaultParams; result: null };
   "vault.observeTx": { params: TxParams; result: TxObserved };
   "peers.status": { params: VaultParams; result: Array<Reachability> };

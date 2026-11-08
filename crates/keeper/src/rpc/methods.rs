@@ -93,7 +93,9 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
             let observation = keeper.observe_config(p.vault.0, Config::try_from(p.config)?).await?;
             Ok(api::Observed { observation })
         };
-        VaultRetire => |p: api::VaultParams| async move { Ok(convert::vault(&keeper.retire(p.vault.0).await?)) };
+        VaultRetire => |p: api::RetireParams| async move {
+            Ok(convert::vault(&keeper.retire(p.vault.0, p.force.unwrap_or(false)).await?))
+        };
         VaultSync => |p: api::VaultParams| async move { keeper.sync(p.vault.0).await };
         VaultObserveTx => |p: api::TxParams| async move {
             Ok(api::TxObserved { known: keeper.observe_tx(p.vault.0, p.tx_hash.0)? })

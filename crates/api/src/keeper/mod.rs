@@ -62,6 +62,18 @@ pub struct ObserveConfigParams {
     pub config: VaultConfig,
 }
 
+/// Params of `vault.retire`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct RetireParams {
+    /// Vault.
+    pub vault: Hex32,
+    /// Retire even though this keeper has not seen a newer config: for a member removed by a rotation its keeper took
+    /// no part in, which cannot read the new config.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub force: Option<bool>,
+}
+
 /// Params of `audit.list`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct AuditParams {
@@ -96,7 +108,7 @@ methods! {
     /// Tells the keeper what the chain says the vault's config is.
     VaultObserveConfig = "vault.observeConfig" (ObserveConfigParams) -> Observed;
     /// Destroys a kept share once the chain shows a newer committee.
-    VaultRetire = "vault.retire" (VaultParams) -> Vault;
+    VaultRetire = "vault.retire" (RetireParams) -> Vault;
     /// Asks every reachable member for records this keeper lacks.
     VaultSync = "vault.sync" (VaultParams) -> ();
     /// Checks a vault transaction against the execution receipts.

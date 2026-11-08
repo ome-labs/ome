@@ -43,7 +43,7 @@ fn types(cfg: &Config) -> Vec<Declared> {
         // Keeper.
         k::KeeperInfo, k::KeeperContact, k::Member, k::Manifest, k::VaultStatus, k::Vault, k::VaultConfig,
         k::Observation, k::Observed, k::Reachability, k::AuditEntry, k::VaultParams, k::SessionParams,
-        k::RegisterParams, k::ObserveConfigParams, k::AuditParams, k::NewMember, k::CeremonyKind,
+        k::RegisterParams, k::ObserveConfigParams, k::RetireParams, k::AuditParams, k::NewMember, k::CeremonyKind,
         k::CeremonyStatus, k::Failure, k::DkgResult, k::ReshareResult, k::CeremonyResult, k::Ceremony,
         k::DkgParams, k::ReshareParams, k::EcdhPurpose, k::EcdhParams, k::Partial, k::MemberPartials,
         k::EcdhResult, k::BodyParams, k::ProposalStored, k::PayloadStored, k::IdParams, k::ProposalParams,
