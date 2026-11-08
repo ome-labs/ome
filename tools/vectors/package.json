@@ -6,12 +6,18 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "generate": "node src/main.mjs",
-    "test": "node src/main.mjs --check"
+    "generate": "node src/main.ts",
+    "test": "node src/main.ts --check",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@aztec-labs/constants": "catalog:",
     "@aztec-labs/foundation": "catalog:",
     "@aztec-labs/stdlib": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "klarity": "catalog:",
+    "typescript": "catalog:"
   }
 }

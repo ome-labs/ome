@@ -12,7 +12,7 @@ import {
 } from "@aztec-labs/stdlib/keys";
 import { appSiloEcdhSharedSecretPoint, deriveEcdhSharedSecretPoint } from "@aztec-labs/stdlib/logs";
 
-import { hex, point } from "../encoding.mjs";
+import { type EncodedPoint, hex, point } from "../encoding.ts";
 
 /** Accounts kept per sign of the address secret. */
 const PER_SIGN = 3;
@@ -22,7 +22,26 @@ const CANDIDATE_SEEDS = 40;
 
 const APP = new AztecAddress(new Fr(0xc0ffeen));
 
-async function account(seed) {
+export interface AccountCase {
+  ivsk: string;
+  ivpk: EncodedPoint;
+  publicKeysHash: string;
+  partialAddress: string;
+  preaddress: string;
+  address: string;
+  addressSecret: string;
+  addressSecretNegated: boolean;
+  addressPoint: EncodedPoint;
+  ecdh: {
+    ephSecret: string;
+    ephPk: EncodedPoint;
+    sharedPoint: EncodedPoint;
+    app: string;
+    appSiloedSecret: string;
+  };
+}
+
+async function account(seed: bigint): Promise<AccountCase> {
   const secretKey = new Fr(seed * 0x1234567n);
   const partialAddress = new Fr(seed * 0x9abcdefn + 11n);
   const { masterIncomingViewingSecretKey: ivsk, publicKeys } = await deriveKeys(secretKey);
@@ -57,7 +76,7 @@ async function account(seed) {
 }
 
 /** The first `PER_SIGN` plain accounts, then the first `PER_SIGN` negated ones, in seed order. */
-export async function accountVectors() {
+export async function accountVectors(): Promise<AccountCase[]> {
   const candidates = await Promise.all(
     Array.from({ length: CANDIDATE_SEEDS }, (_, i) => account(BigInt(i + 1))),
   );

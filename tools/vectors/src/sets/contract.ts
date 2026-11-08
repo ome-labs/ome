@@ -6,12 +6,17 @@ import { poseidon2HashWithSeparator } from "@aztec-labs/foundation/crypto/poseid
 import { Fq, Fr } from "@aztec-labs/foundation/curves/bn254";
 import { derivePublicKeyFromSecretKey } from "@aztec-labs/stdlib/keys";
 
-import { hex } from "../encoding.mjs";
+import { hex } from "../encoding.ts";
 
 const MAX_SIGNERS = 8;
 
 /** A domain tag as the contract writes it: the field whose big-endian bytes spell the ASCII name. */
-const tag = (name) => BigInt(`0x${Buffer.from(name).toString("hex")}`);
+const tag = (name: string): bigint => BigInt(`0x${Buffer.from(name).toString("hex")}`);
+
+interface Coordinates {
+  x: string;
+  y: string;
+}
 
 const TAGS = {
   approval: "ome.approval.v0",
@@ -20,7 +25,7 @@ const TAGS = {
 };
 
 /** `count` points `(seed + i) · G`, zero-padded to `MAX_SIGNERS`, as the contract tests derive them. */
-async function distinctPoints(count, seed) {
+async function distinctPoints(count: number, seed: number): Promise<Coordinates[]> {
   return Promise.all(
     Array.from({ length: MAX_SIGNERS }, async (_, i) => {
       if (i >= count) return { x: hex(Fr.ZERO), y: hex(Fr.ZERO) };
@@ -31,22 +36,25 @@ async function distinctPoints(count, seed) {
   );
 }
 
-const coordinates = (points) => points.flatMap(({ x, y }) => [BigInt(x), BigInt(y)]);
+const coordinates = (points: Coordinates[]): bigint[] =>
+  points.flatMap(({ x, y }) => [BigInt(x), BigInt(y)]);
 
-const hash = async (inputs, name) =>
+// Aztec types the separator as `number`, but passes it straight to `new Fr`. Ome's tags are ASCII strings far wider
+// than 32 bits, so they go in as `bigint`.
+const hash = async (inputs: bigint[], name: string): Promise<string> =>
   hex(
     await poseidon2HashWithSeparator(
       inputs.map((v) => new Fr(v)),
-      tag(name),
+      tag(name) as unknown as number,
     ),
   );
 
-async function signerSet(count, seed) {
+async function signerSet(count: number, seed: number) {
   const keys = await distinctPoints(count, seed);
   return { count, keys, commitment: await hash(coordinates(keys), TAGS.signers) };
 }
 
-async function committee(viewingThreshold, memberCount, seed) {
+async function committee(viewingThreshold: number, memberCount: number, seed: number) {
   const shares = await distinctPoints(memberCount, seed);
   return {
     viewingThreshold,
@@ -56,7 +64,12 @@ async function committee(viewingThreshold, memberCount, seed) {
   };
 }
 
-async function approvalMessage(vault, outerHash, configVersion, expiresAt) {
+async function approvalMessage(
+  vault: bigint,
+  outerHash: bigint,
+  configVersion: number,
+  expiresAt: bigint,
+) {
   return {
     vault: hex(new Fr(vault)),
     outerHash: hex(new Fr(outerHash)),

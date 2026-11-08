@@ -1,25 +1,32 @@
 // Generates every golden-vector file from Aztec's own packages. Deterministic for a given Aztec version, except
 // Schnorr nonces, which are kept from the committed file while they still verify.
 //
-//   node src/main.mjs           rewrite the vector files
-//   node src/main.mjs --check   fail if a committed file differs from what the installed Aztec produces
+//   node src/main.ts           rewrite the vector files
+//   node src/main.ts --check   fail if a committed file differs from what the installed Aztec produces
 
-import { header, matches, readCommitted, target, write } from "./files.mjs";
-import { accountVectors } from "./sets/accounts.mjs";
-import { contractVectors } from "./sets/contract.mjs";
-import { curveVectors } from "./sets/curve.mjs";
-import { poseidon2Vectors } from "./sets/poseidon2.mjs";
-import { schnorrVectors } from "./sets/schnorr.mjs";
+import { header, matches, readCommitted, target, write } from "./files.ts";
+import { accountVectors } from "./sets/accounts.ts";
+import { contractVectors } from "./sets/contract.ts";
+import { curveVectors } from "./sets/curve.ts";
+import { poseidon2Vectors } from "./sets/poseidon2.ts";
+import { type SchnorrCase, schnorrVectors } from "./sets/schnorr.ts";
+
+interface VectorFile {
+  path: string;
+  build: (committed: unknown) => Promise<object>;
+}
 
 /** Each file a crate's compatibility tests load, and how to build it from its committed version. */
-const FILES = [
+const FILES: VectorFile[] = [
   {
     path: "crates/crypto/tests/vectors/aztec.json",
     build: async (committed) => ({
       ...header,
       ...(await curveVectors()),
       poseidon2: await poseidon2Vectors(),
-      schnorr: await schnorrVectors(committed?.schnorr),
+      schnorr: await schnorrVectors(
+        (committed as { schnorr?: SchnorrCase[] } | undefined)?.schnorr,
+      ),
       accounts: await accountVectors(),
     }),
   },
