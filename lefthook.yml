@@ -1,0 +1,29 @@
+# Based on klarity/src/lefthook/monorepo.yml, extended with TOML formatting and the Rust and Noir formatters.
+min_version: 2.1.0
+
+pre-commit:
+  jobs:
+    - name: format
+      glob: "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,jsonc,css,scss,md,mdx,yaml,yml,toml}"
+      run: pnpm exec oxfmt --write --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    - name: lint
+      glob: "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"
+      run: pnpm exec oxlint --deny-warnings {staged_files}
+    - name: rust-format
+      glob: "crates/**/*.rs"
+      run: cargo fmt --manifest-path crates/Cargo.toml --all --check
+    - name: noir-format
+      glob: "contracts/**/*.nr"
+      root: "contracts/"
+      run: aztec-nargo fmt --workspace --check
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: pnpm exec commitlint --edit {1}
+
+pre-push:
+  jobs:
+    - name: check
+      run: pnpm exec turbo run format:check lint typecheck test

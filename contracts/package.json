@@ -1,0 +1,17 @@
+{
+  "name": "@ome-labs/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Ome contracts (Aztec.nr 6.0.0, Noir)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "aztec compile",
+    "codegen": "aztec codegen target -o artifacts",
+    "format": "aztec-nargo fmt --workspace",
+    "format:check": "aztec-nargo fmt --workspace --check",
+    "lint": "aztec-nargo check --workspace --deny-warnings",
+    "profile": "aztec profile gates target",
+    "test": "aztec test"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": { "cache": false },
+    "deny": { "cache": false },
+    "format:check": { "cache": false },
+    "lint": { "cache": false },
+    "test": { "cache": false }
+  }
+}

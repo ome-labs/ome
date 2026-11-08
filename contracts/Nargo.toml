@@ -1,0 +1,3 @@
+[workspace]
+# Add each contract package here as it lands.
+members = []

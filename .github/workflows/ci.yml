@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec oxfmt --check .
+      - run: pnpm exec oxlint --deny-warnings .
+      - run: pnpm exec turbo run lint typecheck build test '--filter=./packages/*'
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - run: scripts/cargo.sh fmt --all --check
+      - run: scripts/cargo.sh clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: scripts/cargo.sh test --workspace --all-features --locked
+      - run: scripts/cargo.sh deny check
+
+  noir:
+    name: Noir
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v7
+      # The job uses no pnpm; setup-node would otherwise cache for the root packageManager.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Cache Aztec toolchain and Nargo dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.aztec
+            ~/nargo
+          key: aztec-${{ hashFiles('.aztecrc') }}-${{ hashFiles('contracts/**/Nargo.toml') }}
+          restore-keys: aztec-${{ hashFiles('.aztecrc') }}-
+      - name: Install Aztec
+        working-directory: .
+        run: |
+          VERSION="$(cat .aztecrc)"
+          if [ ! -x "$HOME/.aztec/versions/$VERSION/bin/aztec" ]; then
+            curl -fsSL "https://install.aztec-labs.com/$VERSION/install" | VERSION="$VERSION" bash
+          fi
+          ln -sfn "$HOME/.aztec/versions/$VERSION" "$HOME/.aztec/current"
+          echo "$HOME/.aztec/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.aztec/current/bin" >> "$GITHUB_PATH"
+      - run: aztec-nargo fmt --workspace --check
+      - run: aztec-nargo check --workspace --deny-warnings
+      - run: aztec compile
+      - run: aztec test

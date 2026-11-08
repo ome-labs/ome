@@ -1,0 +1,22 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": ["Nargo.toml", "*/Nargo.toml", "*/src/**/*.nr"],
+      "outputs": ["target/**"]
+    },
+    "codegen": {
+      "dependsOn": ["build"],
+      "inputs": ["target/*.json"],
+      "outputs": ["artifacts/**"]
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "inputs": ["Nargo.toml", "*/Nargo.toml", "*/src/**/*.nr"],
+      "outputs": []
+    },
+    "lint": { "inputs": ["Nargo.toml", "*/Nargo.toml", "*/src/**/*.nr"] },
+    "format:check": { "inputs": ["*/src/**/*.nr"] }
+  }
+}

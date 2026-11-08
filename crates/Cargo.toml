@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+# Add each crate folder here as it lands (folders carry no `ome` prefix; package names do: `crypto` builds `ome-crypto`).
+members = []
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/ome-labs/ome"
+rust-version = "1.99"
+publish = false
+
+# Shared dependency versions; crates opt in with `dep = { workspace = true }`.
+[workspace.dependencies]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+print_stdout = "warn"
+todo = "warn"
+unwrap_used = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

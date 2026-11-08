@@ -1,0 +1,21 @@
+packages:
+  - contracts
+  - crates
+  - packages/*
+
+catalog:
+  "@commitlint/cli": 21.2.4
+  "@commitlint/config-conventional": 21.2.4
+  "@types/node": 26.6.6
+  klarity: 0.3.0
+  lefthook: 2.2.2
+  oxfmt: 0.77.0
+  oxlint: 1.92.0
+  publint: 0.3.25
+  tsdown: 0.23.7
+  turbo: 2.11.10
+  typescript: 7.0.2
+  vitest: 5.1.0
+
+allowBuilds:
+  lefthook: true

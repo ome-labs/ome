@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output and caches
+dist/
+build/
+out/
+release/
+.turbo/
+*.tsbuildinfo
+coverage/
+
+# Rust (Cargo) and Noir (Nargo) build output
+target/
+codegenCache.json
+contracts/**/Prover.toml
+contracts/artifacts/
+
+# napi-rs build output
+*.node
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local tooling state
+.claude/settings.local.json
+lefthook-local.yml
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp

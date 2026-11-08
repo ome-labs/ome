@@ -1,0 +1,16 @@
+{
+  "name": "@ome-labs/crates",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Ome Rust workspace (Cargo); Turbo orders these tasks, Cargo caches them",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "../scripts/cargo.sh build --workspace --all-targets",
+    "deny": "../scripts/cargo.sh deny check",
+    "format": "../scripts/cargo.sh fmt --all",
+    "format:check": "../scripts/cargo.sh fmt --all --check",
+    "lint": "../scripts/cargo.sh clippy --workspace --all-targets --all-features -- -D warnings",
+    "test": "../scripts/cargo.sh test --workspace --all-features"
+  }
+}
