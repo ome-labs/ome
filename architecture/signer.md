@@ -64,11 +64,12 @@ with optimizations.
 There is no `sign(hash)`. A `Signer` signs a `Message`, and only this crate can create one. The public entry points
 are:
 
-| Function           | Checks before signing                                                                                                                                                                                                                                                           | Returns     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `approve`          | `check_proposal` (payload matches, calls hash to `outer_hash`, current config, before the deadline, proposer is a member, external fees); no call is `rotate_membership` on the vault                                                                                           | `Approval`  |
-| `approve_rotation` | `check_proposal`; the payload has exactly one `rotate_membership` call, and every other call targets a fee payer the member trusts; the rotation's decoded arguments equal the one the member reviewed; `check_rotation` (contract rules, shares hold `Ivpk`, shares refreshed) | `Approval`  |
-| `reject`           | the reason fits the wire limit                                                                                                                                                                                                                                                  | `Rejection` |
+| Function              | Checks before signing                                                                                                                                                                                                                                                           | Returns     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `approve`             | `check_proposal` (payload matches, calls hash to `outer_hash`, current config, before the deadline, proposer is a member, external fees); no call is `rotate_membership` on the vault                                                                                           | `Approval`  |
+| `approve_rotation`    | `check_proposal`; the payload has exactly one `rotate_membership` call, and every other call targets a fee payer the member trusts; the rotation's decoded arguments equal the one the member reviewed; `check_rotation` (contract rules, shares hold `Ivpk`, shares refreshed) | `Approval`  |
+| `approve_signer_swap` | `check_proposal`; exactly one `rotate_membership` call plus trusted fee payer calls, as for `approve_rotation`; `check_signer_swap` (one key replaced, committee and thresholds unchanged, contract rules). Returns the swapped slot too                                        | `Approval`  |
+| `reject`              | the reason fits the wire limit                                                                                                                                                                                                                                                  | `Rejection` |
 
 Every entry point derives the slot from the signer's own public key. A key outside the signer set gets `NotASigner`.
 
@@ -78,7 +79,8 @@ A compromised proposer or front end therefore can't get a member's signature on:
 - a stale or expired proposal;
 - a proposal that pays fees from the vault in public;
 - a rotation that leaves the vault unreadable or keeps removed members' shares valid;
-- a rotation that also moves funds.
+- a rotation that also moves funds;
+- a signer swap that changes anything but one key.
 
 **Fee payers in a rotation.** A sponsored fee payer is paid through a call in the vault's own payload, so a rotation
 proposal carries one. `approve_rotation` therefore takes `fee_payers`, the fee payer contracts the member's own
@@ -111,4 +113,5 @@ signer schemes. Only the software Grumpkin signer (`SigningKey`) exists now.
   - a rotation can't be approved as an ordinary proposal, or bundled with another call;
   - it may also call a trusted fee payer, but not an untrusted one, and never carry two rotations;
   - only the reviewed rotation is signed;
-  - a rotation that keeps the old shares is refused.
+  - a rotation that keeps the old shares is refused;
+  - a signer swap is approved only through `approve_signer_swap`, and a reshare is not a swap.

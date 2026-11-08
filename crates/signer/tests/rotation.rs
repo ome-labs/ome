@@ -1,10 +1,10 @@
 //! A rotation is signed only through `approve_rotation`, only for the rotation the member reviewed, and only if the new
-//! committee holds the vault's key with fresh shares.
+//! committee holds the vault's key with fresh shares. A signer swap is signed only through `approve_signer_swap`.
 
 mod support;
 
 use ome_protocol::{Error as ProtocolError, membership::Rotation, proposals::verify_approval};
-use ome_signer::{Error, approve, approve_rotation};
+use ome_signer::{Error, Signer, SigningKey, approve, approve_rotation, approve_signer_swap};
 use support::{NOW, chain, fixture, propose, rotation, transfer};
 
 #[test]
@@ -146,4 +146,59 @@ fn a_rotation_that_keeps_the_old_shares_is_not_signed() {
         .err(),
         Some(Error::Protocol(ProtocolError::SharesNotRefreshed))
     );
+}
+
+#[test]
+fn a_signer_swap_is_approved_only_as_a_swap() {
+    let mut f = fixture();
+    let phone = SigningKey::generate(&mut f.rng).unwrap().public_key();
+    let swap = Rotation::signer_swap(&f.vault, 2, phone).unwrap();
+    let (proposal, payload) = propose(&f, vec![swap.to_call(&f.vault)]);
+
+    let (approval, slot) = approve_signer_swap(
+        &f.members[0],
+        &f.vault,
+        chain(),
+        &proposal,
+        &payload,
+        &[],
+        NOW,
+        &mut f.rng,
+    )
+    .unwrap();
+    assert_eq!(slot, 2);
+    assert_eq!(verify_approval(&f.vault, &proposal, &approval), Ok(()));
+    // As a reshare, a swap keeps the old shares and is refused.
+    assert_eq!(
+        approve_rotation(
+            &f.members[0],
+            &f.vault,
+            chain(),
+            &proposal,
+            &payload,
+            &swap,
+            &[],
+            NOW,
+            &mut f.rng
+        )
+        .err(),
+        Some(Error::Protocol(ProtocolError::SharesNotRefreshed))
+    );
+
+    // A reshare is not a swap.
+    let reshare = rotation(&mut f);
+    let (proposal, payload) = propose(&f, vec![reshare.to_call(&f.vault)]);
+    assert!(matches!(
+        approve_signer_swap(
+            &f.members[0],
+            &f.vault,
+            chain(),
+            &proposal,
+            &payload,
+            &[],
+            NOW,
+            &mut f.rng
+        ),
+        Err(Error::Protocol(ProtocolError::NotASignerSwap(_)))
+    ));
 }

@@ -2,8 +2,8 @@
 //! front end cannot get a member's signature on a transaction other than the one the payload describes.
 
 use ome_protocol::{
-    membership::{Rotation, Vault, check_rotation, is_rotation_call},
-    payload::ChainInfo,
+    membership::{Rotation, Vault, check_rotation, check_signer_swap, is_rotation_call},
+    payload::{Call, ChainInfo},
     proposals::{approval_message_for, check_proposal},
     vault::rejection_message,
 };
@@ -68,22 +68,59 @@ pub fn approve_rotation<S: Signer>(
     rng: &mut impl CryptoRng,
 ) -> Result<Approval, Error> {
     let slot = slot_of(signer, vault)?;
-    let request = check_proposal(vault, chain, proposal, payload, now)?;
-    let (rotations, others): (Vec<_>, Vec<_>) = request
-        .calls
-        .iter()
-        .partition(|call| is_rotation_call(call, vault));
-    let [call] = rotations.as_slice() else {
-        return Err(Error::NotARotation);
-    };
-    if let Some(other) = others.iter().find(|call| !fee_payers.contains(&call.to)) {
-        return Err(Error::UnexpectedCall(hex::encode(other.to)));
-    }
-    if &Rotation::from_call(call, vault)? != rotation {
+    let call = single_rotation(vault, chain, proposal, payload, fee_payers, now)?;
+    if &Rotation::from_call(&call, vault)? != rotation {
         return Err(Error::RotationMismatch);
     }
     check_rotation(vault, rotation)?;
     sign_approval(signer, vault, proposal, slot, rng)
+}
+
+/// Approves a signer swap: the proposal passes [`check_proposal`], and its payload is exactly one `rotate_membership`
+/// call that replaces one member's key and changes nothing else ([`check_signer_swap`]), plus at most calls to one of
+/// `fee_payers`, as for [`approve_rotation`]. Returns the approval and the swapped slot.
+///
+/// The committee stays, so there is no reshare to compare with: a swap needs only the contract's rules and its shape.
+///
+/// # Errors
+/// [`Error::NotASigner`], [`Error::NotARotation`], [`Error::UnexpectedCall`], or the protocol error that refused the
+/// proposal or swap.
+#[allow(clippy::too_many_arguments)]
+pub fn approve_signer_swap<S: Signer>(
+    signer: &S,
+    vault: &Vault,
+    chain: ChainInfo,
+    proposal: &Proposal,
+    payload: &ProposalPayload,
+    fee_payers: &[WireField],
+    now: u64,
+    rng: &mut impl CryptoRng,
+) -> Result<(Approval, u32), Error> {
+    let slot = slot_of(signer, vault)?;
+    let call = single_rotation(vault, chain, proposal, payload, fee_payers, now)?;
+    let (swapped, _) = check_signer_swap(vault, &Rotation::from_call(&call, vault)?)?;
+    Ok((sign_approval(signer, vault, proposal, slot, rng)?, swapped))
+}
+
+/// The proposal's one `rotate_membership` call, after [`check_proposal`]; any other call must go to a trusted fee payer.
+fn single_rotation(
+    vault: &Vault,
+    chain: ChainInfo,
+    proposal: &Proposal,
+    payload: &ProposalPayload,
+    fee_payers: &[WireField],
+    now: u64,
+) -> Result<Call, Error> {
+    let request = check_proposal(vault, chain, proposal, payload, now)?;
+    let (rotations, others): (Vec<_>, Vec<_>) = request
+        .calls
+        .into_iter()
+        .partition(|call| is_rotation_call(call, vault));
+    let [call] = <[Call; 1]>::try_from(rotations).map_err(|_| Error::NotARotation)?;
+    if let Some(other) = others.iter().find(|call| !fee_payers.contains(&call.to)) {
+        return Err(Error::UnexpectedCall(hex::encode(other.to)));
+    }
+    Ok(call)
 }
 
 /// Rejects `proposal` with a reason shown to the other members.
