@@ -1,0 +1,3 @@
+[env]
+# Property tests run a modest number of cases locally; CI's slow lane raises it by setting PROPTEST_CASES itself.
+PROPTEST_CASES = { value = "64", force = false }
