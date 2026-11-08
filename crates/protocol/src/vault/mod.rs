@@ -28,6 +28,13 @@ pub fn tag(name: &str) -> Base {
     curve::base_from_bytes(&bytes).unwrap_or_else(|_| unreachable!("tags are at most 31 bytes"))
 }
 
+/// A 16-byte big-endian value as a field (128 bits always fit).
+pub(crate) fn half(bytes: &[u8]) -> Base {
+    let mut padded = [0u8; 32];
+    padded[32 - bytes.len()..].copy_from_slice(bytes);
+    curve::base_from_bytes(&padded).unwrap_or_else(|_| unreachable!("a 128-bit value is canonical"))
+}
+
 /// `[x_0, y_0, ..., x_7, y_7]` with empty slots zero, as the contract lays out ordered points.
 pub(crate) fn padded(points: &[Point]) -> [Base; MAX_SIGNERS * POINT_LEN] {
     let mut fields = [Base::from(0u64); MAX_SIGNERS * POINT_LEN];

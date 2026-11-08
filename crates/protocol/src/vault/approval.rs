@@ -1,8 +1,8 @@
-use ome_crypto::{Base, curve, poseidon2};
+use ome_crypto::{Base, poseidon2};
 
 use super::{
     constants::{APPROVAL_TAG, REJECTION_TAG},
-    tag,
+    half, tag,
 };
 
 /// What each signer signs to approve `outer_hash` (`authorization::approval_message`):
@@ -36,11 +36,4 @@ pub fn rejection_message(vault: Base, proposal_id: &[u8; 32]) -> Base {
         tag(REJECTION_TAG),
         &[vault, half(&proposal_id[..16]), half(&proposal_id[16..])],
     )
-}
-
-fn half(bytes: &[u8]) -> Base {
-    let mut padded = [0u8; 32];
-    padded[16..].copy_from_slice(bytes);
-    // 128 bits are always below the field modulus.
-    curve::base_from_bytes(&padded).unwrap_or_else(|_| unreachable!("a 128-bit value is canonical"))
 }

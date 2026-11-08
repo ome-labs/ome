@@ -8,7 +8,7 @@ mod support;
 use ome_crypto::{Base, Point, SecretScalar};
 use ome_protocol::{
     Error,
-    membership::{Rotation, check_rotation, is_rotation_call, verify_shares},
+    membership::{Rotation, check_rotation, epoch_tagging_secret, is_rotation_call, verify_shares},
     payload::selector,
     vault::{
         Committee, SignerSet,
@@ -185,5 +185,20 @@ fn a_rotate_membership_call_that_is_not_a_rotation_of_this_vault_is_refused() {
     refused(
         |c| c.args[32] = field(&Base::from(1u64 << 32)),
         "count or threshold above u32",
+    );
+}
+
+#[test]
+fn each_epoch_tags_self_sends_with_its_own_secret() {
+    let vault = Base::from(0x1234u64);
+    let transcript = [7u8; 64];
+    let secret = epoch_tagging_secret(vault, 1, &transcript).unwrap();
+    assert_eq!(secret, epoch_tagging_secret(vault, 1, &transcript).unwrap());
+    // A new epoch, a new transcript or another vault each give a different secret.
+    assert_ne!(secret, epoch_tagging_secret(vault, 2, &transcript).unwrap());
+    assert_ne!(secret, epoch_tagging_secret(vault, 1, &[8u8; 64]).unwrap());
+    assert_ne!(
+        secret,
+        epoch_tagging_secret(Base::from(0x1235u64), 1, &transcript).unwrap()
     );
 }
