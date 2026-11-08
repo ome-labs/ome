@@ -1,0 +1,27 @@
+[package]
+name = "ome-protocol"
+description = "The rules of an Ome vault: contract mirror, payload hashing, approvals, tallies, rotations and lobbies"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hmac = { workspace = true }
+ome-crypto = { workspace = true }
+ome-wire = { workspace = true }
+rand_core = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+rand_chacha = { workspace = true }
+serde_json = { workspace = true }

@@ -738,6 +738,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ome-protocol"
+version = "0.0.0"
+dependencies = [
+ "hmac",
+ "ome-crypto",
+ "ome-wire",
+ "rand_chacha 0.10.0",
+ "rand_core 0.10.1",
+ "serde",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "ome-wire"
 version = "0.0.0"
 dependencies = [
