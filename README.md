@@ -17,14 +17,17 @@ scripts/     repository scripts
 
 ## Toolchain
 
-| Concern    | Tool                                                                          |
-| ---------- | ----------------------------------------------------------------------------- |
-| Contracts  | Aztec 6.0.0 (`aztec compile`, `aztec test`, `aztec-nargo fmt / check`)        |
-| Rust       | 1.99.1 (`rust-toolchain.toml`), `rustfmt`, `clippy -D warnings`, `cargo-deny` |
-| TypeScript | Node 24, pnpm 12, Turborepo, TypeScript 7, oxfmt, oxlint (klarity presets)    |
-| Hooks      | lefthook, commitlint (Conventional Commits)                                   |
+| Concern     | Tool                                                                          |
+| ----------- | ----------------------------------------------------------------------------- |
+| Contracts   | Aztec 6.0.0 (`aztec compile`, `aztec test`, `aztec-nargo fmt / check`)        |
+| Rust        | 1.99.1 (`rust-toolchain.toml`), `rustfmt`, `clippy -D warnings`, `cargo-deny` |
+| WebAssembly | `wasm32-unknown-unknown` (`rust-toolchain.toml`), `wasm-bindgen` CLI 0.2.108  |
+| TypeScript  | Node 24, pnpm 12, Turborepo, TypeScript 7, oxfmt, oxlint (klarity presets)    |
+| Hooks       | lefthook, commitlint (Conventional Commits)                                   |
 
-Install Aztec with `aztec-up install 6.0.0` and `cargo-deny` with `cargo install cargo-deny`.
+Install Aztec with `aztec-up install 6.0.0`, `cargo-deny` with `cargo install cargo-deny`, and the `wasm-bindgen` CLI
+with `cargo install wasm-bindgen-cli --version 0.2.108 --locked` (it must match the `wasm-bindgen` crate in
+`crates/Cargo.lock`).
 
 ## Commands
 
@@ -42,6 +45,15 @@ pnpm --filter @ome-labs/contracts test                  # unit, integration (TXE
 pnpm --filter @ome-labs/contracts check:failures        # every assert message is expected by a test
 pnpm --filter @ome-labs/contracts profile               # gate counts per function
 pnpm --filter @ome-labs/contracts profile:flamegraphs   # target/flamegraphs/<artifact>/<function>.svg
+```
+
+WebAssembly (`@ome-labs/wasm`):
+
+```sh
+pnpm --filter @ome-labs/wasm build      # dist/{main,testing}/{node,web}
+pnpm --filter @ome-labs/wasm test       # Vitest against the built package
+pnpm --filter @ome-labs/wasm generate   # src/types.d.ts from the Rust boundary types
+pnpm --filter @ome-labs/wasm bench      # timings of combine, outer hash and unseal
 ```
 
 ## License

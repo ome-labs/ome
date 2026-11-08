@@ -1,0 +1,58 @@
+{
+  "name": "@ome-labs/wasm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ome's Rust core for TypeScript as WebAssembly: threshold reading, contract mirror, proposals, signer and membership checks",
+  "license": "Apache-2.0",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "browser": {
+        "types": "./dist/main/web/ome_wasm.d.ts",
+        "default": "./dist/main/web/ome_wasm.js"
+      },
+      "node": {
+        "types": "./dist/main/node/ome_wasm.d.ts",
+        "default": "./dist/main/node/ome_wasm.js"
+      },
+      "default": {
+        "types": "./dist/main/web/ome_wasm.d.ts",
+        "default": "./dist/main/web/ome_wasm.js"
+      }
+    },
+    "./testing": {
+      "browser": {
+        "types": "./dist/testing/web/ome_wasm.d.ts",
+        "default": "./dist/testing/web/ome_wasm.js"
+      },
+      "node": {
+        "types": "./dist/testing/node/ome_wasm.d.ts",
+        "default": "./dist/testing/node/ome_wasm.js"
+      },
+      "default": {
+        "types": "./dist/testing/web/ome_wasm.d.ts",
+        "default": "./dist/testing/web/ome_wasm.js"
+      }
+    }
+  },
+  "scripts": {
+    "bench": "node scripts/bench.ts",
+    "build": "node scripts/build.ts",
+    "generate": "node scripts/build.ts --generate",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ome-labs/api": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "klarity": "catalog:",
+    "oxfmt": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

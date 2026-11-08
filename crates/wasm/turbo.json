@@ -1,0 +1,22 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/crates/*/src/**",
+        "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/Cargo.toml",
+        "$TURBO_ROOT$/crates/Cargo.lock"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "test": {
+      "dependsOn": ["build"]
+    },
+    "typecheck": {
+      "dependsOn": ["build"]
+    }
+  }
+}

@@ -1,6 +1,7 @@
 packages:
   - contracts
   - crates
+  - crates/wasm
   - packages/*
   - tools/*
 

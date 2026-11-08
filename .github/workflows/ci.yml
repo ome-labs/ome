@@ -79,9 +79,32 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Regenerates @ome-labs/api from crates/api and fails if the committed declarations differ.
+      # Regenerates @ome-labs/api and the ome-wasm boundary types and fails if the committed declarations differ.
       - run: pnpm --filter @ome-labs/api generate
-      - run: git diff --exit-code -- packages/api
+      - run: pnpm --filter @ome-labs/wasm generate
+      - run: git diff --exit-code -- packages/api crates/wasm/src/types.d.ts
+
+  wasm:
+    name: WebAssembly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      # The CLI must match the wasm-bindgen crate in crates/Cargo.lock.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.108
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ome-labs/wasm build
+      - run: pnpm --filter @ome-labs/wasm typecheck
+      - run: pnpm --filter @ome-labs/wasm test
 
   noir:
     name: Noir
