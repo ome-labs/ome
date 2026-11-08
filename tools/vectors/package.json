@@ -1,0 +1,17 @@
+{
+  "name": "@ome-labs/vectors",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Golden vectors computed with Aztec 6.0.0's own packages, for Ome's compatibility tests",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "generate": "node src/main.mjs",
+    "test": "node src/main.mjs --check"
+  },
+  "dependencies": {
+    "@aztec-labs/constants": "catalog:",
+    "@aztec-labs/foundation": "catalog:",
+    "@aztec-labs/stdlib": "catalog:"
+  }
+}
