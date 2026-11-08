@@ -1,0 +1,39 @@
+[package]
+name = "ome-wasm"
+description = "WebAssembly bindings of Ome's threshold reading, contract mirror, proposals, signer and membership checks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+# `cdylib` is the module; `rlib` lets the TypeScript generator example link the types.
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[features]
+# Test helpers (dealing shares, producing partials, signing with a raw key), built into @ome-labs/wasm/testing only.
+testing = []
+
+[dependencies]
+js-sys = { workspace = true }
+ome-api = { workspace = true, features = ["core"] }
+ome-crypto = { workspace = true }
+ome-protocol = { workspace = true }
+ome-signer = { workspace = true }
+ome-wire = { workspace = true }
+os-rng = { workspace = true }
+rand_core = { workspace = true }
+serde = { workspace = true }
+serde-wasm-bindgen = { workspace = true }
+ts-rs = { workspace = true }
+wasm-bindgen = { workspace = true }
+zeroize = { workspace = true }
+
+# The browser's and Node's `crypto.getRandomValues`, enabled only in this crate so the core stays platform-neutral.
+[target.'cfg(target_family = "wasm")'.dependencies]
+os-rng = { workspace = true, features = ["wasm_js"] }

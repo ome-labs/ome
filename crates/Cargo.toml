@@ -1,7 +1,18 @@
 [workspace]
 resolver = "3"
 # Add each crate folder here as it lands (folders carry no `ome` prefix; package names do: `crypto` builds `ome-crypto`).
-members = ["api", "client", "crypto", "keeper", "net", "protocol", "relay", "signer", "wire"]
+members = [
+  "api",
+  "client",
+  "crypto",
+  "keeper",
+  "net",
+  "protocol",
+  "relay",
+  "signer",
+  "wasm",
+  "wire",
+]
 # The fuzz crate needs nightly and has its own workspace.
 exclude = ["wire/fuzz"]
 
@@ -28,6 +39,7 @@ ome-crypto = { path = "crypto" }
 ome-keeper = { path = "keeper" }
 ome-net = { path = "net" }
 ome-protocol = { path = "protocol" }
+ome-signer = { path = "signer" }
 ome-wire = { path = "wire" }
 
 # Curve and field arithmetic (Grumpkin over BN254) and Aztec's Poseidon2.
@@ -100,6 +112,12 @@ rusqlite = { version = "0.41.1", features = ["bundled"] }
 # API types and their TypeScript declarations.
 ts-rs = { version = "12.0.1", features = ["no-serde-warnings"] }
 
+# WebAssembly bindings. libp2p pins wasm-bindgen-futures 0.4.58, which fixes wasm-bindgen at 0.2.108 for the whole
+# workspace; the wasm-bindgen CLI that packages ome-wasm must be this exact version.
+js-sys = "0.3.85"
+serde-wasm-bindgen = "0.6.5"
+wasm-bindgen = "0.2.108"
+
 # Keeper binary.
 clap = { version = "4.6.7", features = ["derive", "env"] }
 toml = "1.2.1"
@@ -133,3 +151,8 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 strip = "symbols"
+
+# @ome-labs/wasm: full LTO keeps the module small; speed stays at opt-level 3 for Argon2id and point arithmetic.
+[profile.wasm]
+inherits = "release"
+lto = "fat"
