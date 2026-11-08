@@ -29,7 +29,8 @@ pub enum ErrorKind {
     Auth,
     /// The keeper refuses to act until a person looks: an unverifiable config or an unexpected spend.
     Alarm,
-    /// Anything else.
+    /// Anything else, including a kind this version does not know.
+    #[serde(other)]
     Failed,
 }
 

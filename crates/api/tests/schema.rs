@@ -37,6 +37,12 @@ fn error_codes_are_distinct_and_round_trip() {
     let error: RpcError =
         serde_json::from_value(json!({ "code": -32011, "message": "locked" })).unwrap();
     assert_eq!(error.kind(), ErrorKind::Locked);
+    // A kind from a later version reads as failed instead of breaking the reply.
+    let error: RpcError = serde_json::from_value(
+        json!({ "code": -32099, "message": "new", "data": { "kind": "quota" } }),
+    )
+    .unwrap();
+    assert_eq!(error.kind(), ErrorKind::Failed);
     assert_eq!(
         serde_json::to_value(RpcError::new(ErrorKind::NotReady, "starting")).unwrap(),
         json!({ "code": -32010, "message": "starting", "data": { "kind": "not-ready" } })

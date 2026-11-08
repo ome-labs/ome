@@ -98,7 +98,7 @@ os-rng = { package = "getrandom", version = "0.4.3", features = ["sys_rng"] }
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 
 # API types and their TypeScript declarations.
-ts-rs = "12.0.1"
+ts-rs = { version = "12.0.1", features = ["no-serde-warnings"] }
 
 # Keeper binary.
 clap = { version = "4.6.7", features = ["derive", "env"] }
