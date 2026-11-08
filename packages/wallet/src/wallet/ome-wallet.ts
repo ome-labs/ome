@@ -315,6 +315,19 @@ export class OmeWallet extends BaseWallet {
   }
 
   /**
+   * Registers the self-send tagging secret of an earlier committee epoch, so notes the vault sent itself then are found.
+   * A member who joins later receives those epochs' transcripts in the reshare.
+   */
+  async addEpochSecret(vault: AztecAddress, epoch: number, transcript: Hex64): Promise<void> {
+    this.#vault(vault);
+    await this.pxe.registerTaggingSecretSource({
+      kind: "arbitrary-secret",
+      recipient: vault,
+      secret: fromApiPoint(epochTaggingSecret(vault.toString(), epoch, transcript)),
+    });
+  }
+
+  /**
    * Initializes a registered vault: `from` (a member's own account) sends the constructor with the vault in scope. The
    * vault needs no class or instance publication (it has no public functions). Returns the mined receipt.
    */
