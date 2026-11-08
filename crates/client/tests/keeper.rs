@@ -51,6 +51,7 @@ fn keeper(net: &Arc<MemoryNetwork>, seed: u8) -> Served {
         config: KeeperConfig::default(),
         addresses: Vec::new(),
         mailbox: None,
+        relays: Vec::new(),
     })
     .unwrap();
     let socket = dir.path().join("keeper.sock");
