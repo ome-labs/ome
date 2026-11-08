@@ -19,6 +19,7 @@ use std::{
 use ome_crypto::{
     Base, Point, SecretScalar,
     aztec::AddressContext,
+    schnorr,
     threshold::ecdh::{Partial, combine},
 };
 use ome_keeper::{
@@ -28,14 +29,21 @@ use ome_keeper::{
     events::Event,
     store::Store,
 };
-use ome_net::{MemoryNetwork, Peer};
-use ome_protocol::vault::{Committee, Config, SignerSet};
+use ome_net::{Mailbox, MemoryMailbox, MemoryNetwork, Peer};
+use ome_protocol::{
+    membership::Vault as ProtocolVault,
+    payload::{Call, CallKind, ChainInfo, ExecutionRequest, selector},
+    proposals::{Draft, approval_message_for},
+    vault::{Committee, Config, SignerSet, rejection_message},
+};
 use ome_wire::{
+    Message, encode_body,
     messages::{
         ceremony::{Manifest, Member},
         ecdh::EcdhPurpose,
+        proposals::{Approval, Proposal, ProposalPayload, Rejection},
     },
-    types::{WirePoint, field},
+    types::{WirePoint, WireSignature, field},
     version::PROTOCOL_VERSION,
 };
 use rand_chacha::ChaCha20Rng;
@@ -44,7 +52,7 @@ use tempfile::TempDir;
 use tokio::sync::broadcast;
 
 /// How long any wait may take before the test fails.
-const WAIT: Duration = Duration::from_secs(10);
+pub const WAIT: Duration = Duration::from_secs(10);
 
 /// A clock tests move by hand.
 #[derive(Default)]
@@ -110,6 +118,7 @@ pub struct Harness {
     pub net: Arc<MemoryNetwork>,
     pub clock: Arc<ManualClock>,
     pub config: KeeperConfig,
+    pub mailbox: Option<Arc<MemoryMailbox>>,
 }
 
 impl Harness {
@@ -118,6 +127,15 @@ impl Harness {
             net: MemoryNetwork::new(),
             clock: Arc::new(ManualClock::default()),
             config,
+            mailbox: None,
+        }
+    }
+
+    /// A harness whose keepers share an in-memory relay mailbox.
+    pub fn with_mailbox(config: KeeperConfig) -> Self {
+        Self {
+            mailbox: Some(Arc::new(MemoryMailbox::default())),
+            ..Self::new(config)
         }
     }
 
@@ -148,6 +166,7 @@ impl Harness {
             clock: self.clock.clone(),
             config: self.config.clone(),
             addresses: Vec::new(),
+            mailbox: self.mailbox.clone().map(|m| m as Arc<dyn Mailbox>),
         })
         .unwrap()
     }
@@ -210,20 +229,29 @@ pub async fn run_dkg(keepers: &[&TestKeeper], threshold: u32, session: [u8; 32])
     serde_json::from_value(keepers[0].keeper.ceremony(session).unwrap().result.unwrap()).unwrap()
 }
 
-/// The manifest of a vault founded by `keepers` from `result`, with fresh signing keys, and the config the contract
-/// would store for it.
-pub fn manifest(keepers: &[&TestKeeper], result: &DkgResult, seed: u64) -> (Manifest, Config) {
+/// The manifest of a vault founded by `keepers` from `result`, the config the contract would store for it, and the
+/// members' signing keys in slot order.
+pub fn manifest(
+    keepers: &[&TestKeeper],
+    result: &DkgResult,
+    seed: u64,
+) -> (Manifest, Config, Vec<SecretScalar>) {
     let mut rng = ChaCha20Rng::seed_from_u64(seed);
+    let signers: Vec<SecretScalar> = keepers
+        .iter()
+        .map(|_| SecretScalar::random(&mut rng))
+        .collect();
     let preaddress = Base::from(seed + 1000);
     let group_key = Point::try_from(&result.group_key).unwrap();
     let context = AddressContext::new(preaddress, &group_key).unwrap();
     let members = keepers
         .iter()
         .zip(&result.verification_shares)
+        .zip(&signers)
         .zip(1..)
-        .map(|((k, share), index)| Member {
+        .map(|(((k, share), signer), index)| Member {
             index,
-            signer_key: signer_key(&mut rng),
+            signer_key: WirePoint::from(&Point::generator_mul_secret(signer).unwrap()),
             verification_share: *share,
             identity: k.keeper.identity(),
             transport: k.keeper.transport_key(),
@@ -241,7 +269,7 @@ pub fn manifest(keepers: &[&TestKeeper], result: &DkgResult, seed: u64) -> (Mani
         members,
     };
     let config = config_of(&manifest, 0);
-    (manifest, config)
+    (manifest, config, signers)
 }
 
 /// The config note naming `manifest`'s committee at `version`.
@@ -343,21 +371,25 @@ pub fn fast_config() -> KeeperConfig {
     }
 }
 
-/// Three keepers, a 2-of-3 committee from a real DKG, registered as a vault and observed on chain.
+/// Three keepers, a 2-of-3 committee from a real DKG, registered as a vault.
 pub struct Vault {
     pub harness: Harness,
     pub keepers: Vec<TestKeeper>,
     pub address: [u8; 32],
     pub manifest: Manifest,
     pub config: Config,
+    pub signers: Vec<SecretScalar>,
 }
 
 pub async fn vault(config: KeeperConfig) -> Vault {
-    let harness = Harness::new(config);
+    vault_on(Harness::new(config)).await
+}
+
+pub async fn vault_on(harness: Harness) -> Vault {
     let keepers: Vec<TestKeeper> = (1..=3).map(|i| harness.keeper(i)).collect();
     let refs: Vec<&TestKeeper> = keepers.iter().collect();
     let result = run_dkg(&refs, 2, [1; 32]).await;
-    let (manifest, config) = manifest(&refs, &result, 7);
+    let (manifest, config, signers) = manifest(&refs, &result, 7);
     for k in &keepers {
         assert!(
             k.keeper
@@ -373,5 +405,80 @@ pub async fn vault(config: KeeperConfig) -> Vault {
         keepers,
         manifest,
         config,
+        signers,
     }
+}
+
+impl Vault {
+    pub fn protocol(&self) -> ProtocolVault {
+        ProtocolVault::from_manifest(&self.manifest, &self.config).unwrap()
+    }
+
+    /// A one-call transfer proposal of `amount` and its payload, as a member's daemon builds them.
+    pub fn proposal(&self, amount: u64) -> (Proposal, ProposalPayload) {
+        let signature = "transfer_private_to_private((Field),(Field),u128,Field)";
+        let call = Call {
+            signature: Some(signature.to_owned()),
+            to: field(&Base::from(0x1001u64)),
+            selector: selector(signature).unwrap(),
+            kind: CallKind::Private,
+            is_static: false,
+            hide_msg_sender: false,
+            args: [0x2001, 0x2002, amount, 7]
+                .map(|a| field(&Base::from(a)))
+                .to_vec(),
+        };
+        let draft = Draft {
+            request: ExecutionRequest {
+                calls: vec![call],
+                extras: vec![],
+            },
+            tx_nonce: Base::from(amount),
+            expires_at: 1_800_000_000,
+            summary: format!("transfer {amount}"),
+            proposer: 1,
+        };
+        let chain = ChainInfo {
+            chain_id: Base::from(31_337u64),
+            version: Base::from(1u64),
+        };
+        draft.build(&self.protocol(), chain).unwrap()
+    }
+
+    /// An approval of `proposal` claiming `slot`, signed with member `signer`'s key (a different one forges it).
+    pub fn approval(&self, proposal: &Proposal, slot: u32, signer: usize) -> Approval {
+        let message = approval_message_for(&self.protocol(), proposal).unwrap();
+        let signature = schnorr::sign(
+            &self.signers[signer],
+            message,
+            &mut ChaCha20Rng::seed_from_u64(9),
+        )
+        .unwrap();
+        Approval::new(proposal.id().unwrap(), slot, &signature)
+    }
+
+    /// Member `slot` rejects `proposal`.
+    pub fn rejection(&self, proposal: &Proposal, slot: u32) -> Rejection {
+        let id = proposal.id().unwrap();
+        let message = rejection_message(self.protocol().address(), &id);
+        let signer = &self.signers[usize::try_from(slot).unwrap()];
+        let signature =
+            schnorr::sign(signer, message, &mut ChaCha20Rng::seed_from_u64(10)).unwrap();
+        Rejection {
+            proposal: id,
+            slot,
+            reason: "no".into(),
+            signature: WireSignature::from(&signature),
+        }
+    }
+}
+
+/// A message body as the daemon hands it to its keeper.
+pub fn body(message: &Message) -> Vec<u8> {
+    encode_body(message).unwrap()
+}
+
+/// Whether `frame` is a signed message whose body satisfies `kind`.
+pub fn frame_is(frame: &[u8], kind: fn(&Message) -> bool) -> bool {
+    ome_wire::decode(frame).is_ok_and(|message| kind(&message.body))
 }
