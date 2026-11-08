@@ -18,6 +18,7 @@ use ome_api::{
 use ome_protocol::vault::Config;
 use ome_wire::messages::ecdh::EcdhPurpose;
 use serde_json::Value;
+use zeroize::Zeroizing;
 
 use super::{convert, lobby};
 use crate::{Keeper, ReshareRequest, Result, ceremony::dkg::DkgParams};
@@ -117,8 +118,9 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
                 .await
         };
         CeremonyReshare => |p: api::ReshareParams| async move {
+            let secrets = p.secrets.map(|s| Zeroizing::new(s.0));
             keeper
-                .start_reshare(ReshareRequest {
+                .start_reshare_with_secrets(ReshareRequest {
                     session: p.session.0,
                     vault: p.vault.0,
                     current: p.current.map(TryInto::try_into).transpose()?,
@@ -126,10 +128,13 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
                     new_threshold: p.new_threshold,
                     new_spending_threshold: p.new_spending_threshold,
                     new_members: p.new_members.into_iter().map(convert::new_member).collect::<Result<_>>()?,
-                })
+                }, secrets.as_deref().map(Vec::as_slice))
                 .await
         };
-        CeremonyStatusGet => |p: api::SessionParams| async move { convert::ceremony(keeper.ceremony(p.session.0)?) };
+        CeremonyStatusGet => |p: api::SessionParams| async move {
+            let secrets = keeper.joiner_secrets(p.session.0)?;
+            convert::ceremony(keeper.ceremony(p.session.0)?, secrets.as_deref().map(Vec::as_slice))
+        };
         ProposalsPut => |p: api::BodyParams| async move {
             Ok(api::ProposalStored { id: keeper.put_proposal(p.vault.0, &p.body.0).await?.into() })
         };

@@ -504,6 +504,10 @@ export type ReshareResult = {
    * Transcript hash, if this keeper stays.
    */
   transcript: Hex64 | null;
+  /**
+   * For a member who joined in this reshare: the vault's shared protocol secrets a dealer handed it.
+   */
+  secrets: HexBytes | null;
 };
 
 /**
@@ -583,6 +587,11 @@ export type ReshareParams = {
    * The new committee, in member order.
    */
   newMembers: Array<NewMember>;
+  /**
+   * From a dealer's daemon: the vault's shared protocol secrets, which the keeper seals to every joining member.
+   * Never stored by the dealer's keeper.
+   */
+  secrets?: HexBytes;
 };
 
 /**

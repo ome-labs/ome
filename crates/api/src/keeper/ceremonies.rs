@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{KeeperContact, Manifest};
-use crate::{Hex32, Hex64, Point};
+use crate::{Hex32, Hex64, HexBytes, Point};
 
 /// A member of a reshare's new committee.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -83,6 +83,8 @@ pub struct ReshareResult {
     pub manifest: Option<Manifest>,
     /// Transcript hash, if this keeper stays.
     pub transcript: Option<Hex64>,
+    /// For a member who joined in this reshare: the vault's shared protocol secrets a dealer handed it.
+    pub secrets: Option<HexBytes>,
 }
 
 /// A ceremony's outcome.
@@ -137,6 +139,11 @@ pub struct ReshareParams {
     pub new_spending_threshold: u32,
     /// The new committee, in member order.
     pub new_members: Vec<NewMember>,
+    /// From a dealer's daemon: the vault's shared protocol secrets, which the keeper seals to every joining member.
+    /// Never stored by the dealer's keeper.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub secrets: Option<HexBytes>,
 }
 
 /// What an ECDH batch is for. Recorded in the audit log.

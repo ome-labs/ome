@@ -531,6 +531,7 @@ fn is_ceremony_message(body: &Message) -> bool {
             | Message::Justification(_)
             | Message::Abort(_)
             | Message::Echo(_)
+            | Message::ReshareSecrets(_)
     )
 }
 

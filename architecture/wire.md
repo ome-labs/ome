@@ -63,14 +63,14 @@ signature     = Ed25519(keeper identity, "ome.wire.v0" ‖ canonical(version, he
 
 ## Messages
 
-| Module      | Messages                                                                                                                                                            | Used for                                              |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `ceremony`  | `Manifest`, `DkgRound1`, `DkgRound2`/`ReshareSubShare` (`SealedShare`), `DkgConfirm`/`ReshareConfirm`, `ReshareDeal`, `Complaint`, `Justification`, `Abort`, `Echo` | the committee, creating and resharing the viewing key |
-| `ecdh`      | `EcdhRequest`, `EcdhResponse` (`WirePartial` with DLEQ proof)                                                                                                       | threshold decryption                                  |
-| `proposals` | `Proposal`, `PayloadRequest`, `Payload` (`ProposalPayload`), `Approval`, `Rejection`, `ExecutionReceipt`                                                            | spending                                              |
-| `sync`      | `SyncRequest` (`VoteRef`)                                                                                                                                           | catching up after being offline                       |
-| `lobby`     | `LobbyJoin`, `LobbyState`, `LobbyPlan`, `LobbyLeave`; `Invite` (string form, not a message)                                                                         | founding a vault                                      |
-| `mailbox`   | `MailboxRequest`, `MailboxResponse`, `RelayEnvelope`, `StoredEnvelope` (unsigned)                                                                                   | store-and-forward through an untrusted relay          |
+| Module      | Messages                                                                                                                                                                                                | Used for                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `ceremony`  | `Manifest`, `DkgRound1`, `DkgRound2`/`ReshareSubShare` (`SealedShare`), `DkgConfirm`/`ReshareConfirm`, `ReshareDeal`, `ReshareSecrets` (`SealedSecrets`), `Complaint`, `Justification`, `Abort`, `Echo` | the committee, creating and resharing the viewing key |
+| `ecdh`      | `EcdhRequest`, `EcdhResponse` (`WirePartial` with DLEQ proof)                                                                                                                                           | threshold decryption                                  |
+| `proposals` | `Proposal`, `PayloadRequest`, `Payload` (`ProposalPayload`), `Approval`, `Rejection`, `ExecutionReceipt`                                                                                                | spending                                              |
+| `sync`      | `SyncRequest` (`VoteRef`)                                                                                                                                                                               | catching up after being offline                       |
+| `lobby`     | `LobbyJoin`, `LobbyState`, `LobbyPlan`, `LobbyLeave`; `Invite` (string form, not a message)                                                                                                             | founding a vault                                      |
+| `mailbox`   | `MailboxRequest`, `MailboxResponse`, `RelayEnvelope`, `StoredEnvelope` (unsigned)                                                                                                                       | store-and-forward through an untrusted relay          |
 
 `Echo` forwards a dealer's signed broadcast verbatim. If a dealer signed two different broadcasts, that proves it
 equivocated.

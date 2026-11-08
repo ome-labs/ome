@@ -203,10 +203,23 @@ impl LobbyState {
     }
 }
 
-/// The founding secrets sealed for one member.
+impl SealedSecrets {
+    pub(super) fn validate(&self) -> Result<(), Error> {
+        bounded(
+            "ciphertext",
+            self.ciphertext.len(),
+            1,
+            MAX_SEALED_SECRETS_BYTES,
+        )?;
+        bounded("index", usize::from(self.index), 1, MAX_MEMBERS)
+    }
+}
+
+/// The vault's shared protocol secrets sealed for one member: in a lobby plan for each founder, or in a reshare for a
+/// member who joins after founding.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SealedSecrets {
-    /// Recipient's 1-based index in the plan.
+    /// Recipient's 1-based index in the plan, or in the reshare's new committee.
     pub index: u8,
     /// HPKE encapsulated key.
     pub encapsulated_key: [u8; 32],

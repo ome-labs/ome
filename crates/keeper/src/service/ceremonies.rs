@@ -1,15 +1,26 @@
 use std::time::Duration;
 
 use ome_api::keeper::{CeremonyKind, CeremonyStatus, KeeperEvent};
-use ome_crypto::threshold::shamir::MemberIndex;
+use ome_crypto::{
+    sealing::envelope::{Envelope, TransportPublic},
+    threshold::shamir::MemberIndex,
+};
 use ome_net::{Inbound, Peer};
-use ome_protocol::vault::Committee as Viewers;
+use ome_protocol::{
+    lobby::{open_secrets, seal_secrets},
+    vault::Committee as Viewers,
+};
 use ome_wire::{
     IdentityPublic, Message, decode,
-    messages::ceremony::{Echo, Manifest, Member},
+    limits::MAX_LOBBY_SECRETS_BYTES,
+    messages::{
+        ceremony::{Echo, Manifest, Member},
+        lobby::SealedSecrets,
+    },
     types::{Bytes64, WireField, WirePoint, field},
 };
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
 
 use crate::keeper::{Keeper, State};
 use crate::{
@@ -138,6 +149,20 @@ impl Keeper {
     /// # Errors
     /// [`Error::UnknownVault`] without a current manifest, [`Error::CeremonyExists`], or parameter errors.
     pub async fn start_reshare(&self, request: ReshareRequest) -> Result<()> {
+        self.start_reshare_with_secrets(request, None).await
+    }
+
+    /// Starts (or joins) a reshare, as a dealer also handing `secrets` (the vault's shared protocol secrets) to every
+    /// member who joins in it, sealed to that member's keeper and bound to the session. The secrets are never stored by
+    /// the dealer.
+    ///
+    /// # Errors
+    /// As [`Self::start_reshare`], or [`Error::Invalid`] for secrets that are too large or given to a non-dealer.
+    pub async fn start_reshare_with_secrets(
+        &self,
+        request: ReshareRequest,
+        secrets: Option<&[u8]>,
+    ) -> Result<()> {
         let session = request.session;
         let now = self.now();
         let mut state = self.0.state.lock().await;
@@ -195,6 +220,11 @@ impl Keeper {
         outbox
             .0
             .extend(reshare.seal_sub_shares(&self.0.keys.transport, &mut rng)?.0);
+        if let Some(secrets) = secrets {
+            outbox
+                .0
+                .extend(self.seal_joiner_secrets(&params_of(&reshare), secrets, &mut rng)?);
+        }
         self.0
             .store
             .create_ceremony(&session, "reshare", Some(&request.vault), &request, now)?;
@@ -207,6 +237,115 @@ impl Keeper {
         self.dispatch(sends);
         self.replay_early(session).await;
         Ok(())
+    }
+
+    /// The sealed hand-off of `secrets` to each member who joins in this reshare (in the new committee, not the old).
+    fn seal_joiner_secrets(
+        &self,
+        params: &ReshareParams,
+        secrets: &[u8],
+        rng: &mut impl rand_core::CryptoRng,
+    ) -> Result<Vec<(Target, Message)>> {
+        if secrets.len() > MAX_LOBBY_SECRETS_BYTES {
+            return Err(Error::Invalid("protocol secrets are too large".into()));
+        }
+        let me = self.identity();
+        let dealer = params
+            .old_members
+            .iter()
+            .zip(1u32..)
+            .any(|(m, index)| m.identity == me && params.dealers.contains(&index));
+        if !dealer {
+            return Err(Error::Invalid(
+                "only a dealer hands joiners the secrets".into(),
+            ));
+        }
+        params
+            .new_members
+            .iter()
+            .zip(1u8..)
+            .filter(|(m, _)| {
+                !params
+                    .old_members
+                    .iter()
+                    .any(|old| old.identity == m.identity)
+            })
+            .map(|(joiner, index)| {
+                let envelope = seal_secrets(
+                    &params.session,
+                    u32::from(index),
+                    &self.0.keys.transport,
+                    &TransportPublic(joiner.transport),
+                    secrets,
+                    rng,
+                )?;
+                Ok((
+                    Target::One(joiner.identity),
+                    Message::ReshareSecrets(SealedSecrets {
+                        index,
+                        encapsulated_key: envelope.encapsulated_key,
+                        ciphertext: envelope.ciphertext,
+                    }),
+                ))
+            })
+            .collect()
+    }
+
+    /// A dealer's sealed hand-off, received by a joining member: opened with this keeper's transport key, checked to
+    /// come from a dealer of the session, and kept sealed at rest for the member's daemon (`ceremony.status`).
+    fn on_reshare_secrets(
+        &self,
+        state: &State,
+        from: IdentityPublic,
+        session: [u8; 32],
+        sealed: &SealedSecrets,
+    ) {
+        let Some(reshare) = state.reshares.get(&session) else {
+            return;
+        };
+        let params = reshare.params();
+        let dealer = params
+            .old_members
+            .iter()
+            .zip(1u32..)
+            .find(|(m, index)| m.identity == from && params.dealers.contains(index));
+        let me = self.identity();
+        let joiner = reshare.new_index() == Some(u32::from(sealed.index))
+            && !params.old_members.iter().any(|m| m.identity == me);
+        let (Some((dealer, _)), true) = (dealer, joiner) else {
+            tracing::warn!("ignoring protocol secrets from a non-dealer or for a non-joiner");
+            return;
+        };
+        let opened = open_secrets(
+            &session,
+            u32::from(sealed.index),
+            &self.0.keys.transport,
+            &TransportPublic(dealer.transport),
+            &Envelope {
+                encapsulated_key: sealed.encapsulated_key,
+                ciphertext: sealed.ciphertext.clone(),
+            },
+        );
+        match opened {
+            Ok(secrets) => {
+                if let Err(error) = self.0.secrets.put(&joiner_slot(&session), &secrets) {
+                    tracing::error!(%error, "cannot keep the protocol secrets");
+                }
+            }
+            Err(error) => tracing::warn!(%error, "protocol secrets did not open"),
+        }
+    }
+
+    /// The vault's shared protocol secrets this keeper received as a joining member of reshare `session`, if any.
+    ///
+    /// # Errors
+    /// Custody errors.
+    pub fn joiner_secrets(&self, session: [u8; 32]) -> Result<Option<Zeroizing<Vec<u8>>>> {
+        let slot = joiner_slot(&session);
+        if !self.0.secrets.exists(&slot) {
+            return Ok(None);
+        }
+        Ok(Some(self.0.secrets.get(&slot)?))
     }
 
     /// Status of a ceremony (from memory while running, from the store afterwards).
@@ -249,6 +388,10 @@ impl Keeper {
     ) {
         let now = self.now();
         let mut state = self.0.state.lock().await;
+        if let Message::ReshareSecrets(sealed) = &body {
+            self.on_reshare_secrets(&state, from, session, sealed);
+            return;
+        }
         let outbox = if let Some(dkg) = state.dkgs.get_mut(&session) {
             dkg.handle(&from, body, &self.0.keys.transport, now, &mut os_rng())
         } else if let Some(reshare) = state.reshares.get_mut(&session) {
@@ -617,4 +760,13 @@ pub(crate) fn ceremony_status(label: &str) -> CeremonyStatus {
         "expired" => CeremonyStatus::Expired,
         _ => CeremonyStatus::Aborted,
     }
+}
+
+/// Custody name of a joiner's protocol secrets for reshare `session`.
+fn joiner_slot(session: &[u8; 32]) -> String {
+    format!("joiner-secrets-{}", hex::encode(session))
+}
+
+fn params_of(reshare: &Reshare) -> ReshareParams {
+    reshare.params().clone()
 }

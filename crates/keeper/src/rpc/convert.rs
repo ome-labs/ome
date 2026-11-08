@@ -132,16 +132,18 @@ fn dkg_result(r: &DkgResult) -> api::DkgResult {
     }
 }
 
-fn reshare_result(r: &ReshareResult) -> api::ReshareResult {
+fn reshare_result(r: &ReshareResult, secrets: Option<&[u8]>) -> api::ReshareResult {
     api::ReshareResult {
         committee_commitment: r.committee_commitment.into(),
         new_index: r.new_index,
         manifest: r.manifest.as_ref().map(api::Manifest::from),
         transcript: r.transcript.as_ref().map(transcript),
+        secrets: secrets.map(|s| s.to_vec().into()),
     }
 }
 
-pub(super) fn ceremony(info: crate::CeremonyInfo) -> Result<api::Ceremony> {
+/// A ceremony's status; `secrets` are the protocol secrets this keeper received as a joiner of a reshare.
+pub(super) fn ceremony(info: crate::CeremonyInfo, secrets: Option<&[u8]>) -> Result<api::Ceremony> {
     let kind = ceremony_kind(&info.kind);
     let stored = |e: serde_json::Error| Error::Storage(format!("ceremony result: {e}"));
     let result = match (kind, info.result) {
@@ -150,7 +152,7 @@ pub(super) fn ceremony(info: crate::CeremonyInfo) -> Result<api::Ceremony> {
             &serde_json::from_value(value).map_err(stored)?,
         ))),
         (api::CeremonyKind::Reshare, Some(value)) => Some(api::CeremonyResult::Reshare(
-            reshare_result(&serde_json::from_value(value).map_err(stored)?),
+            reshare_result(&serde_json::from_value(value).map_err(stored)?, secrets),
         )),
     };
     Ok(api::Ceremony {

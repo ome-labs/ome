@@ -263,3 +263,63 @@ async fn a_silent_member_times_the_ceremony_out_and_is_blamed() {
         vec![hex::encode(keepers[2].keeper.identity().0)]
     );
 }
+
+/// The dealers start first and member 2 starts after both: its fellow members' frames arrive before it knows the
+/// session and must wait for it, not be dropped.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_joining_member_receives_the_protocol_secrets_from_the_dealers() {
+    let v = vault(fast_config()).await;
+    let newcomer = v.harness.keeper(4);
+    let request = rotation(&v, &newcomer, 5);
+    let secrets = b"nullifier, outgoing and tagging secrets".to_vec();
+    let mut events: Vec<_> = [&v.keepers[0], &v.keepers[1], &v.keepers[2], &newcomer]
+        .iter()
+        .map(|k| k.keeper.subscribe())
+        .collect();
+
+    // Only a dealer may hand them over.
+    assert!(matches!(
+        v.keepers[1]
+            .keeper
+            .start_reshare_with_secrets(request.clone(), Some(&secrets))
+            .await,
+        Err(Error::Invalid(_))
+    ));
+    for dealer in [&v.keepers[0], &v.keepers[2]] {
+        dealer
+            .keeper
+            .start_reshare_with_secrets(request.clone(), Some(&secrets))
+            .await
+            .unwrap();
+    }
+    v.keepers[1]
+        .keeper
+        .start_reshare(request.clone())
+        .await
+        .unwrap();
+    newcomer
+        .keeper
+        .start_reshare(ReshareRequest {
+            current: Some(v.manifest.clone()),
+            ..request.clone()
+        })
+        .await
+        .unwrap();
+    for events in &mut events {
+        ceremony_reaches(events, request.session, CeremonyStatus::Completed).await;
+    }
+
+    assert_eq!(
+        newcomer
+            .keeper
+            .joiner_secrets(request.session)
+            .unwrap()
+            .as_deref(),
+        Some(&secrets)
+    );
+    // A member who stays already holds them and is sent nothing.
+    assert_eq!(
+        v.keepers[1].keeper.joiner_secrets(request.session).unwrap(),
+        None
+    );
+}

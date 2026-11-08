@@ -16,7 +16,7 @@ use ceremony::{
     Abort, Complaint, Confirm, DkgRound1, Echo, Justification, Manifest, ReshareDeal, SealedShare,
 };
 use ecdh::{EcdhRequest, EcdhResponse};
-use lobby::{LobbyJoin, LobbyLeave, LobbyPlan, LobbyState};
+use lobby::{LobbyJoin, LobbyLeave, LobbyPlan, LobbyState, SealedSecrets};
 use proposals::{Approval, ExecutionReceipt, PayloadRequest, Proposal, ProposalPayload, Rejection};
 use sync::SyncRequest;
 
@@ -71,6 +71,8 @@ pub enum Message {
     LobbyPlan(LobbyPlan),
     /// A guest leaves a lobby, or the host closes it.
     LobbyLeave(LobbyLeave),
+    /// A reshare dealer hands a joining member the vault's shared protocol secrets, sealed to its keeper.
+    ReshareSecrets(SealedSecrets),
 }
 
 impl Message {
@@ -95,6 +97,7 @@ impl Message {
             Self::LobbyJoin(m) => m.validate(),
             Self::LobbyState(m) => m.validate(),
             Self::LobbyPlan(m) => m.validate(),
+            Self::ReshareSecrets(m) => m.validate(),
             Self::DkgConfirm(_)
             | Self::ReshareConfirm(_)
             | Self::Complaint(_)

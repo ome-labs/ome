@@ -46,6 +46,8 @@ It also ships as the `ome-keeper` binary (below).
   | `pending-<session>`     | a finished reshare's share, waiting for its rotation |
   | `share-<vault>-<epoch>` | the share serving the vault at that committee epoch  |
 
+  A joining member's keeper also keeps the protocol secrets a reshare handed it, under `joiner-secrets-<session>`.
+
   All share storage goes through one interface (`StoredShare`), so a recovery design (encrypted backups or a recovery
   keeper) can be added later without restructuring.
 
@@ -83,6 +85,18 @@ There is no coordinator: members are indexed `1..=n` in the agreed order.
      that leaves the committee also knows the commitment its rotation will put on chain.
   4. The result (`ReshareResult`) records that commitment, and for new members the new manifest. Their new share is
      stored as `pending`.
+  5. **Joiner secrets.** A member who joins after founding also needs the vault's shared protocol secrets
+     (nullifier-hiding, outgoing-viewing and tagging keys).
+     - A dealer's daemon passes them in `ceremony.reshare`.
+     - The dealer's keeper seals them to each joiner (a member of the new committee but not the old) with the
+       lobby's HPKE sealing, bound to the session and the joiner's new index, and sends them as `ReshareSecrets`.
+       It never stores them.
+     - The joiner's keeper opens a hand-off only from a dealer of the session, and keeps it sealed at rest
+       (`joiner-secrets-<session>`). `ceremony.status` returns it to its daemon in the result's `secrets`.
+- **Late starts**: members' daemons start a ceremony when their members act, so frames often arrive before the session
+  exists. Every ceremony frame for a session this keeper hasn't started waits in a bounded backlog (16 sessions, 64
+  frames each) and is replayed when the session starts. This holds whoever signed it, including fellow committee
+  members, whose delivered frames are never resent.
 - **Timeouts**: a phase past its deadline aborts and blames whoever didn't send what it needed.
 - **No resume**: ceremony secrets live only in memory. A keeper that restarts mid-ceremony marks the ceremony aborted,
   and members start a new session.
@@ -273,7 +287,9 @@ These are streamed to the daemon:
   - a reshare committee with a mismatching config isn't activated;
   - an unlanded pending share expires;
   - a restart keeps the vault and aborts an interrupted ceremony;
-  - a silent member times a ceremony out and is blamed.
+  - a silent member times a ceremony out and is blamed;
+  - a joining member receives the protocol secrets from the dealers, a staying member is sent none, and a non-dealer
+    can't send them; the member who starts last still completes.
 
 Tests use a manual clock and wait on the keepers' own events, with a time limit, instead of sleeping.
 
