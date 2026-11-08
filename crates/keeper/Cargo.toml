@@ -1,0 +1,36 @@
+[package]
+name = "ome-keeper"
+description = "An Ome member's always-on keeper: viewing-share custody, ceremonies and threshold ECDH"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+argon2 = { workspace = true }
+chacha20poly1305 = { workspace = true }
+hex = { workspace = true }
+ome-crypto = { workspace = true }
+ome-net = { workspace = true }
+ome-protocol = { workspace = true }
+ome-wire = { workspace = true }
+os-rng = { workspace = true }
+postcard = { workspace = true }
+rand_core = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+tracing = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+rand_chacha = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "test-util", "time"] }

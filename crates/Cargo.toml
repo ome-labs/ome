@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 # Add each crate folder here as it lands (folders carry no `ome` prefix; package names do: `crypto` builds `ome-crypto`).
-members = ["crypto", "net", "protocol", "signer", "wire"]
+members = ["crypto", "keeper", "net", "protocol", "signer", "wire"]
 # The fuzz crate needs nightly and has its own workspace.
 exclude = ["wire/fuzz"]
 
@@ -23,6 +23,7 @@ publish = false
 [workspace.dependencies]
 # Ome crates.
 ome-crypto = { path = "crypto" }
+ome-net = { path = "net" }
 ome-protocol = { path = "protocol" }
 ome-wire = { path = "wire" }
 
@@ -89,8 +90,13 @@ libp2p = { version = "0.57.1", default-features = false, features = [
 tokio = { version = "1.54.1", default-features = false }
 tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 
+# Keeper storage and randomness (native only).
+os-rng = { package = "getrandom", version = "0.4.3", features = ["sys_rng"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+
 # Test-only.
 proptest = "1.12.0"
+tempfile = "3.27.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
