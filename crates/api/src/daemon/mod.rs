@@ -155,6 +155,9 @@ methods! {
     VaultActivity = "vault.activity" (VaultParams) -> Vec<ActivityEntry>;
     /// Sets a vault's alias.
     VaultAlias = "vault.alias" (AliasParams) -> Vec<VaultSummary>;
+    /// Retires the viewing share the keeper kept for a vault whose newer committee it could not verify: after a
+    /// rotation that removed this member without its keeper taking part.
+    VaultRetire = "vault.retire" (VaultParams) -> Vec<VaultSummary>;
     /// Makes a vault the default.
     VaultUse = "vault.use" (VaultParams) -> Vec<VaultSummary>;
     /// The vault's token balances.

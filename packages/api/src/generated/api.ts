@@ -3201,6 +3201,7 @@ export interface DaemonMethods {
   "vault.audit": { params: VaultAuditParams; result: Array<AuditView> };
   "vault.activity": { params: VaultParams; result: Array<ActivityEntry> };
   "vault.alias": { params: AliasParams; result: Array<VaultSummary> };
+  "vault.retire": { params: VaultParams; result: Array<VaultSummary> };
   "vault.use": { params: VaultParams; result: Array<VaultSummary> };
   "tokens.list": { params: VaultParams; result: Array<TokenBalance> };
   "tokens.add": { params: TokenParams; result: TokenInfo };
