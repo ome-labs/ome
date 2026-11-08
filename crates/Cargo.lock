@@ -2696,6 +2696,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ome-relay"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "futures",
+ "getrandom 0.4.3",
+ "hex",
+ "libp2p",
+ "ome-net",
+ "ome-wire",
+ "rusqlite",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ome-signer"
 version = "0.0.0"
 dependencies = [

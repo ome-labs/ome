@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 # Add each crate folder here as it lands (folders carry no `ome` prefix; package names do: `crypto` builds `ome-crypto`).
-members = ["crypto", "keeper", "net", "protocol", "signer", "wire"]
+members = ["crypto", "keeper", "net", "protocol", "relay", "signer", "wire"]
 # The fuzz crate needs nightly and has its own workspace.
 exclude = ["wire/fuzz"]
 
