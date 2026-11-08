@@ -66,7 +66,7 @@ The keeper maps its errors to kinds as follows:
 | Area      | Method                                                                       | Params → result                                                                |
 | --------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | session   | `session.auth`, `events.subscribe`                                           | `{ token }` → `null`; `{}` → `null`                                            |
-| keeper    | `keeper.info`                                                                | → `KeeperInfo { apiVersion, version, identity, transport, peerId, addresses }` |
+| keeper    | `keeper.info`, `keeper.joinRequest` (a signed `ome-join-v0:` string)         | → `KeeperInfo { apiVersion, version, identity, transport, peerId, addresses }` |
 | vaults    | `vault.list`, `vault.status`, `vault.register`, `vault.retire`               | → `Vault { manifest, status, index, serving }`                                 |
 |           | `vault.observeConfig`                                                        | `{ vault, config: VaultConfig }` → `{ observation }`                           |
 |           | `vault.observeTx`                                                            | `{ vault, txHash }` → `{ known }` (an unknown spend raises `unexpectedSpend`)  |
@@ -103,12 +103,12 @@ two changes: times are Unix seconds, and hex values are typed.
 | signer     | `signer.status`, `signer.unlock` (`Secret` is `{ passphrase }` or `{ key }`), `signer.lock`, `signer.sealingKey`                         |
 | node       | `node.status`                                                                                                                            |
 | founding   | `lobby.inspect`, `lobby.create`, `lobby.join`, `lobby.get`, `lobby.list`, `lobby.start`, `lobby.leave`, `founding.begin`, `founding.get` |
-| vaults     | `vault.list`, `vault.details`, `vault.peers`, `vault.audit`, `vault.activity`, `vault.alias`, `vault.use`                                |
+| vaults     | `vault.list`, `vault.details`, `vault.peers`, `vault.audit`, `vault.activity`, `vault.alias`, `vault.use`, `vault.retire`                |
 | tokens     | `tokens.list`, `tokens.add`, `tokens.deployTest` (local network only)                                                                    |
 | proposals  | `proposals.list`, `get`, `preview`, `create`, `review`, `approve`, `reject`, `execute`, `cancel`                                         |
 | contracts  | `contracts.functions`                                                                                                                    |
 | contacts   | `contacts.list`, `contacts.put`, `contacts.remove`                                                                                       |
-| membership | `membership.plan`, `membership.begin`, `membership.get`, `membership.list` (**draft**)                                                   |
+| membership | `membership.request`, `membership.plan`, `membership.begin`, `membership.get`, `membership.list`                                         |
 
 - `proposals.approve` and `proposals.reject` take an optional `secret`, which unseals a locked signer for that one
   call.
@@ -116,14 +116,18 @@ two changes: times are Unix seconds, and hex values are typed.
   - `transfer { token, to, amount, memo }`;
   - `calls { calls: [{ to, fn, args }], memo }`;
   - `cancel { cancels, memo }`.
-- The **membership** methods are a draft of the rotation flow:
-  1. plan the change;
-  2. reshare to the new committee;
-  3. propose `rotate_membership`;
-  4. approve and execute it;
+- **Membership** (`architecture/daemon.md`):
+  1. a newcomer's daemon produces a join request (`membership.request`), signed by the newcomer's keeper;
+  2. a member plans the change (`membership.plan`, taking the requests) and hands the plan string
+     (`ome-rotation-v0:`) to everyone who stays and every joiner;
+  3. each passes it to `membership.begin`, and their keepers reshare;
+  4. the planner proposes `rotate_membership`, and members approve it with `proposals.approve`, which checks it
+     against their own reshare;
   5. the keepers activate the new committee.
-
-  Their shapes may change within API version 0, until the rotation flow lands.
+- `vault.retire` forces the keeper's `vault.retire`: a member removed by a rotation it took no part in can't read the
+  new config to show its keeper, and destroys its share deliberately.
+- The keeper's `ceremony.reshare` takes optional `secrets`, which the keeper seals to joiners, and `ceremony.status`
+  returns them to a joiner in the result's `secrets`. The keeper's `vault.retire` takes an optional `force`.
 
 `DaemonEvent` types:
 
@@ -132,7 +136,7 @@ two changes: times are Unix seconds, and hex values are typed.
 - `lobby` and `founding`;
 - `vaultActivity`;
 - `execution`;
-- `rotation` (draft).
+- `rotation`.
 
 ## Versioning
 

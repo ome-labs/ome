@@ -47,6 +47,14 @@ pnpm --filter @ome-labs/contracts profile               # gate counts per functi
 pnpm --filter @ome-labs/contracts profile:flamegraphs   # target/flamegraphs/<artifact>/<function>.svg
 ```
 
+Daemon (`@ome-labs/daemon`):
+
+```sh
+pnpm --filter @ome-labs/daemon test       # unit tests (no network)
+pnpm --filter @ome-labs/daemon test:e2e   # three or four daemons against `aztec start --local-network`
+node packages/daemon/src/omed.ts --profile <name>   # run omed
+```
+
 Wallet (`@ome-labs/wallet`):
 
 ```sh

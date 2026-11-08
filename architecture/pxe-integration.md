@@ -152,6 +152,9 @@ DKG, then each reshare).
 - Reshare dealers must therefore be members who stay.
 - The wallet's tagging hook returns the secret as an `arbitrary-secret` strategy, and `setViewing` registers it as a
   tagging source. Earlier epochs' secrets stay registered, so their notes are still found.
+- A member who joins later receives the earlier epochs' transcripts in the reshare's sealed hand-off
+  (`architecture/daemon.md`), and `addEpochSecret` registers each. Without them, the joiner would miss the vault's
+  older change notes, which hold its balance.
 
 **Content and amounts.** A removed member can't read anything that arrives after removal. Every note's decryption
 needs `address_secret · ephPk` for a fresh ephemeral key, and only the new committee can produce it. What leaks is

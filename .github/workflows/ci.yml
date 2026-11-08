@@ -26,8 +26,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec oxfmt --check .
       - run: pnpm exec oxlint --deny-warnings .
-      # The wallet needs the contract artifact and the WebAssembly build; it has its own job.
-      - run: pnpm exec turbo run lint typecheck build test '--filter=./packages/*' '--filter=!@ome-labs/wallet'
+      # The wallet and the daemon need the contract artifact and the WebAssembly build; they have their own job.
+      - run: pnpm exec turbo run lint typecheck build test '--filter=./packages/*' '--filter=!@ome-labs/wallet' '--filter=!@ome-labs/daemon'
 
   vectors:
     name: Golden vectors
@@ -108,7 +108,7 @@ jobs:
       - run: pnpm --filter @ome-labs/wasm test
 
   wallet:
-    name: Wallet
+    name: Wallet and daemon
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -143,7 +143,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Builds the contract artifact and @ome-labs/wasm first. The end-to-end suite needs a local network and runs
       # outside CI (pnpm --filter @ome-labs/wallet test:e2e).
-      - run: pnpm exec turbo run typecheck test --filter=@ome-labs/wallet
+      - run: pnpm exec turbo run typecheck test --filter=@ome-labs/wallet --filter=@ome-labs/daemon
 
   noir:
     name: Noir

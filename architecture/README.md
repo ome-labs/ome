@@ -6,25 +6,26 @@ verified decisions about the components that exist; each component gets its own 
 
 ## Components in the tree
 
-| Path                    | What it is                                                                                                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `contracts/ome_vault`   | `OmeVault`, the vault's Aztec account contract (Aztec.nr 6.0.0), with its unit, integration and end-to-end tests under `src/test/`                                   |
-| `contracts/test_signer` | Test-only contract that returns TXE Schnorr signatures; never deployed                                                                                               |
-| `crates/crypto`         | `ome-crypto`: Grumpkin, Poseidon2, Aztec key derivation, Schnorr, DKG, threshold ECDH, resharing and HPKE sealing ([crypto.md](crypto.md))                           |
-| `crates/wire`           | `ome-wire`: canonical, versioned, signed messages between keepers, daemons and relays ([wire.md](wire.md))                                                           |
-| `crates/protocol`       | `ome-protocol`: the vault's rules: contract mirror, payload hashing, approvals, tallies, rotations and lobbies ([protocol.md](protocol.md))                          |
-| `crates/signer`         | `ome-signer`: the member's approval key, sealed at rest and signing only proposals `ome-protocol` accepts ([signer.md](signer.md))                                   |
-| `crates/net`            | `ome-net`: transport, libp2p node, framing, admission and relay mailboxes ([networking.md](networking.md))                                                           |
-| `crates/keeper`         | `ome-keeper`: viewing-share custody, ceremonies, threshold ECDH, replication, lobbies, mailboxes, the local RPC and the `ome-keeper` binary ([keeper.md](keeper.md)) |
-| `crates/api`            | `ome-api`: every method, event and error of the keeper and daemon APIs, and their TypeScript ([api.md](api.md))                                                      |
-| `crates/client`         | `ome-client`: typed keeper and daemon clients and daemon discovery ([api.md](api.md))                                                                                |
-| `crates/wasm`           | `ome-wasm` / `@ome-labs/wasm`: the core for TypeScript as WebAssembly, for Node and the browser ([bindings.md](bindings.md))                                         |
-| `crates/relay`          | `ome-relay`: the untrusted circuit relay and sealed mailbox store, its binary and the `ome-node` image ([relay.md](relay.md))                                        |
-| `packages/wallet`       | `@ome-labs/wallet`: Aztec's PXE for Ome vaults, with the threshold key store, deployment and proposals ([pxe-integration.md](pxe-integration.md))                    |
-| `patches/`              | The guarded `@aztec-labs/pxe` 6.0.0 patch the wallet needs ([pxe-integration.md](pxe-integration.md))                                                                |
-| `packages/api`          | `@ome-labs/api`: the API's TypeScript declarations, generated from `crates/api`                                                                                      |
-| `tools/vectors`         | `@ome-labs/vectors`: golden vectors computed with Aztec 6.0.0's own packages                                                                                         |
-| `scripts/`              | Repository scripts: guarded cargo runs, the WebAssembly build check, the contract's failure-message check and gate flamegraphs                                       |
+| Path                    | What it is                                                                                                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contracts/ome_vault`   | `OmeVault`, the vault's Aztec account contract (Aztec.nr 6.0.0), with its unit, integration and end-to-end tests under `src/test/`                                         |
+| `contracts/test_signer` | Test-only contract that returns TXE Schnorr signatures; never deployed                                                                                                     |
+| `crates/crypto`         | `ome-crypto`: Grumpkin, Poseidon2, Aztec key derivation, Schnorr, DKG, threshold ECDH, resharing and HPKE sealing ([crypto.md](crypto.md))                                 |
+| `crates/wire`           | `ome-wire`: canonical, versioned, signed messages between keepers, daemons and relays ([wire.md](wire.md))                                                                 |
+| `crates/protocol`       | `ome-protocol`: the vault's rules: contract mirror, payload hashing, approvals, tallies, rotations and lobbies ([protocol.md](protocol.md))                                |
+| `crates/signer`         | `ome-signer`: the member's approval key, sealed at rest and signing only proposals `ome-protocol` accepts ([signer.md](signer.md))                                         |
+| `crates/net`            | `ome-net`: transport, libp2p node, framing, admission and relay mailboxes ([networking.md](networking.md))                                                                 |
+| `crates/keeper`         | `ome-keeper`: viewing-share custody, ceremonies, threshold ECDH, replication, lobbies, mailboxes, the local RPC and the `ome-keeper` binary ([keeper.md](keeper.md))       |
+| `crates/api`            | `ome-api`: every method, event and error of the keeper and daemon APIs, and their TypeScript ([api.md](api.md))                                                            |
+| `crates/client`         | `ome-client`: typed keeper and daemon clients and daemon discovery ([api.md](api.md))                                                                                      |
+| `crates/wasm`           | `ome-wasm` / `@ome-labs/wasm`: the core for TypeScript as WebAssembly, for Node and the browser ([bindings.md](bindings.md))                                               |
+| `crates/relay`          | `ome-relay`: the untrusted circuit relay and sealed mailbox store, its binary and the `ome-node` image ([relay.md](relay.md))                                              |
+| `packages/daemon`       | `@ome-labs/daemon`: `omed`, a member's service: the API server, the sealed signer, keeper supervision, founding, proposals and membership changes ([daemon.md](daemon.md)) |
+| `packages/wallet`       | `@ome-labs/wallet`: Aztec's PXE for Ome vaults, with the threshold key store, deployment and proposals ([pxe-integration.md](pxe-integration.md))                          |
+| `patches/`              | The guarded `@aztec-labs/pxe` 6.0.0 patch the wallet needs ([pxe-integration.md](pxe-integration.md))                                                                      |
+| `packages/api`          | `@ome-labs/api`: the API's TypeScript declarations, generated from `crates/api`                                                                                            |
+| `tools/vectors`         | `@ome-labs/vectors`: golden vectors computed with Aztec 6.0.0's own packages                                                                                               |
+| `scripts/`              | Repository scripts: guarded cargo runs, the WebAssembly build check, the contract's failure-message check and gate flamegraphs                                             |
 
 Crates and packages join as they are built.
 
@@ -88,4 +89,4 @@ own packages; CI fails when a committed vector file differs from what the pinned
 
 ## Planned components
 
-Not built yet; each will get a page here when it lands: `ome-ffi` and `@ome-labs/daemon`.
+Not built yet; it will get a page here when it lands: `ome-ffi`.

@@ -1,0 +1,182 @@
+# The daemon (`omed`)
+
+`packages/daemon` (`@ome-labs/daemon`) is one member's background service for one profile. Every app (the CLI, a
+desktop app, later the phone approver) talks to it through the daemon API of `@ome-labs/api` (`architecture/api.md`).
+
+It does five things:
+
+- serves the API on an owner-only socket;
+- keeps the sealed signer;
+- runs and supervises the member's keeper;
+- hosts the wallet's PXE (`architecture/pxe-integration.md`);
+- founds vaults, runs proposals and membership changes, and tells the keeper what the chain says.
+
+It runs under Node 24, straight from its TypeScript sources: `omed [--profile <name>] [--home <dir>]`.
+
+## Profile and files
+
+The Ome home is `OME_HOME`, or `~/.ome`. Each profile is `profiles/<name>/`. The name is lowercase letters, digits,
+`-` and `_`, so it can't leave the home. The profile directory is owner-only (`0700`), and every file in it is written
+`0600` and atomically.
+
+| File                          | Holds                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `profile.json`                | the public profile (name, signer key, account), settings, contacts, vault aliases, the default vault, tracked tokens |
+| `signer.json`                 | the signing key, sealed (`ome-signer`, Argon2id)                                                                     |
+| `keeper-key.sealed`           | the keeper's master key, when no OS keychain holds it                                                                |
+| `secrets/*.sealed`            | the member's Aztec account and each vault's protocol secrets, sealed with the master key (AES-256-GCM)               |
+| `vaults/*.json`               | each vault's record: name, founding constructor (public), names, each epoch's transcript, the last config read       |
+| `rotations/*.json`            | rotations this daemon takes part in                                                                                  |
+| `keeper/`, `keeper.log`       | the keeper's data directory and log                                                                                  |
+| `pxe/`                        | the PXE's store                                                                                                      |
+| `daemon.addr`, `daemon.token` | written at start: the socket path and the session token (`ome-client` discovers them)                                |
+| `daemon.lock`                 | one daemon per profile                                                                                               |
+
+The socket is `daemon.sock` in the profile, unless that path is longer than 100 bytes; it then lives in the temporary
+directory under a hash of the path.
+
+## The server
+
+- Newline-delimited JSON-RPC 2.0, the keeper's framing.
+- Every connection presents the token first (`session.auth`), compared in constant time.
+- `events.subscribe` adds `event` notifications.
+- Errors carry the API kind and code. Errors from the keeper and from `@ome-labs/wasm` keep their kinds; anything else
+  is `failed`.
+- All 52 daemon methods are served. The server answers `session.auth` and `events.subscribe` itself, and the other
+  50 each have a handler (`src/server/handlers.ts`) that checks the params it uses. Hex values and points are checked
+  again by the bindings.
+
+## Signer and keys
+
+- `profile.create` does three things:
+  1. seals a new signing key under the passphrase;
+  2. creates the keeper's master key;
+  3. creates the member's own Aztec account (an initializerless Schnorr account), sealed with the master key.
+- `signer.unlock` opens an `UnlockedSigner` for a window. The key stays in WebAssembly memory and is wiped when the
+  window ends or on `signer.lock`.
+- A proposal can also be signed with a secret passed for that one call.
+- **Keeper master key**:
+  - it lives in the OS keychain: macOS Keychain, or Linux Secret Service through `secret-tool`. The keeper then starts
+    with the daemon, without the member;
+  - without a keychain, or with `OME_KEYCHAIN=off`, it is a file sealed with the signer's sealing key. The keeper then
+    starts at the first unlock, by passphrase or by sealing key.
+
+## Keeper supervision
+
+The daemon runs `ome-keeper run --secrets-stdin`. The master key and a fresh session token go on stdin, never on the
+command line or in the environment.
+
+- The daemon reads the ready line, connects, and refuses a keeper whose `apiVersion` differs.
+- It restarts the keeper with backoff when it exits, and reports the state (`keeper` events).
+- Keeper events are forwarded (`keeperEvent`).
+- The binary is found at `OME_KEEPER_BIN`, then `<home>/bin/ome-keeper`, then the repository's debug build.
+- In this phase the keeper is local. A keeper on the member's own server needs a network transport for the RPC,
+  which comes later.
+
+## Fees
+
+Every transaction pays through the sponsored fee payer (the canonical `SponsoredFPC`, salt 0), which the local
+network and Testnet provide. The vault never pays its own fees. The same address is the fee payer the signer trusts
+in rotations. Alpha has no sponsored fee payer, so a configurable fee payer is still to come.
+
+## Founding
+
+1. The host's `lobby.create` opens a lobby through the keeper. The invite carries the network label
+   `aztec:<l1 chain id>:<rollup version>`, and `lobby.join` refuses an invite for another network.
+2. `lobby.start` fixes the thresholds, a fresh salt and fresh protocol secrets. The keeper seals the secrets to each
+   member.
+3. Each member runs `founding.begin`. It goes through these steps, reported as `founding` events:
+
+| Step     | What happens                                                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| agree    | wait for the host's plan                                                                                                          |
+| dkg      | `ceremony.dkg` with the roster in member order; every keeper must reach the same transcript                                       |
+| derive   | `deriveVault` from the roster's signer keys, the DKG's group key and verification shares, the plan's thresholds, salt and secrets |
+| register | `vault.register` with the manifest; the vault's record and sealed secrets are stored; the wallet registers the vault              |
+| deploy   | the host deploys from its own account; the others wait until the config note reads                                                |
+| verify   | the config note goes to the keeper (`vault.observeConfig`), which must answer `current`                                           |
+
+## Proposals
+
+- **`proposals.create`**: turns an intent into an Aztec payload, with the fee payer's call merged in.
+  - A transfer is the token's private `transfer`.
+  - `calls` are built from the registered contracts' artifacts.
+  - A cancellation is the fee call alone, under the cancelled proposal's nonce.
+
+  The wallet builds the proposal, and the daemon stores the payload and the proposal with the keeper, which
+  replicates them. The proposal's summary is the intent as JSON.
+
+- **Views**: built from the keeper's records.
+  - Votes are verified against the signer set.
+  - The status comes from the tally at chain time, the receipts, nonces spent by other executed proposals, and the
+    config version.
+  - Calls come from the checked payload.
+- **`proposals.review`**: rebuilds the transaction on this device. `vaultTxOf` runs the wasm checks and Aztec's own
+  outer hash. Review then simulates the transaction with the stub account and shows what an approval and a rejection
+  would sign.
+- **`approve`** / **`reject`**: sign with the signer, then store the vote with the keeper.
+- **`execute`**: tallies the votes into the witness, sends the transaction, stores the receipt, and reports
+  `execution` progress.
+
+## Membership
+
+1. **Join request.** A newcomer's daemon produces one (`membership.request`), signed by its keeper.
+2. **Plan.** `membership.plan` builds the plan string and checks:
+   - that at most `t_v − 1` members leave;
+   - that `t_v` members stay to deal; dealers are always members who stay, as the epoch tagging secret requires;
+   - the thresholds against the new size;
+   - that each joiner's keeper isn't already a member.
+3. **Begin.** Everyone who stays and every joiner passes the plan to `membership.begin`. The plan carries the
+   reshare's parameters, the current manifest and config, the vault's founding constructor, names, and the rotation
+   proposal's nonce. It holds no secrets.
+4. **Reshare.**
+   - Dealers pass `ceremony.reshare` the hand-off: the protocol secrets and every earlier epoch's transcript, for at
+     most 12 earlier epochs (`src/secrets/handoff.ts`).
+   - Each dealer's keeper seals the hand-off to the joiners, so a member removed earlier never receives it.
+   - The new epoch's transcript is stored.
+5. **Propose.** The planner proposes `rotate_membership` under the plan's nonce, built from its own reshare result.
+6. **Approve.** Members approve with `proposals.approve`, which routes a rotation to `approveRotation`. The proposal
+   must perform exactly the rotation this member's keeper reshared. That compares the signers and committee shares,
+   which closes the gaps doc's unchecked-approval item. The member's trusted fee payer is the only other call
+   allowed.
+7. **Execute.** Any member executes it.
+8. **Activate.**
+   - Members who stay read the new config note and hand it to the keeper, which activates its pending share. The
+     daemon then points the wallet at the new committee and its epoch's tagging secret.
+   - A joiner can't read the note until its keeper activates. It waits for the plan nonce's nullifier on chain
+     (`poseidon2([nonce], 1025801951)`, siloed with the vault), computes the config the rotation sets
+     (`checkRotation`), and hands that to its keeper.
+   - If the proposal is cancelled instead, the nullifier also appears. That's harmless: the members who stay never
+     activate a committee the chain doesn't name, so a joiner alone can't reach `t_v`.
+9. **Retire.** A member who leaves without taking part can no longer read the vault: the new committee doesn't answer
+   its keeper. It retires its share with `vault.retire`.
+
+Replacing a device is the same flow: the old device's slot leaves and the new device joins.
+
+## Background work
+
+Every 15 seconds, for each vault, the daemon reads the config note and hands it to the keeper:
+
+- an activated committee re-points viewing;
+- a removal marks the vault;
+- anything else surfaces through the keeper's alarms.
+
+## Tests
+
+| Test                           | What it checks                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `src/server/server.test.ts`    | the socket: authentication, refused tokens, error kinds and codes, events, `0600`                      |
+| `src/proposals/review.test.ts` | a payload that rebuilds to another outer hash is reported, and approval refuses it                     |
+| `src/membership/plan.test.ts`  | plans the rules refuse report why, dealers are members who stay, and a member with no part can't begin |
+| `test/e2e/daemons.test.ts`     | the local-network suite, below                                                                         |
+
+`test/e2e/daemons.test.ts` runs against `aztec start --local-network`. Three, then four, daemons run in one process,
+each with its own keeper process and PXE, all driven through their sockets:
+
+- they found a vault and agree on its address;
+- they pay with two approvals, and a rejection blocks a proposal;
+- a newcomer joins and a member leaves in one rotation;
+- the newcomer reads the vault and its approval counts;
+- the member who left can't see the new balance and retires its share.
+
+Measured: 4 tests in 79 s with fake proofs, setup included.

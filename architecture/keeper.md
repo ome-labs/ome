@@ -139,6 +139,10 @@ keeps its share. The removal still holds cryptographically, because the old shar
 committee. Erasing that leftover share is a deliberate step, not an automatic one: `vault.retire` destroys it, and
 only once the chain has moved past the committee it serves, so a mistaken call can't break a working vault.
 
+`vault.retire { force: true }` skips that check. Such a member can't read the new config to show its keeper, since
+the config is encrypted to the new committee. A member may always destroy its own share; doing so costs only its own
+access.
+
 **Pending shares expire.** A completed reshare whose committee never becomes active is expired after
 `pending_share_ttl_secs` (default 7 days): its pending share is destroyed, the ceremony is marked `expired`, and
 `PendingExpired` is raised.
@@ -289,7 +293,8 @@ These are streamed to the daemon:
   - a restart keeps the vault and aborts an interrupted ceremony;
   - a silent member times a ceremony out and is blamed;
   - a joining member receives the protocol secrets from the dealers, a staying member is sent none, and a non-dealer
-    can't send them; the member who starts last still completes.
+    can't send them; the member who starts last still completes, and a hand-off that lands after completion is kept;
+  - a member can force the retirement of its own share, which is otherwise refused while the committee is current.
 
 Tests use a manual clock and wait on the keepers' own events, with a time limit, instead of sleeping.
 
