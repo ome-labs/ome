@@ -16,7 +16,7 @@ argon2 = { workspace = true }
 chacha20poly1305 = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
-ome-api = { workspace = true }
+ome-api = { workspace = true, features = ["core"] }
 ome-crypto = { workspace = true }
 ome-net = { workspace = true }
 ome-protocol = { workspace = true }

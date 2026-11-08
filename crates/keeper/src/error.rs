@@ -106,6 +106,12 @@ impl From<Error> for RpcError {
     }
 }
 
+impl From<ome_api::core::InvalidValue> for Error {
+    fn from(error: ome_api::core::InvalidValue) -> Self {
+        Self::Invalid(error.0)
+    }
+}
+
 impl From<rusqlite::Error> for Error {
     fn from(error: rusqlite::Error) -> Self {
         Self::Storage(error.to_string())

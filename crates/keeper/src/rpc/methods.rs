@@ -16,7 +16,7 @@ use ome_api::{
     },
 };
 use ome_protocol::vault::Config;
-use ome_wire::{messages::ecdh::EcdhPurpose, types::parse_field};
+use ome_wire::messages::ecdh::EcdhPurpose;
 use serde_json::Value;
 
 use super::{convert, lobby};
@@ -61,17 +61,6 @@ const fn purpose(purpose: api::EcdhPurpose) -> EcdhPurpose {
     }
 }
 
-fn config(config: api::VaultConfig) -> Result<Config> {
-    Ok(Config {
-        threshold: config.threshold,
-        signer_count: config.signer_count,
-        version: config.version,
-        signer_set_commitment: parse_field(&config.signer_set_commitment.0)?,
-        viewing_threshold: config.viewing_threshold,
-        committee_commitment: parse_field(&config.committee_commitment.0)?,
-    })
-}
-
 fn info(keeper: &Keeper) -> api::KeeperInfo {
     let identity = keeper.identity();
     api::KeeperInfo {
@@ -91,11 +80,11 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
         VaultList => |_| async { Ok(keeper.vaults().await.iter().map(convert::vault).collect()) };
         VaultStatusGet => |p: api::VaultParams| async move { Ok(convert::vault(&keeper.vault(p.vault.0).await?)) };
         VaultRegister => |p: api::RegisterParams| async move {
-            let manifest = convert::wire_manifest(p.manifest)?;
+            let manifest = p.manifest.try_into()?;
             Ok(convert::vault(&keeper.register_vault(p.session.0, manifest).await?))
         };
         VaultObserveConfig => |p: api::ObserveConfigParams| async move {
-            let observation = keeper.observe_config(p.vault.0, config(p.config)?).await?;
+            let observation = keeper.observe_config(p.vault.0, Config::try_from(p.config)?).await?;
             Ok(api::Observed { observation })
         };
         VaultRetire => |p: api::VaultParams| async move { Ok(convert::vault(&keeper.retire(p.vault.0).await?)) };
@@ -111,7 +100,7 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
             Ok(api::MailboxPolled { delivered: u32::try_from(delivered).unwrap_or(u32::MAX) })
         };
         EcdhBatch => |p: api::EcdhParams| async move {
-            let points = p.points.into_iter().map(convert::wire_point).collect::<Result<Vec<_>>>()?;
+            let points = p.points.into_iter().map(TryInto::try_into).collect::<Result<Vec<_>, _>>()?;
             let responses = keeper.ecdh_batch(p.vault.0, p.epoch, purpose(p.purpose), points).await?;
             Ok(api::EcdhResult {
                 epoch: p.epoch,
@@ -132,7 +121,7 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
                 .start_reshare(ReshareRequest {
                     session: p.session.0,
                     vault: p.vault.0,
-                    current: p.current.map(convert::wire_manifest).transpose()?,
+                    current: p.current.map(TryInto::try_into).transpose()?,
                     dealers: p.dealers,
                     new_threshold: p.new_threshold,
                     new_spending_threshold: p.new_spending_threshold,

@@ -2619,6 +2619,9 @@ name = "ome-api"
 version = "0.0.0"
 dependencies = [
  "hex",
+ "ome-crypto",
+ "ome-protocol",
+ "ome-wire",
  "serde",
  "serde_json",
  "ts-rs",

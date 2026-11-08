@@ -11,8 +11,15 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Conversions to and from the core types, for the services and bindings that serve these shapes.
+core = ["dep:ome-crypto", "dep:ome-protocol", "dep:ome-wire"]
+
 [dependencies]
 hex = { workspace = true }
+ome-crypto = { workspace = true, optional = true }
+ome-protocol = { workspace = true, optional = true }
+ome-wire = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 ts-rs = { workspace = true }

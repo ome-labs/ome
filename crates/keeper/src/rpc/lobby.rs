@@ -15,7 +15,7 @@ pub(super) async fn open(keeper: &Keeper, p: api::LobbyOpenParams) -> Result<api
             viewing_threshold: p.viewing_threshold,
             network: p.network,
             member_name: p.member.name,
-            signer_key: convert::wire_point(p.member.signer_key)?,
+            signer_key: p.member.signer_key.try_into()?,
         })
         .await?;
     Ok(api::LobbyOpened {
@@ -25,7 +25,7 @@ pub(super) async fn open(keeper: &Keeper, p: api::LobbyOpenParams) -> Result<api
 }
 
 pub(super) async fn join(keeper: &Keeper, p: api::LobbyJoinParams) -> Result<api::LobbyJoined> {
-    let signer_key = convert::wire_point(p.member.signer_key)?;
+    let signer_key = p.member.signer_key.try_into()?;
     let lobby = keeper
         .join_lobby(&p.invite, p.member.name, signer_key)
         .await?;

@@ -9,11 +9,8 @@ use ome_crypto::threshold::ecdh::Partial;
 use ome_net::identity::peer_id;
 use ome_wire::{
     IdentityPublic,
-    messages::{
-        ceremony::{Manifest, Member},
-        lobby::{Invite, KeeperContact},
-    },
-    types::{Bytes64, WirePoint, scalar},
+    messages::lobby::{Invite, KeeperContact},
+    types::{Bytes64, scalar},
 };
 
 use crate::{
@@ -24,22 +21,6 @@ use crate::{
     store::{AuditEntry, ReceiptEntry},
 };
 
-pub(super) fn point(point: &WirePoint) -> Point {
-    Point {
-        x: point.x.into(),
-        y: point.y.into(),
-    }
-}
-
-pub(super) fn wire_point(point: Point) -> Result<WirePoint> {
-    let point = WirePoint {
-        x: point.x.0,
-        y: point.y.0,
-    };
-    ome_crypto::Point::try_from(&point)?;
-    Ok(point)
-}
-
 fn transcript(bytes: &Bytes64) -> ome_api::Hex64 {
     ome_api::Hex64(bytes.to_array())
 }
@@ -48,56 +29,6 @@ pub(super) fn identity_peer_id(identity: &IdentityPublic) -> String {
     peer_id(identity)
         .map(|id| id.to_string())
         .unwrap_or_default()
-}
-
-pub(super) fn manifest(m: &Manifest) -> api::Manifest {
-    api::Manifest {
-        protocol_version: m.protocol_version,
-        vault: m.vault.into(),
-        epoch: m.epoch,
-        threshold: m.threshold,
-        viewing_threshold: m.viewing_threshold,
-        preaddress: m.preaddress.into(),
-        group_key: point(&m.group_key),
-        members: m
-            .members
-            .iter()
-            .map(|member| api::Member {
-                index: member.index,
-                signer_key: point(&member.signer_key),
-                verification_share: point(&member.verification_share),
-                identity: member.identity.0.into(),
-                transport: member.transport.into(),
-                addresses: member.addresses.clone(),
-            })
-            .collect(),
-    }
-}
-
-pub(super) fn wire_manifest(m: api::Manifest) -> Result<Manifest> {
-    Ok(Manifest {
-        protocol_version: m.protocol_version,
-        vault: m.vault.0,
-        epoch: m.epoch,
-        threshold: m.threshold,
-        viewing_threshold: m.viewing_threshold,
-        preaddress: m.preaddress.0,
-        group_key: wire_point(m.group_key)?,
-        members: m
-            .members
-            .into_iter()
-            .map(|member| {
-                Ok(Member {
-                    index: member.index,
-                    signer_key: wire_point(member.signer_key)?,
-                    verification_share: wire_point(member.verification_share)?,
-                    identity: IdentityPublic(member.identity.0),
-                    transport: member.transport.0,
-                    addresses: member.addresses,
-                })
-            })
-            .collect::<Result<_>>()?,
-    })
 }
 
 pub(super) fn participant(contact: api::KeeperContact) -> Participant {
@@ -113,7 +44,7 @@ pub(super) fn new_member(member: api::NewMember) -> Result<NewMember> {
         identity: IdentityPublic(member.identity.0),
         transport: member.transport.0,
         addresses: member.addresses,
-        signer_key: wire_point(member.signer_key)?,
+        signer_key: member.signer_key.try_into()?,
     })
 }
 
@@ -127,7 +58,7 @@ pub(super) fn contact(contact: &KeeperContact) -> api::KeeperContact {
 
 pub(super) fn vault(info: &VaultInfo) -> api::Vault {
     api::Vault {
-        manifest: manifest(&info.manifest),
+        manifest: api::Manifest::from(&info.manifest),
         status: match info.status {
             "retired" => VaultStatus::Retired,
             "removed" => VaultStatus::Removed,
@@ -171,7 +102,7 @@ pub(super) fn audit(entry: AuditEntry) -> api::AuditEntry {
 
 fn partial(p: &Partial) -> api::Partial {
     api::Partial {
-        point: point(&WirePoint::from(&p.point)),
+        point: Point::from_core(&p.point),
         challenge: scalar(&p.proof.challenge).into(),
         response: scalar(&p.proof.response).into(),
     }
@@ -195,8 +126,8 @@ fn dkg_result(r: &DkgResult) -> api::DkgResult {
     api::DkgResult {
         index: r.index,
         threshold: r.threshold,
-        group_key: point(&r.group_key),
-        verification_shares: r.verification_shares.iter().map(point).collect(),
+        group_key: Point::from(&r.group_key),
+        verification_shares: r.verification_shares.iter().map(Point::from).collect(),
         transcript: transcript(&r.transcript),
     }
 }
@@ -205,7 +136,7 @@ fn reshare_result(r: &ReshareResult) -> api::ReshareResult {
     api::ReshareResult {
         committee_commitment: r.committee_commitment.into(),
         new_index: r.new_index,
-        manifest: r.manifest.as_ref().map(manifest),
+        manifest: r.manifest.as_ref().map(api::Manifest::from),
         transcript: r.transcript.as_ref().map(transcript),
     }
 }
@@ -260,7 +191,7 @@ pub(super) fn lobby(me: &IdentityPublic, info: &LobbyInfo) -> api::Lobby {
             .map(|(m, index)| api::LobbyMember {
                 index,
                 name: m.name.clone(),
-                signer_key: point(&m.signer_key),
+                signer_key: Point::from(&m.signer_key),
                 identity: m.keeper.identity.0.into(),
                 transport: m.keeper.transport.into(),
                 addresses: m.keeper.addresses.clone(),

@@ -8,6 +8,8 @@
 //! `{ x, y }`, amounts are decimal strings ([`Amount`]), times are Unix seconds, and a missing value is `null`.
 
 mod amount;
+#[cfg(feature = "core")]
+pub mod core;
 pub mod daemon;
 mod error;
 mod hex;
