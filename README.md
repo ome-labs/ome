@@ -39,6 +39,7 @@ Contracts:
 
 ```sh
 pnpm --filter @ome-labs/contracts test                  # unit, integration (TXE) and end-to-end tests
+pnpm --filter @ome-labs/contracts check:failures        # every assert message is expected by a test
 pnpm --filter @ome-labs/contracts profile               # gate counts per function
 pnpm --filter @ome-labs/contracts profile:flamegraphs   # target/flamegraphs/<artifact>/<function>.svg
 ```

@@ -130,6 +130,9 @@ pub contract OmeVault {
         // as there are current members removes all of them.
         let signer_notes = self.storage.signers.at(self.address);
         let removed = signer_notes.pop_notes(NoteGetterOptions::new());
+
+        // failure-check: invariant. `governance::rotate` already proved `current_signer_keys` match the stored
+        // commitment, which fixes how many signer notes are live, so no caller can reach this message.
         assert_eq(
             removed.len(),
             governance::member_count(current_signer_keys),

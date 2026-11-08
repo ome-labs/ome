@@ -77,5 +77,6 @@ jobs:
           echo "$HOME/.aztec/current/bin" >> "$GITHUB_PATH"
       - run: aztec-nargo fmt --workspace --check
       - run: aztec-nargo check --workspace --deny-warnings
+      - run: node ../scripts/noir-failure-messages.mjs ome_vault
       - run: aztec compile
       - run: aztec test

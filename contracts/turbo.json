@@ -17,7 +17,12 @@
       "outputs": []
     },
     "lint": {
-      "inputs": ["Nargo.toml", "*/Nargo.toml", "*/src/**/*.nr"]
+      "inputs": [
+        "Nargo.toml",
+        "*/Nargo.toml",
+        "*/src/**/*.nr",
+        "$TURBO_ROOT$/scripts/noir-failure-messages.mjs"
+      ]
     },
     "format:check": {
       "inputs": ["*/src/**/*.nr"]
