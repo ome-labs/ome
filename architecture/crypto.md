@@ -21,6 +21,7 @@ only from `rand_core::CryptoRng` parameters. It builds for native targets and `w
 | `threshold::reshare` | resharing to a new committee and threshold with the group key unchanged                                                         |
 | `sealing::envelope`  | HPKE envelopes (X25519, HKDF-SHA256, ChaCha20-Poly1305, auth mode) bound to a session, epoch, kind and both members             |
 | `sealing::mailbox`   | per-pair, per-day mailbox ids and payload sealing for store-and-forward delivery                                                |
+| `sealing::pairing`   | a device pairing offer's mailbox id and XChaCha20-Poly1305 seal, both derived from the offer's one-time secret                  |
 
 ## Threshold viewing
 
@@ -56,6 +57,8 @@ Every tag ends in `v0` and changes only together with every encoder.
 | `ome.reshare.transcript.v0` | reshare transcript hash                    |
 | `ome.envelope.v0`           | HPKE `info` prefix                         |
 | `ome.mailbox.v0`            | mailbox id derivation (SHA-256)            |
+| `ome.pair.mailbox.v0`       | pairing mailbox id (SHA-256)               |
+| `ome.pair.key.v0`           | pairing key (HMAC-SHA256)                  |
 
 ## Compatibility with Aztec
 

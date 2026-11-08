@@ -1,4 +1,5 @@
-//! HPKE envelopes and mailboxes: a sealed payload opens only for its recipient, from its sender, in its context.
+//! HPKE envelopes and mailboxes: a sealed payload opens only for its recipient, from its sender, in its context. A
+//! pairing request opens only under its offer's secret.
 // Helpers outside `#[test]` unwrap like the tests do.
 #![allow(clippy::unwrap_used)]
 
@@ -10,7 +11,7 @@ use ome_crypto::{
         envelope::{
             Context, TransportPublic, TransportSecret, open, open_scalar, seal, seal_scalar,
         },
-        mailbox,
+        mailbox, pairing,
     },
 };
 use support::seeded;
@@ -156,5 +157,27 @@ fn a_low_order_peer_key_is_refused() {
     assert_eq!(
         mailbox::mailbox_id(&alice, &zero, &alice_public, &zero, 1).err(),
         Some(Error::EnvelopeKey)
+    );
+}
+
+#[test]
+fn a_pairing_request_opens_only_under_its_offer_secret() {
+    let secret = [7u8; 32];
+    let sealed = pairing::seal(&secret, b"pair me", &mut seeded(1)).unwrap();
+    assert_eq!(
+        pairing::open(&secret, &sealed).unwrap().as_slice(),
+        b"pair me"
+    );
+    assert_eq!(pairing::open(&[8u8; 32], &sealed), Err(Error::EnvelopeOpen));
+    let mut flipped = sealed.clone();
+    *flipped.last_mut().unwrap() ^= 1;
+    assert_eq!(pairing::open(&secret, &flipped), Err(Error::EnvelopeOpen));
+    assert!(matches!(
+        pairing::open(&secret, &sealed[..24]),
+        Err(Error::InvalidLength { .. })
+    ));
+    assert_ne!(
+        pairing::pairing_mailbox(&secret),
+        pairing::pairing_mailbox(&[8u8; 32])
     );
 }
