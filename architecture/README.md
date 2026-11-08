@@ -6,14 +6,15 @@ verified decisions about the components that exist; each component gets its own 
 
 ## Components in the tree
 
-| Path                    | What it is                                                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `contracts/ome_vault`   | `OmeVault`, the vault's Aztec account contract (Aztec.nr 6.0.0), with its unit, integration and end-to-end tests under `src/test/`         |
-| `contracts/test_signer` | Test-only contract that returns TXE Schnorr signatures; never deployed                                                                     |
-| `crates/crypto`         | `ome-crypto`: Grumpkin, Poseidon2, Aztec key derivation, Schnorr, DKG, threshold ECDH, resharing and HPKE sealing ([crypto.md](crypto.md)) |
-| `crates/wire`           | `ome-wire`: canonical, versioned, signed messages between keepers, daemons and relays ([wire.md](wire.md))                                 |
-| `tools/vectors`         | `@ome-labs/vectors`: golden vectors computed with Aztec 6.0.0's own packages                                                               |
-| `scripts/`              | Repository scripts: guarded cargo runs, the WebAssembly build check, the contract's failure-message check and gate flamegraphs             |
+| Path                    | What it is                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contracts/ome_vault`   | `OmeVault`, the vault's Aztec account contract (Aztec.nr 6.0.0), with its unit, integration and end-to-end tests under `src/test/`          |
+| `contracts/test_signer` | Test-only contract that returns TXE Schnorr signatures; never deployed                                                                      |
+| `crates/crypto`         | `ome-crypto`: Grumpkin, Poseidon2, Aztec key derivation, Schnorr, DKG, threshold ECDH, resharing and HPKE sealing ([crypto.md](crypto.md))  |
+| `crates/wire`           | `ome-wire`: canonical, versioned, signed messages between keepers, daemons and relays ([wire.md](wire.md))                                  |
+| `crates/protocol`       | `ome-protocol`: the vault's rules: contract mirror, payload hashing, approvals, tallies, rotations and lobbies ([protocol.md](protocol.md)) |
+| `tools/vectors`         | `@ome-labs/vectors`: golden vectors computed with Aztec 6.0.0's own packages                                                                |
+| `scripts/`              | Repository scripts: guarded cargo runs, the WebAssembly build check, the contract's failure-message check and gate flamegraphs              |
 
 The TypeScript packages (`packages/`) are empty; crates and packages join as they are built.
 
@@ -66,7 +67,8 @@ Gate counts (`pnpm --filter @ome-labs/contracts profile`):
 | `rotate_membership`      | 85,734 |
 
 Known limit: `rotate_membership` checks that new committee shares are well formed but not that they are shares of the
-vault's viewing key. The fix belongs to the contract track.
+vault's viewing key. Approvers' software checks it before signing (`ome-protocol`'s `check_rotation`, see
+[protocol.md](protocol.md)); enforcing it in the contract belongs to the contract track.
 
 ## Compatibility with Aztec
 
@@ -76,6 +78,6 @@ own packages; CI fails when a committed vector file differs from what the pinned
 
 ## Planned components
 
-Not built yet; each will get a page here when it lands: `ome-protocol`, `ome-signer`,
+Not built yet; each will get a page here when it lands: `ome-signer`,
 `ome-net`, `ome-keeper`, `ome-relay`, `ome-api`, `ome-client`, `ome-wasm`, `ome-ffi`, `@ome-labs/wallet` and
 `@ome-labs/daemon`.
