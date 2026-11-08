@@ -1,0 +1,28 @@
+[package]
+name = "ome-wire"
+description = "Canonical, versioned, signed messages exchanged between Ome keepers, daemons and relays"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+ed25519-dalek = { workspace = true }
+ome-crypto = { workspace = true }
+postcard = { workspace = true }
+rand_core = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+rand_chacha = { workspace = true }
+serde_json = { workspace = true }

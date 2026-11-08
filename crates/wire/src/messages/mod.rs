@@ -1,0 +1,122 @@
+//! The message catalogue, grouped by conversation. [`Message`] variants are only ever appended within a protocol
+//! version: their position is their encoding. Each body has structural bounds checked on encode and decode, and
+//! conversions to `ome-crypto` types that validate the cryptographic content.
+
+pub mod ceremony;
+pub mod ecdh;
+pub mod lobby;
+pub mod mailbox;
+pub mod proposals;
+pub mod sync;
+
+use serde::{Deserialize, Serialize};
+
+use crate::Error;
+use ceremony::{
+    Abort, Complaint, Confirm, DkgRound1, Echo, Justification, Manifest, ReshareDeal, SealedShare,
+};
+use ecdh::{EcdhRequest, EcdhResponse};
+use lobby::{LobbyJoin, LobbyLeave, LobbyPlan, LobbyState};
+use proposals::{Approval, ExecutionReceipt, PayloadRequest, Proposal, ProposalPayload, Rejection};
+use sync::SyncRequest;
+
+/// Every message kind. Append new variants at the end only.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Message {
+    /// The committee as members know it.
+    Manifest(Manifest),
+    /// DKG round 1 broadcast.
+    DkgRound1(DkgRound1),
+    /// DKG round 2 private share.
+    DkgRound2(SealedShare),
+    /// DKG transcript confirmation.
+    DkgConfirm(Confirm),
+    /// Reshare dealer commitments.
+    ReshareDeal(ReshareDeal),
+    /// Reshare private sub-share.
+    ReshareSubShare(SealedShare),
+    /// Reshare transcript confirmation.
+    ReshareConfirm(Confirm),
+    /// A member accuses a dealer of a bad share.
+    Complaint(Complaint),
+    /// The accused reveals the disputed share.
+    Justification(Justification),
+    /// A ceremony is abandoned.
+    Abort(Abort),
+    /// A dealer's broadcast forwarded by another participant.
+    Echo(Echo),
+    /// Threshold ECDH request.
+    EcdhRequest(EcdhRequest),
+    /// Threshold ECDH partials.
+    EcdhResponse(EcdhResponse),
+    /// A spending proposal; its payload travels separately.
+    Proposal(Proposal),
+    /// A request for proposal payloads by hash.
+    PayloadRequest(PayloadRequest),
+    /// A proposal payload.
+    Payload(ProposalPayload),
+    /// A member's approval of a proposal.
+    Approval(Approval),
+    /// A member's signed vote against a proposal.
+    Rejection(Rejection),
+    /// A proposal was executed.
+    ExecutionReceipt(ExecutionReceipt),
+    /// What a member holds, so peers send what it lacks.
+    SyncRequest(SyncRequest),
+    /// A guest asks to join a lobby.
+    LobbyJoin(LobbyJoin),
+    /// A lobby's roster, from its host.
+    LobbyState(LobbyState),
+    /// A started lobby's plan, from its host.
+    LobbyPlan(LobbyPlan),
+    /// A guest leaves a lobby, or the host closes it.
+    LobbyLeave(LobbyLeave),
+}
+
+impl Message {
+    /// Structural bounds: counts, lengths and ranges. Cryptographic validity is checked by the conversions.
+    ///
+    /// # Errors
+    /// [`Error::OutOfBounds`] naming the field, or [`Error::UnsupportedVersion`] for a manifest or plan.
+    pub fn validate(&self) -> Result<(), Error> {
+        match self {
+            Self::Manifest(m) => m.validate(),
+            Self::DkgRound1(m) => m.validate(),
+            Self::ReshareDeal(m) => m.validate(),
+            Self::DkgRound2(m) | Self::ReshareSubShare(m) => m.validate(),
+            Self::Echo(m) => m.validate(),
+            Self::EcdhRequest(m) => m.validate(),
+            Self::EcdhResponse(m) => m.validate(),
+            Self::Proposal(m) => m.validate(),
+            Self::PayloadRequest(m) => m.validate(),
+            Self::Payload(m) => m.validate(),
+            Self::Rejection(m) => m.validate(),
+            Self::SyncRequest(m) => m.validate(),
+            Self::LobbyJoin(m) => m.validate(),
+            Self::LobbyState(m) => m.validate(),
+            Self::LobbyPlan(m) => m.validate(),
+            Self::DkgConfirm(_)
+            | Self::ReshareConfirm(_)
+            | Self::Complaint(_)
+            | Self::Justification(_)
+            | Self::Abort(_)
+            | Self::Approval(_)
+            | Self::ExecutionReceipt(_)
+            | Self::LobbyLeave(_) => Ok(()),
+        }
+    }
+}
+
+/// `len` must lie in `min..=max`.
+pub(crate) fn bounded(
+    field: &'static str,
+    len: usize,
+    min: usize,
+    max: usize,
+) -> Result<(), Error> {
+    if (min..=max).contains(&len) {
+        Ok(())
+    } else {
+        Err(Error::OutOfBounds { field })
+    }
+}
