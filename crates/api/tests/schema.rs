@@ -33,6 +33,7 @@ fn error_codes_are_distinct_and_round_trip() {
     for kind in ErrorKind::ALL {
         assert!(codes.insert(kind.code()));
         assert_eq!(ErrorKind::from_code(kind.code()), kind);
+        assert_eq!(serde_json::to_value(kind).unwrap(), json!(kind.label()));
     }
     let error: RpcError =
         serde_json::from_value(json!({ "code": -32011, "message": "locked" })).unwrap();

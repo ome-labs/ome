@@ -117,8 +117,7 @@ pub fn render() -> String {
     );
     out.push_str("/** JSON-RPC error code of each kind. */\nexport const ERROR_CODES = {\n");
     for kind in ErrorKind::ALL {
-        let label = serde_json::to_value(kind).unwrap_or_default();
-        let _ = writeln!(out, "  {label}: {},", kind.code());
+        let _ = writeln!(out, "  \"{}\": {},", kind.label(), kind.code());
     }
     out.push_str("} as const satisfies Record<ErrorKind, number>;\n\n");
     let _ = writeln!(

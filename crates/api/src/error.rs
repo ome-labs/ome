@@ -50,6 +50,24 @@ impl ErrorKind {
         Self::Failed,
     ];
 
+    /// The kind's name on the wire.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Parse => "parse",
+            Self::InvalidRequest => "invalid-request",
+            Self::MethodNotFound => "method-not-found",
+            Self::Invalid => "invalid",
+            Self::Unauthorized => "unauthorized",
+            Self::NotFound => "not-found",
+            Self::NotReady => "not-ready",
+            Self::Locked => "locked",
+            Self::Auth => "auth",
+            Self::Alarm => "alarm",
+            Self::Failed => "failed",
+        }
+    }
+
     /// The JSON-RPC error code.
     #[must_use]
     pub const fn code(self) -> i32 {
