@@ -135,9 +135,9 @@ export interface VaultTx {
 
 /** Why a vault transaction did not run. */
 export class VaultTxError extends Error {
-  readonly reason: "outer-hash" | "not-approved";
+  readonly reason: "outer-hash" | "not-approved" | "stale-config";
 
-  constructor(reason: "outer-hash" | "not-approved", message: string) {
+  constructor(reason: VaultTxError["reason"], message: string) {
     super(message);
     this.name = "VaultTxError";
     this.reason = reason;
@@ -504,8 +504,9 @@ export class OmeWallet extends BaseWallet {
   }
 
   /**
-   * Tallies `approvals`, and once `k` members approved, assembles the witness, proves and sends the transaction and
-   * waits for it to be mined.
+   * Tallies `approvals`, and once `k` members approved under the vault's current config, assembles the witness,
+   * proves and sends the transaction and waits for it to be mined. Approvals collected before a config change are
+   * refused here; the contract would refuse them too.
    */
   async executeVaultTx(
     tx: VaultTx,
@@ -513,6 +514,12 @@ export class OmeWallet extends BaseWallet {
     options: { gasSettings?: Partial<GasSettings> } = {},
   ): Promise<TxReceipt> {
     const record = this.#vault(tx.vault);
+    const { version } = await this.getVaultConfig(tx.vault);
+    if (tx.configVersion !== version)
+      throw new VaultTxError(
+        "stale-config",
+        `Approved under config version ${tx.configVersion}; the vault is at ${version}`,
+      );
     const result = await this.tallyVaultTx(tx, approvals);
     if (result.status !== "approved" || !result.witness) {
       const refused = result.refused.map((r) => `#${r.index}: ${r.reason}`).join("; ");
