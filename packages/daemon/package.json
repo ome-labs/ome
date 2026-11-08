@@ -1,0 +1,34 @@
+{
+  "name": "@ome-labs/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "omed: an Ome member's background service, hosting the PXE, the sealed signer and the keeper behind the daemon API",
+  "license": "Apache-2.0",
+  "bin": {
+    "omed": "./src/omed.ts"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:e2e": "vitest run -c vitest.e2e.config.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aztec-labs/aztec.js": "catalog:",
+    "@aztec-labs/foundation": "catalog:",
+    "@aztec-labs/noir-contracts.js": "catalog:",
+    "@aztec-labs/stdlib": "catalog:",
+    "@ome-labs/api": "workspace:*",
+    "@ome-labs/wallet": "workspace:*",
+    "@ome-labs/wasm": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "klarity": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

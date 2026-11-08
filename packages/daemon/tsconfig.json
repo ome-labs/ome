@@ -1,0 +1,12 @@
+{
+  "extends": "klarity/tsconfig/library/node",
+  "compilerOptions": {
+    // Consumers run the sources directly under Node: imports name real `.ts` files, and only erasable syntax is used.
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "noEmit": true,
+    // Aztec's types are written without exact optional properties.
+    "exactOptionalPropertyTypes": false
+  },
+  "include": ["src", "test", "*.config.ts"]
+}
