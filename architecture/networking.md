@@ -71,6 +71,9 @@ where the receiver rejects it.
   and `last_seen`; idle connections close after 2 minutes.
 - **Startup**: `start` returns once every listener is bound and every relay accepted a reservation, or after the ready
   timeout.
+- **Client mode** (`reserve: false`, no listen addresses): the node dials its relays only to use their mailboxes. It
+  reserves no circuit, advertises no address and is ready at once. A member's signing device runs this way
+  (`architecture/mobile.md`).
 - **Advertised addresses**: direct addresses first, then the relay circuits, which are always kept as the fallback;
   at most 8, the manifest's limit.
   - Loopback is advertised only by a loopback-only node: advertised to another host, it would dial the dialer itself

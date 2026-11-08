@@ -1,5 +1,6 @@
 //! Keepers' relay mailboxes against real relays: an envelope is deposited at every relay, fetched once, deleted
-//! everywhere, and held exactly as sealed; a private relay refuses strangers' deposits.
+//! everywhere, and held exactly as sealed; a private relay refuses strangers' deposits; a client node that listens on
+//! nothing and reserves no circuit (a signing device) uses the mailboxes too.
 // Helpers outside `#[test]` unwrap like the tests do.
 #![allow(clippy::unwrap_used)]
 
@@ -76,5 +77,25 @@ async fn a_private_relay_refuses_a_strangers_deposit() {
     assert_eq!(refused, Err(Error::NotStored));
     assert_eq!(relay.store.usage().unwrap().envelopes, 0);
     stranger.stop();
+    relay.stop();
+}
+
+#[tokio::test]
+async fn a_client_node_uses_the_mailbox_without_listening_or_reserving() {
+    let (mut relay, address) = relay(8, None).await;
+    let mut config = node(&[], vec![address]);
+    config.reserve = false;
+    let started = std::time::Instant::now();
+    let (device, _) = Libp2pTransport::start(&identity(3), config).await.unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    assert_eq!(device.addresses(), [] as [String; 0]);
+    let mailbox = RelayMailbox::new(device.clone());
+
+    mailbox.deposit(envelope(4)).await.unwrap();
+    assert_eq!(
+        mailbox.fetch(vec![[4; 32]]).await.unwrap()[0].envelope,
+        envelope(4)
+    );
+    device.stop();
     relay.stop();
 }

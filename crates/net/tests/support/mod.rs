@@ -97,6 +97,7 @@ pub fn config(listen: &[&str], relays: Vec<Multiaddr>) -> Libp2pConfig {
         external: Vec::new(),
         request_timeout: Duration::from_secs(2),
         ready_timeout: Duration::from_secs(5),
+        reserve: true,
     }
 }
 

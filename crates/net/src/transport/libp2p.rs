@@ -56,6 +56,9 @@ pub struct Libp2pConfig {
     pub request_timeout: Duration,
     /// How long [`Libp2pTransport::start`] waits for listeners and relay reservations.
     pub ready_timeout: Duration,
+    /// Whether to reserve a circuit at each relay so peers can dial this node. A client that only uses the relays'
+    /// mailboxes (a signing device) reserves none and listens on nothing.
+    pub reserve: bool,
 }
 
 impl Default for Libp2pConfig {
@@ -70,6 +73,7 @@ impl Default for Libp2pConfig {
             external: Vec::new(),
             request_timeout: Duration::from_secs(10),
             ready_timeout: Duration::from_secs(10),
+            reserve: true,
         }
     }
 }
@@ -286,10 +290,12 @@ impl Libp2pTransport {
         for address in &config.listen {
             swarm.listen_on(address.clone()).map_err(transport_error)?;
         }
-        for (_, relay) in &relays {
-            swarm
-                .listen_on(relay.clone().with(Protocol::P2pCircuit))
-                .map_err(transport_error)?;
+        if config.reserve {
+            for (_, relay) in &relays {
+                swarm
+                    .listen_on(relay.clone().with(Protocol::P2pCircuit))
+                    .map_err(transport_error)?;
+            }
         }
 
         let (listening, reserved) = wait_ready(&mut swarm, &config, &relays).await;
@@ -456,7 +462,8 @@ async fn wait_ready(
     // briefly so every interface and both transports make it into what is advertised.
     let mut settle: Option<Instant> = None;
     loop {
-        if listeners.len() >= config.listen.len() && reserved.len() >= relays.len() {
+        let reservations = if config.reserve { relays.len() } else { 0 };
+        if listeners.len() >= config.listen.len() && reserved.len() >= reservations {
             let until = *settle.get_or_insert_with(|| Instant::now() + LISTEN_SETTLE);
             if Instant::now() >= until {
                 break;

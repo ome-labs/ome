@@ -30,7 +30,8 @@ through sync.
     answer that would not fit is replaced by `Refused(Malformed)`, never sent truncated or empty.
   - Answers are `Stored`, `Refused(reason)`, `Envelopes` or `Deleted`.
 - **Open or private**: open by default, protected by quotas and a per-peer deposit limit. With `--allow-peer <peer id>`
-  (repeatable), only those keepers may reserve circuits or use mailboxes: a private relay for one team.
+  (repeatable), only those keepers may reserve circuits or use mailboxes: a private relay for one team. A member's
+  paired signing device is a peer too, so a private relay must also allow the device's peer id.
 - **Startup**: the node waits until every listener has reported its addresses, then settles briefly, so every
   interface and both transports are announced. It then prints `{"ready": {"peerId", "addresses"}}` on stdout.
 
@@ -109,5 +110,6 @@ clients.
   - a keeper with no direct address is reached through the real relay's circuit;
   - a private relay serves only its allow list.
 - `tests/mailbox.rs`: `ome-net`'s `RelayMailbox` against two real relays (deposit everywhere, merged fetch, delete
-  everywhere, sealed bytes held exactly), and a private relay refuses a stranger's deposit.
+  everywhere, sealed bytes held exactly), a private relay refuses a stranger's deposit, and a client-mode node (a
+  signing device) uses the mailbox without listening or reserving a circuit.
 - `tests/health.rs`: `/health` and `/metrics` answer, and metrics name no peer, mailbox or envelope id.
