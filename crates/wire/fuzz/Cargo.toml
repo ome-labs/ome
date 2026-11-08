@@ -1,0 +1,25 @@
+# Fuzz targets for ome-wire. Needs nightly and cargo-fuzz:
+#   cargo +nightly fuzz run decode -- -max_total_time=300
+# This crate has its own workspace so the main workspace stays on stable.
+[package]
+name = "ome-wire-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4.13"
+ome-wire = { path = ".." }
+
+[[bin]]
+name = "decode"
+path = "fuzz_targets/decode.rs"
+test = false
+doc = false
+bench = false
