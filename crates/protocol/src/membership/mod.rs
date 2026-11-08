@@ -5,4 +5,4 @@ pub mod policy;
 mod rotation;
 
 pub use manifest::Vault;
-pub use rotation::{Rotation, check_rotation, verify_shares};
+pub use rotation::{Rotation, check_rotation, is_rotation_call, verify_shares};

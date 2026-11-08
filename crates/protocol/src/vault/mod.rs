@@ -29,7 +29,7 @@ pub fn tag(name: &str) -> Base {
 }
 
 /// `[x_0, y_0, ..., x_7, y_7]` with empty slots zero, as the contract lays out ordered points.
-fn padded(points: &[Point]) -> [Base; MAX_SIGNERS * POINT_LEN] {
+pub(crate) fn padded(points: &[Point]) -> [Base; MAX_SIGNERS * POINT_LEN] {
     let mut fields = [Base::from(0u64); MAX_SIGNERS * POINT_LEN];
     for (i, point) in points.iter().enumerate() {
         fields[i * POINT_LEN] = point.x();

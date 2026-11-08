@@ -59,6 +59,9 @@ pub enum Error {
         /// What is wrong with it.
         reason: &'static str,
     },
+    /// A `rotate_membership` call's arguments are not a rotation of this vault.
+    #[error("rotate_membership call is invalid: {0}")]
+    InvalidRotationCall(&'static str),
     /// More calls than Aztec's account entrypoint executes.
     #[error("{0} calls; an entrypoint executes at most 5")]
     TooManyCalls(usize),

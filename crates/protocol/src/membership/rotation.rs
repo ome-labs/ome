@@ -1,10 +1,22 @@
-use ome_crypto::{Error as CryptoError, Point, threshold::shamir::Commitments};
+use ome_crypto::{Base, Error as CryptoError, Point, threshold::shamir::Commitments};
+use ome_wire::types::{field, parse_field};
 
 use super::Vault;
 use crate::{
     Error,
-    vault::{Committee, Config, SignerSet},
+    payload::{Call, CallKind},
+    vault::{
+        Committee, Config, SignerSet,
+        constants::{
+            MAX_SIGNERS, POINT_LEN, ROTATE_MEMBERSHIP_ARGS, ROTATE_MEMBERSHIP_SELECTOR,
+            ROTATE_MEMBERSHIP_SIGNATURE,
+        },
+        padded,
+    },
 };
+
+/// Fields of one padded point list in the call's arguments.
+const KEYS: usize = MAX_SIGNERS * POINT_LEN;
 
 /// A proposed `rotate_membership`: the new signer set, spending threshold and committee from the reshare.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -15,6 +27,106 @@ pub struct Rotation {
     pub threshold: u32,
     /// New viewing committee: `t_v` and the verification shares the reshare produced.
     pub committee: Committee,
+}
+
+impl Rotation {
+    /// The `rotate_membership` call that performs this rotation on `vault`.
+    #[must_use]
+    pub fn to_call(&self, vault: &Vault) -> Call {
+        let mut args = Vec::with_capacity(ROTATE_MEMBERSHIP_ARGS);
+        args.extend_from_slice(&padded(vault.signers().keys()));
+        args.extend_from_slice(&padded(self.signers.keys()));
+        args.extend(
+            [
+                self.signers.count(),
+                self.threshold,
+                self.committee.viewing_threshold(),
+            ]
+            .map(Base::from),
+        );
+        args.extend_from_slice(&padded(self.committee.shares()));
+        Call {
+            signature: Some(ROTATE_MEMBERSHIP_SIGNATURE.to_owned()),
+            to: field(&vault.address()),
+            selector: ROTATE_MEMBERSHIP_SELECTOR,
+            kind: CallKind::Private,
+            is_static: false,
+            hide_msg_sender: false,
+            args: args.iter().map(field).collect(),
+        }
+    }
+
+    /// Decodes a `rotate_membership` call on `vault`: current keys, new keys, new count, `k`, `t_v`, then the
+    /// committee shares, each key list zero-padded to eight.
+    ///
+    /// # Errors
+    /// [`Error::InvalidRotationCall`] if the call is not `rotate_membership` on this vault or its arguments are not a
+    /// well-formed rotation of the current signer set, or signer-set and committee errors.
+    pub fn from_call(call: &Call, vault: &Vault) -> Result<Self, Error> {
+        if !is_rotation_call(call, vault) || call.kind != CallKind::Private {
+            return Err(Error::InvalidRotationCall(
+                "not rotate_membership on this vault",
+            ));
+        }
+        if call.args.len() != ROTATE_MEMBERSHIP_ARGS {
+            return Err(Error::InvalidRotationCall("wrong argument count"));
+        }
+        let args = call
+            .args
+            .iter()
+            .map(parse_field)
+            .collect::<Result<Vec<_>, _>>()?;
+        if args[..KEYS] != padded(vault.signers().keys()) {
+            return Err(Error::InvalidRotationCall(
+                "current keys are not the vault's signer set",
+            ));
+        }
+        let count = small(args[2 * KEYS])?;
+        let threshold = small(args[2 * KEYS + 1])?;
+        let viewing_threshold = small(args[2 * KEYS + 2])?;
+        let signers = SignerSet::new(points(&args[KEYS..2 * KEYS], count)?)?;
+        let committee = Committee::new(viewing_threshold, points(&args[2 * KEYS + 3..], count)?)?;
+        Ok(Self {
+            signers,
+            threshold,
+            committee,
+        })
+    }
+}
+
+/// Whether `call` is a `rotate_membership` call on `vault`.
+#[must_use]
+pub fn is_rotation_call(call: &Call, vault: &Vault) -> bool {
+    call.selector == ROTATE_MEMBERSHIP_SELECTOR
+        && parse_field(&call.to).ok() == Some(vault.address())
+}
+
+/// The first `count` points of a zero-padded list; every later slot must be zero.
+fn points(fields: &[Base], count: u32) -> Result<Vec<Point>, Error> {
+    let count = usize::try_from(count).unwrap_or(usize::MAX);
+    if count > MAX_SIGNERS {
+        return Err(Error::InvalidRotationCall("member count above eight"));
+    }
+    let (used, rest) = fields.split_at(count * POINT_LEN);
+    if rest.iter().any(|f| *f != Base::from(0u64)) {
+        return Err(Error::InvalidRotationCall(
+            "non-empty slot past the member count",
+        ));
+    }
+    used.chunks(POINT_LEN)
+        .map(|xy| Ok(Point::from_xy(xy[0], xy[1])?))
+        .collect()
+}
+
+/// A `u32` argument.
+fn small(value: Base) -> Result<u32, Error> {
+    let bytes = field(&value);
+    if bytes[..28].iter().any(|b| *b != 0) {
+        return Err(Error::InvalidRotationCall("count or threshold above u32"));
+    }
+    Ok(u32::from_be_bytes([
+        bytes[28], bytes[29], bytes[30], bytes[31],
+    ]))
 }
 
 /// Checks that `committee`'s verification shares lie on one polynomial of degree `t_v - 1` whose value at zero is

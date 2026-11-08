@@ -5,12 +5,17 @@
 
 mod support;
 
-use ome_crypto::{Point, SecretScalar};
+use ome_crypto::{Base, Point, SecretScalar};
 use ome_protocol::{
     Error,
-    membership::{Rotation, check_rotation, verify_shares},
-    vault::{Committee, SignerSet},
+    membership::{Rotation, check_rotation, is_rotation_call, verify_shares},
+    payload::selector,
+    vault::{
+        Committee, SignerSet,
+        constants::{ROTATE_MEMBERSHIP_SELECTOR, ROTATE_MEMBERSHIP_SIGNATURE},
+    },
 };
+use ome_wire::types::field;
 use support::fixture::{fixture, reshare_to, run_dkg};
 
 /// The signer keys after member 3 leaves and a newcomer joins in their slot.
@@ -119,5 +124,66 @@ fn the_contract_rules_are_applied_first() {
             threshold: 4,
             members: 3
         })
+    );
+}
+
+#[test]
+fn a_rotation_round_trips_through_its_rotate_membership_call() {
+    let mut f = fixture();
+    let signers = replaced_signers(&mut f);
+    let reshared = reshare_to(&f.shares, vec![1, 2], 3, 2, &mut f.rng);
+    let rotation = Rotation {
+        signers,
+        threshold: 2,
+        committee: committee_of(&reshared, 2),
+    };
+
+    let call = rotation.to_call(&f.vault);
+
+    assert_eq!(
+        selector(ROTATE_MEMBERSHIP_SIGNATURE),
+        Ok(ROTATE_MEMBERSHIP_SELECTOR)
+    );
+    assert_eq!(call.args.len(), 51);
+    assert!(is_rotation_call(&call, &f.vault));
+    assert_eq!(Rotation::from_call(&call, &f.vault), Ok(rotation));
+}
+
+#[test]
+fn a_rotate_membership_call_that_is_not_a_rotation_of_this_vault_is_refused() {
+    let mut f = fixture();
+    let signers = replaced_signers(&mut f);
+    let reshared = reshare_to(&f.shares, vec![1, 2], 3, 2, &mut f.rng);
+    let call = Rotation {
+        signers,
+        threshold: 2,
+        committee: committee_of(&reshared, 2),
+    }
+    .to_call(&f.vault);
+    let refused = |change: fn(&mut ome_protocol::payload::Call), reason| {
+        let mut bad = call.clone();
+        change(&mut bad);
+        assert_eq!(
+            Rotation::from_call(&bad, &f.vault),
+            Err(Error::InvalidRotationCall(reason))
+        );
+    };
+
+    refused(
+        |c| c.to = field(&Base::from(1u64)),
+        "not rotate_membership on this vault",
+    );
+    refused(|c| c.args.truncate(50), "wrong argument count");
+    refused(
+        |c| c.args[0] = field(&Base::from(5u64)),
+        "current keys are not the vault's signer set",
+    );
+    refused(
+        |c| c.args[30] = field(&Base::from(5u64)),
+        "non-empty slot past the member count",
+    );
+    refused(
+        |c| c.args[32] = field(&Base::from(1u64 << 32)),
+        "count or threshold above u32",
     );
 }
