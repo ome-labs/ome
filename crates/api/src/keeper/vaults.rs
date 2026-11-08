@@ -80,9 +80,10 @@ pub struct Manifest {
 pub enum VaultStatus {
     /// Serving.
     Active,
-    /// Its member retired the share.
+    /// Superseded by a later committee epoch.
     Retired,
-    /// A verified rotation removed this keeper; its share is destroyed.
+    /// This keeper is no longer in the vault's committee: a verified rotation left it out, or its member retired the
+    /// share it kept. The share is destroyed.
     Removed,
 }
 
