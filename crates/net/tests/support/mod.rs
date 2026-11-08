@@ -1,4 +1,4 @@
-//! Shared by the networking tests: signed frames for each lane, keeper identities and a small test relay.
+//! Shared by the networking tests: signed frames for each lane and keeper identities.
 // Each test binary uses a different subset of these helpers.
 #![allow(
     dead_code,
@@ -6,8 +6,6 @@
     clippy::unwrap_used,
     clippy::missing_panics_doc
 )]
-
-pub mod relay;
 
 use std::time::Duration;
 

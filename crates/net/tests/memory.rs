@@ -1,4 +1,5 @@
 //! The in-process network delivers like libp2p: authenticated channels, the same admission, partitions on demand.
+//! The in-process mailbox keeps the relay mailbox contract.
 // Helpers outside `#[test]` unwrap like the tests do.
 #![allow(clippy::unwrap_used)]
 
@@ -6,7 +7,8 @@ mod support;
 
 use std::time::Duration;
 
-use ome_net::{Channel, Error, MemoryNetwork, Transport};
+use ome_net::{Channel, Error, Mailbox, MemoryMailbox, MemoryNetwork, Transport};
+use ome_wire::messages::mailbox::RelayEnvelope;
 use support::{ceremony_frame, keeper, lobby_frame, next, peer};
 
 #[tokio::test]
@@ -74,4 +76,25 @@ async fn a_partition_or_a_departed_peer_is_unreachable() {
         alice.send(peer(2, &[]), ceremony_frame(1)).await,
         Err(Error::Unreachable)
     );
+}
+
+#[tokio::test]
+async fn the_memory_mailbox_stores_fetches_and_deletes() {
+    let mailbox = MemoryMailbox::default();
+    let envelope = |n: u8| RelayEnvelope {
+        recipient: [n; 32],
+        expires_at: 1_700_086_400,
+        sealed: vec![n; 40],
+    };
+    mailbox.deposit(envelope(1)).await.unwrap();
+    mailbox.deposit(envelope(1)).await.unwrap();
+    mailbox.deposit(envelope(2)).await.unwrap();
+
+    let found = mailbox.fetch(vec![[1; 32]]).await.unwrap();
+
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].envelope, envelope(1));
+    mailbox.delete(vec![found[0].id]).await.unwrap();
+    assert_eq!(mailbox.fetch(vec![[1; 32]]).await.unwrap(), vec![]);
+    assert_eq!(mailbox.len(), 1);
 }

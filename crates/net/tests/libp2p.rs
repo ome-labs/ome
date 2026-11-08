@@ -1,5 +1,5 @@
-//! Real nodes on loopback: frames cross QUIC and TCP+Noise, a keeper with no direct address is reached through a relay
-//! circuit, and the gate refuses peers the receiver does not admit.
+//! Real nodes on loopback: frames cross QUIC and TCP+Noise, and the gate refuses peers the receiver does not admit.
+//! Relay circuits and relay mailboxes are tested against the real relay in `ome-relay`.
 // Helpers outside `#[test]` unwrap like the tests do.
 #![allow(clippy::unwrap_used)]
 
@@ -8,7 +8,7 @@ mod support;
 use std::time::Duration;
 
 use ome_net::{Channel, Error, Libp2pTransport, Peer, Transport};
-use support::{ceremony_frame, config, keeper, lobby_frame, next, relay, sync_frame};
+use support::{ceremony_frame, config, keeper, lobby_frame, next, sync_frame};
 
 const WAIT: Duration = Duration::from_secs(5);
 
@@ -45,38 +45,6 @@ async fn frames_cross_tcp_with_noise() {
 #[tokio::test]
 async fn frames_cross_quic() {
     exchange_over("/ip4/127.0.0.1/udp/0/quic-v1").await;
-}
-
-#[tokio::test]
-async fn a_keeper_without_a_direct_address_is_reached_through_a_relay() {
-    let (relay, _) = relay::spawn(9).await;
-    let (alice, _) = Libp2pTransport::start(
-        &keeper(1),
-        config(&["/ip4/127.0.0.1/tcp/0"], vec![relay.clone()]),
-    )
-    .await
-    .unwrap();
-    let (carol, mut carol_inbound) = Libp2pTransport::start(&keeper(3), config(&[], vec![relay]))
-        .await
-        .unwrap();
-    assert!(
-        carol.addresses().iter().all(|a| a.contains("p2p-circuit")),
-        "{:?}",
-        carol.addresses()
-    );
-    alice.set_admission(vec![peer_of(3, &carol)], false);
-    carol.set_admission(vec![peer_of(1, &alice)], false);
-
-    alice
-        .send(peer_of(3, &carol), ceremony_frame(1))
-        .await
-        .unwrap();
-
-    let inbound = next(&mut carol_inbound, WAIT).await.unwrap();
-    assert_eq!(inbound.channel, Channel::Peer(keeper(1).public()));
-    assert!(alice.peer_status(&[keeper(3).public()])[0].relayed);
-    alice.stop();
-    carol.stop();
 }
 
 #[tokio::test]
