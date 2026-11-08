@@ -42,3 +42,8 @@ pnpm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+
+# Local Research Folder
+
+research/
