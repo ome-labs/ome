@@ -3366,6 +3366,68 @@ export type AddressParams = {
   address: Hex32;
 };
 
+/**
+ * A device paired with this member's keeper.
+ */
+export type DeviceView = {
+  /**
+   * The device's identity.
+   */
+  identity: Hex32;
+  /**
+   * Its name.
+   */
+  name: string;
+  /**
+   * The key it signs approvals with.
+   */
+  signerKey: Point;
+  /**
+   * When it paired (unix seconds).
+   */
+  pairedAt: number;
+  /**
+   * Its libp2p peer id, for a private relay's allow list.
+   */
+  peerId: string;
+  /**
+   * Vaults where its key holds this member's slot: proposals there are sent to it for review.
+   */
+  vaults: Array<Hex32>;
+};
+
+/**
+ * Params of `devices.enroll`: move this member's signing key in `vault` to a paired device.
+ */
+export type EnrollParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * The paired device's identity.
+   */
+  identity: Hex32;
+};
+
+/**
+ * Params of `membership.swapSigner`: replace one slot's signing key, keeping the committee and thresholds.
+ */
+export type SwapSignerParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * Signer slot (member index - 1).
+   */
+  slot: number;
+  /**
+   * The new key, from the member's new device.
+   */
+  signerKey: Point;
+};
+
 /** Every keeper method: what it takes and returns. */
 export interface KeeperMethods {
   "session.auth": { params: AuthParams; result: null };
@@ -3466,6 +3528,12 @@ export interface DaemonMethods {
   "membership.begin": { params: RotationPlanText; result: RotationState };
   "membership.get": { params: RotationRef; result: RotationState | null };
   "membership.list": { params: VaultParams; result: Array<RotationState> };
+  "membership.swapSigner": { params: SwapSignerParams; result: ProposalView };
+  "devices.pair": { params: Empty; result: DeviceOffer };
+  "devices.list": { params: Empty; result: Array<DeviceView> };
+  "devices.revoke": { params: DeviceParams; result: null };
+  "devices.enroll": { params: EnrollParams; result: ProposalView };
+  "devices.forward": { params: ProposalRef; result: DeviceReviewSent };
 }
 
 /** JSON-RPC error code of each kind. */

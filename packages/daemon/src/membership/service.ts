@@ -19,6 +19,7 @@ import type {
   RotationState,
   RotationStep,
   RotationStepId,
+  SwapSignerParams,
   VaultConfig,
 } from "@ome-labs/api";
 import { fromApiPoint, vaultArtifact, type VaultTx } from "@ome-labs/wallet";
@@ -456,36 +457,14 @@ export class MembershipService {
     }
     const keeper = this.#context.keeper.client;
     if (role === "planner") {
-      const wallet = this.#context.wallet();
-      const vault = AztecAddress.fromStringUnsafe(plan.vault);
-      const rotation = this.#rotation(rotating);
-      const method = Contract.at(vault, vaultArtifact(), wallet).methods.rotate_membership;
-      if (!method) throw new DaemonError("failed", "the vault artifact has no rotate_membership");
-      const rotate = await method(
-        pad(plan.current.members.map((m) => m.signerKey)),
-        pad(rotation.signers),
-        rotation.signers.length,
-        rotation.threshold,
-        rotation.viewingThreshold,
-        pad(rotation.verificationShares),
-      ).request();
-      const payload = mergeExecutionPayloads([
-        rotate,
-        await this.#context.fee().paymentMethod.getExecutionPayload(),
-      ]);
-      const tx = await wallet.prepareVaultTx(vault, payload, {
-        expiresAt: (await wallet.chainTime()) + 72 * 3600,
-        summary: summaryOf({
-          kind: "calls",
-          calls: [{ to: plan.vault, fn: "rotate_membership", args: [] }],
-          memo: `rotation ${plan.session}`,
-        }),
-        proposer: plan.planner,
-        txNonce: Fr.fromString(plan.txNonce),
-      });
-      await keeper.call("payloads.put", { vault: plan.vault, body: tx.payloadBody });
-      await keeper.call("proposals.put", { vault: plan.vault, body: tx.proposal });
-      rotating.state.proposal = tx.id;
+      rotating.state.proposal = await this.#proposeRotation(
+        plan.vault,
+        plan.current,
+        this.#rotation(rotating),
+        `rotation ${plan.session}`,
+        plan.planner,
+        Fr.fromString(plan.txNonce),
+      );
     } else {
       rotating.state.proposal = await until(async () => {
         const bodies = await keeper.call("proposals.list", { vault: plan.vault });
@@ -493,6 +472,88 @@ export class MembershipService {
       }, "the rotation proposal");
     }
     this.#mark(rotating, "propose", "done", rotating.state.proposal);
+  }
+
+  /**
+   * Proposes replacing signer slot `slot`'s key with `signerKey`, keeping the committee and both thresholds: a signer
+   * swap, which moves a member's signing key to another device. No reshare runs; after it executes, every member's
+   * daemon has its keeper adopt the new key (`VaultService.observe`). Members approve it through `proposals.approve`.
+   */
+  async swapSigner(params: SwapSignerParams): Promise<Hex32> {
+    const manifest = this.#context.vaults.manifest(params.vault);
+    const slot = manifest.members[params.slot];
+    require(slot !== undefined, `the vault has no signer slot ${params.slot}`);
+    require(!manifest.members.some(
+      (m) => m.signerKey.x === params.signerKey.x && m.signerKey.y === params.signerKey.y,
+    ), "that key already signs for this vault");
+    const rotation: Rotation = {
+      signers: manifest.members.map((m, i) => (i === params.slot ? params.signerKey : m.signerKey)),
+      threshold: manifest.threshold,
+      viewingThreshold: manifest.viewingThreshold,
+      verificationShares: manifest.members.map((m) => m.verificationShare),
+    };
+    const name = this.#context.vaults.record(params.vault).names[slot.identity];
+    return this.#proposeRotation(
+      params.vault,
+      manifest,
+      rotation,
+      `move ${name ?? `member ${slot.index}`}'s signing key to a new device`,
+      this.#context.vaults.myIndex(params.vault),
+      Fr.random(),
+    );
+  }
+
+  /** Builds `rotate_membership` from `current` to `rotation` with the fee call, stores it with the keeper, returns its id. */
+  async #proposeRotation(
+    vaultAddress: Hex32,
+    current: Manifest,
+    rotation: Rotation,
+    memo: string,
+    proposer: number,
+    txNonce: Fr,
+  ): Promise<Hex32> {
+    const wallet = this.#context.wallet();
+    const vault = AztecAddress.fromStringUnsafe(vaultAddress);
+    const method = Contract.at(vault, vaultArtifact(), wallet).methods.rotate_membership;
+    if (!method) throw new DaemonError("failed", "the vault artifact has no rotate_membership");
+    const rotate = await method(
+      pad(current.members.map((m) => m.signerKey)),
+      pad(rotation.signers),
+      rotation.signers.length,
+      rotation.threshold,
+      rotation.viewingThreshold,
+      pad(rotation.verificationShares),
+    ).request();
+    const payload = mergeExecutionPayloads([
+      rotate,
+      await this.#context.fee().paymentMethod.getExecutionPayload(),
+    ]);
+    const tx = await wallet.prepareVaultTx(vault, payload, {
+      expiresAt: (await wallet.chainTime()) + 72 * 3600,
+      summary: summaryOf({
+        kind: "calls",
+        calls: [{ to: vaultAddress, fn: "rotate_membership", args: [] }],
+        memo,
+      }),
+      proposer,
+      txNonce,
+    });
+    const keeper = this.#context.keeper.client;
+    await keeper.call("payloads.put", { vault: vaultAddress, body: tx.payloadBody });
+    await keeper.call("proposals.put", { vault: vaultAddress, body: tx.proposal });
+    this.#context.emit({ type: "vaultActivity", vault: vaultAddress });
+    return tx.id as Hex32;
+  }
+
+  /**
+   * The rotation this member's keeper reshared for the `rotate_membership` proposal with `txNonce`, if any: what a
+   * paired device compares the proposal with.
+   */
+  reshared(vault: Hex32, txNonce: string): Rotation | null {
+    const rotating = [...this.#rotations.values()].find(
+      (r) => r.plan.vault === vault && r.plan.txNonce === txNonce && r.result,
+    );
+    return rotating ? this.#rotation(rotating) : null;
   }
 
   /**

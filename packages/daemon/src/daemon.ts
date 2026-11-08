@@ -21,6 +21,7 @@ import {
 import { OmeWallet } from "@ome-labs/wallet";
 
 import type { Context } from "./context.ts";
+import { DeviceService } from "./devices/service.ts";
 import { DaemonError, require } from "./errors.ts";
 import { FoundingService } from "./founding/founding.ts";
 import { KeeperSupervisor, keeperBinary } from "./keeper/supervisor.ts";
@@ -71,6 +72,7 @@ export class Daemon implements Context {
   readonly founding: FoundingService;
   readonly proposals: ProposalService;
   readonly membership: MembershipService;
+  readonly devices: DeviceService;
   readonly #options: DaemonOptions;
   readonly #startedAt = Math.floor(Date.now() / 1000);
   #state: ProfileState | undefined;
@@ -95,6 +97,7 @@ export class Daemon implements Context {
     this.founding = new FoundingService(this);
     this.proposals = new ProposalService(this);
     this.membership = new MembershipService(this);
+    this.devices = new DeviceService(this, this.proposals, this.membership);
     this.proposals.rotationApprover = (vault, stored, tx) =>
       this.membership.approve(vault, stored, tx);
   }
@@ -178,6 +181,7 @@ export class Daemon implements Context {
 
   async stop(): Promise<void> {
     clearInterval(this.#sync);
+    this.devices.stop();
     await this.#server?.close();
     await this.#wallet?.stop();
     await this.keeper.stop();
@@ -308,6 +312,7 @@ export class Daemon implements Context {
     await this.keeper.client.subscribe((event) => {
       this.emit({ type: "keeperEvent", event });
       if ("vault" in event) this.emit({ type: "vaultActivity", vault: event.vault });
+      this.devices.onKeeperEvent(event);
     });
     await this.vaults.load();
     await this.membership.load();

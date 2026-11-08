@@ -1,5 +1,6 @@
 //! The daemon's API: what the CLI and apps call on a member's `omed`.
 
+mod devices;
 mod events;
 mod founding;
 mod membership;
@@ -7,6 +8,7 @@ mod proposals;
 mod status;
 mod vaults;
 
+pub use devices::{DeviceView, EnrollParams, SwapSignerParams};
 pub use events::DaemonEvent;
 pub use founding::{
     FoundingError, FoundingState, FoundingStep, FoundingStepId, InviteHost, InvitePreview,
@@ -38,7 +40,7 @@ pub use vaults::{
 use crate::{
     AuthParams, Empty, Hex32,
     jsonrpc::methods,
-    keeper::{InviteParams, LobbyParams, VaultParams},
+    keeper::{DeviceOffer, DeviceParams, DeviceReviewSent, InviteParams, LobbyParams, VaultParams},
 };
 
 /// Params of `vault.audit`.
@@ -202,4 +204,16 @@ methods! {
     MembershipGet = "membership.get" (RotationRef) -> Option<RotationState>;
     /// The vault's rotations .
     MembershipList = "membership.list" (VaultParams) -> Vec<RotationState>;
+    /// Proposes replacing one slot's signing key with a new device's, keeping the committee: no reshare.
+    MembershipSwapSigner = "membership.swapSigner" (SwapSignerParams) -> ProposalView;
+    /// A one-time offer to pair a signing device, to show as a QR code.
+    DevicesPair = "devices.pair" (Empty) -> DeviceOffer;
+    /// Paired devices.
+    DevicesList = "devices.list" (Empty) -> Vec<DeviceView>;
+    /// Unpairs a device.
+    DevicesRevoke = "devices.revoke" (DeviceParams) -> ();
+    /// Proposes moving this member's signing key in a vault to a paired device.
+    DevicesEnroll = "devices.enroll" (EnrollParams) -> ProposalView;
+    /// Sends a proposal to the paired device that holds this member's key, now.
+    DevicesForward = "devices.forward" (ProposalRef) -> DeviceReviewSent;
 }

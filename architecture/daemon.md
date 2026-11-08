@@ -1,7 +1,7 @@
 # The daemon (`omed`)
 
 `packages/daemon` (`@ome-labs/daemon`) is one member's background service for one profile. Every app (the CLI, a
-desktop app, later the phone approver) talks to it through the daemon API of `@ome-labs/api` (`architecture/api.md`).
+desktop app) talks to it through the daemon API of `@ome-labs/api` (`architecture/api.md`).
 
 It does five things:
 
@@ -42,8 +42,8 @@ directory under a hash of the path.
 - `events.subscribe` adds `event` notifications.
 - Errors carry the API kind and code. Errors from the keeper and from `@ome-labs/wasm` keep their kinds; anything else
   is `failed`.
-- All 52 daemon methods are served. The server answers `session.auth` and `events.subscribe` itself, and the other
-  50 each have a handler (`src/server/handlers.ts`) that checks the params it uses. Hex values and points are checked
+- All 57 daemon methods are served. The server answers `session.auth` and `events.subscribe` itself, and the other
+  55 each have a handler (`src/server/handlers.ts`) that checks the params it uses. Hex values and points are checked
   again by the bindings.
 
 ## Signer and keys
@@ -153,11 +153,46 @@ in rotations. Alpha has no sponsored fee payer, so a configurable fee payer is s
 
 Replacing a device is the same flow: the old device's slot leaves and the new device joins.
 
+## Paired devices
+
+A member can move their signing key to a phone (`architecture/mobile.md`). The keeper pairs the phone and carries
+its reviews and votes; the daemon decides what the phone is asked (`src/devices/service.ts`).
+
+- **Pairing**: `devices.pair` asks the keeper for an `ome-pair-v0:` offer naming the member, the network label and
+  the fee payer this daemon trusts. Pairing needs a relay (`relays.set`).
+- **Enrolling**: `devices.enroll { vault, identity }` proposes the signer swap that puts the device's key in this
+  member's slot (`membership.swapSigner`, below). `devices.list` shows, for each device, the vaults where it holds
+  this member's key.
+- **Forwarding**: on every `proposal` and `payload` keeper event, each not yet executed proposal of a vault where a
+  paired device holds this member's key is sent to it with `devices.review`. The daemon adds what only it knows:
+  the config it read, the chain, labels from its contacts and tracked tokens, its own review's simulation, and for a
+  reshare rotation the rotation its keeper reshared. `devices.forward` sends one again.
+- **Voting**: in such a vault this profile's key is no longer the member's, so `proposals.approve` and
+  `proposals.reject` refuse with "approve or reject there". The device's vote reaches the keeper, which stores and
+  replicates it like the daemon's.
+- **Fast polling**: while an offer is open or a forwarded proposal awaits the device's vote, the daemon has the keeper
+  poll its mailboxes every 3 seconds (`mailbox.poll`) for up to 10 minutes, instead of every 30.
+- `devices.revoke` unpairs a device.
+
+### Signer swaps
+
+`membership.swapSigner { vault, slot, signerKey }` proposes `rotate_membership` with one slot's key replaced and the
+committee, `k` and `t_v` unchanged: no reshare. It is how a member moves to a new device, or how other members
+replace a lost one.
+
+- Members approve it with `proposals.approve`: a rotation that `signerSwapSlot` recognises is signed with
+  `approveSignerSwap` (one key replaced, nothing else, plus the trusted fee payer).
+- After it executes, every daemon's next config read sees a signer set its manifest does not match. Its keeper then
+  adopts the new key from the executed swap (`vault.updateSigners`), and the wallet is pointed at the updated
+  manifest.
+- The desktop's own key stays in the profile: it may still sign for the member's other vaults.
+
 ## Background work
 
 Every 15 seconds, for each vault, the daemon reads the config note and hands it to the keeper:
 
 - an activated committee re-points viewing;
+- a signer set that no longer matches the manifest has the keeper adopt a landed signer swap;
 - a removal marks the vault;
 - anything else surfaces through the keeper's alarms.
 
@@ -169,6 +204,7 @@ Every 15 seconds, for each vault, the daemon reads the config note and hands it 
 | `src/proposals/review.test.ts` | a payload that rebuilds to another outer hash is reported, and approval refuses it                     |
 | `src/membership/plan.test.ts`  | plans the rules refuse report why, dealers are members who stay, and a member with no part can't begin |
 | `test/e2e/daemons.test.ts`     | the local-network suite, below                                                                         |
+| `test/e2e/device.test.ts`      | a member's phone on the local network with a real relay, below                                         |
 
 `test/e2e/daemons.test.ts` runs against `aztec start --local-network`. Three, then four, daemons run in one process,
 each with its own keeper process and PXE, all driven through their sockets:
@@ -180,3 +216,13 @@ each with its own keeper process and PXE, all driven through their sockets:
 - the member who left can't see the new balance and retires its share.
 
 Measured: 4 tests in 79 s with fake proofs, setup included.
+
+`test/e2e/device.test.ts` adds a real `ome-relay` on loopback and the `ome-device` test phone:
+
+- three daemons found a vault, and Alice's daemon pairs the phone through the relay;
+- a signer swap moves Alice's key to the phone, and all three keepers adopt it;
+- Alice's daemon forwards a payment to the phone, which finds it signable; Alice's desktop key is refused; the
+  phone's approval reaches Bob, and the payment executes; the phone learns its vote was accepted;
+- revoking the phone ends its pairing.
+
+Measured: 5 tests in 43 s; the whole suite, 9 tests in 113 s.

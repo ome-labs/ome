@@ -12,7 +12,7 @@ import type {
   Review,
 } from "@ome-labs/api";
 import type { VaultTx } from "@ome-labs/wallet";
-import { decodeProposal, rejectionMessage } from "@ome-labs/wasm";
+import { decodeProposal, rejectionMessage, signerSwapSlot } from "@ome-labs/wasm";
 
 import type { Context } from "../context.ts";
 import { DaemonError, require } from "../errors.ts";
@@ -204,20 +204,43 @@ export class ProposalService {
     };
   }
 
+  /**
+   * Refuses to sign when this profile's key is not this member's key in the vault: after a signer swap the member
+   * votes on the paired device that holds it.
+   */
+  #requireLocalKey(vault: Hex32): void {
+    const key = this.#context.state.file.profile?.signerKey;
+    const manifest = this.#context.vaults.manifest(vault);
+    const mine = manifest.members[this.#context.vaults.myIndex(vault) - 1]?.signerKey;
+    if (key && mine && (mine.x !== key.x || mine.y !== key.y))
+      throw new DaemonError(
+        "invalid",
+        "your signing key in this vault is on a paired device: approve or reject there",
+      );
+  }
+
   /** Approves after rebuilding and checking; a rotation is compared with this member's own reshare first. */
   async approve(params: ApproveParams): Promise<ProposalView> {
     const { stored } = await this.#stored(params);
+    this.#requireLocalKey(params.vault);
     const tx = await this.#rebuilt(stored);
     const rotation = tx.payload.calls.some(
       (c) => c.to.toString() === params.vault && c.selector.value === ROTATE_MEMBERSHIP_SELECTOR,
     );
+    const wallet = this.#context.wallet();
+    const input = await wallet.vaultInput(tx.vault);
     let approval: string | null;
-    if (rotation) {
+    if (rotation && signerSwapSlot(input, stored.payload ?? "") !== null) {
+      const chain = await wallet.chain();
+      const now = await wallet.chainTime();
+      const feePayers = [this.#context.feePayer().toString()];
+      approval = this.#context.signer.with(params.secret, (signer) =>
+        signer.approveSignerSwap(input, chain, stored.body, stored.payload ?? "", feePayers, now),
+      );
+    } else if (rotation) {
       if (!this.#approveRotation) throw new DaemonError("not-ready", "rotations are not available");
       approval = await this.#approveRotation(params.vault, stored, tx);
     } else {
-      const wallet = this.#context.wallet();
-      const input = await wallet.vaultInput(tx.vault);
       const chain = await wallet.chain();
       const now = await wallet.chainTime();
       approval = this.#context.signer.with(params.secret, (signer) =>
@@ -235,6 +258,7 @@ export class ProposalService {
 
   async reject(params: RejectParams): Promise<ProposalView> {
     const { stored } = await this.#stored(params);
+    this.#requireLocalKey(params.vault);
     const input = await this.#context
       .wallet()
       .vaultInput(this.#context.vaults.address(params.vault));

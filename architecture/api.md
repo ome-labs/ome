@@ -113,7 +113,8 @@ two changes: times are Unix seconds, and hex values are typed.
 | proposals  | `proposals.list`, `get`, `preview`, `create`, `review`, `approve`, `reject`, `execute`, `cancel`                                         |
 | contracts  | `contracts.functions`                                                                                                                    |
 | contacts   | `contacts.list`, `contacts.put`, `contacts.remove`                                                                                       |
-| membership | `membership.request`, `membership.plan`, `membership.begin`, `membership.get`, `membership.list`                                         |
+| membership | `membership.request`, `membership.plan`, `membership.begin`, `membership.get`, `membership.list`, `membership.swapSigner`                |
+| devices    | `devices.pair`, `devices.list`, `devices.revoke`, `devices.enroll`, `devices.forward`                                                    |
 
 - `proposals.approve` and `proposals.reject` take an optional `secret`, which unseals a locked signer for that one
   call.

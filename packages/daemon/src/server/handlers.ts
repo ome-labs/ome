@@ -211,4 +211,21 @@ export const handlers: Handlers = {
       throw new DaemonError("not-found", "unknown vault");
     return d.membership.list(lower(p.vault));
   },
+  "membership.swapSigner": async (d, p) => {
+    const vault = lower(p.vault);
+    const id = await d.membership.swapSigner({ ...p, vault });
+    return d.proposals.get({ vault, id });
+  },
+  "devices.pair": async (d) => d.devices.pair(),
+  "devices.list": async (d) => d.devices.list(),
+  "devices.revoke": async (d, p) => {
+    await d.devices.revoke(lower(p.identity));
+    return null;
+  },
+  "devices.enroll": async (d, p) => {
+    const vault = lower(p.vault);
+    const id = await d.devices.enroll({ vault, identity: lower(p.identity) });
+    return d.proposals.get({ vault, id });
+  },
+  "devices.forward": async (d, p) => d.devices.forward({ vault: lower(p.vault), id: lower(p.id) }),
 };

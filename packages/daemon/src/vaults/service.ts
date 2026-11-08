@@ -7,6 +7,7 @@ import type {
   Hex32,
   Manifest,
   MemberReachability,
+  VaultConfig,
   VaultDetails,
   VaultSummary,
 } from "@ome-labs/api";
@@ -17,6 +18,7 @@ import {
   decodeVaultProtocolSecrets,
   deriveVault,
 } from "@ome-labs/wallet";
+import { decodeProposal, signerSetCommitment } from "@ome-labs/wasm";
 
 import type { Context } from "../context.ts";
 import { DaemonError } from "../errors.ts";
@@ -149,10 +151,42 @@ export class VaultService {
     };
     if (observation === "activated") await this.attach(vault);
     if (observation === "removed") record.status = "removed";
+    if (observation === "current" && (await this.#adoptSwap(record.address, config)))
+      this.#context.emit({ type: "vaultActivity", vault: record.address });
     await this.save(record);
     if (observation !== "current" && observation !== "outdated")
       this.#context.emit({ type: "vaultActivity", vault: record.address });
     return observation;
+  }
+
+  /**
+   * After a signer swap ran, the config's signer set no longer matches the committee's manifest: the keeper adopts
+   * the new key from the executed swap (`vault.updateSigners`, which checks it against this config), and viewing is
+   * re-pointed at the updated manifest. Returns whether a swap was adopted.
+   */
+  async #adoptSwap(vault: Hex32, config: VaultConfig): Promise<boolean> {
+    const manifest = this.#manifests.get(vault);
+    if (!manifest) return false;
+    if (
+      signerSetCommitment(manifest.members.map((m) => m.signerKey)) === config.signerSetCommitment
+    )
+      return false;
+    const keeper = this.#context.keeper.client;
+    const bodies = await keeper.call("proposals.list", { vault });
+    for (const body of bodies.toReversed()) {
+      const proposal = decodeProposal(body).id;
+      // oxlint-disable-next-line no-await-in-loop
+      const adopted = await keeper.call("vault.updateSigners", { vault, proposal }).then(
+        () => true,
+        () => false,
+      );
+      if (adopted) {
+        // oxlint-disable-next-line no-await-in-loop
+        await this.attach(vault);
+        return true;
+      }
+    }
+    return false;
   }
 
   summary(vault: Hex32): VaultSummary {
