@@ -28,6 +28,20 @@ jobs:
       - run: pnpm exec oxlint --deny-warnings .
       - run: pnpm exec turbo run lint typecheck build test '--filter=./packages/*'
 
+  vectors:
+    name: Golden vectors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Regenerates every vector file from the pinned Aztec packages and fails if a committed file differs.
+      - run: pnpm --filter @ome-labs/vectors test
+
   rust:
     name: Rust
     runs-on: ubuntu-latest
@@ -42,6 +56,13 @@ jobs:
       - run: scripts/cargo.sh fmt --all --check
       - run: scripts/cargo.sh clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: scripts/cargo.sh test --workspace --all-features --locked
+      - name: Slow tests
+        if: github.ref == 'refs/heads/main'
+        env:
+          PROPTEST_CASES: "1024"
+        run: scripts/cargo.sh test --workspace --all-features --locked -- --ignored
+      - name: Core crates build for WebAssembly
+        run: scripts/wasm-core.sh
       - run: scripts/cargo.sh deny check
 
   noir:
