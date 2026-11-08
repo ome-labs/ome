@@ -6,6 +6,13 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+# Each accepted advisory names the path that brings it in and why it is acceptable. Revisit on every libp2p upgrade.
+ignore = [
+  # `paste` (unmaintained, no vulnerability) is a compile-time macro helper reached through
+  # libp2p-quic and libp2p-tcp → if-watch → netlink-packet-core. It runs no code in the built binary,
+  # and no maintained release of that chain drops it yet.
+  { id = "RUSTSEC-2024-0436", reason = "unmaintained compile-time macro via libp2p's if-watch; no fixed release" },
+]
 
 [licenses]
 version = 2
@@ -31,6 +38,10 @@ allow = [
 ignore = true
 
 [bans]
+# Duplicates are warnings, kept visible on purpose. Known sources:
+# - arkworks 0.6 (ome-crypto) still uses digest 0.10 and rand_core 0.6 beside the latest versions Ome uses;
+# - libp2p 0.57 (ome-net) uses the previous RustCrypto generation (chacha20poly1305 0.10, curve25519-dalek 4,
+#   sha2 0.10, …), so those appear twice until libp2p moves to the current releases.
 multiple-versions = "warn"
 wildcards = "deny"
 allow-wildcard-paths = true
