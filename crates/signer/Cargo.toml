@@ -1,0 +1,28 @@
+[package]
+name = "ome-signer"
+description = "An Ome member's approval signing key: sealed at rest, opened only to sign checked proposals"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+argon2 = { workspace = true }
+chacha20poly1305 = { workspace = true }
+hex = { workspace = true }
+ome-crypto = { workspace = true }
+ome-protocol = { workspace = true }
+ome-wire = { workspace = true }
+rand_core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+rand_chacha = { workspace = true }
