@@ -13,6 +13,7 @@ verified decisions about the components that exist; each component gets its own 
 | `crates/crypto`         | `ome-crypto`: Grumpkin, Poseidon2, Aztec key derivation, Schnorr, DKG, threshold ECDH, resharing and HPKE sealing ([crypto.md](crypto.md))  |
 | `crates/wire`           | `ome-wire`: canonical, versioned, signed messages between keepers, daemons and relays ([wire.md](wire.md))                                  |
 | `crates/protocol`       | `ome-protocol`: the vault's rules: contract mirror, payload hashing, approvals, tallies, rotations and lobbies ([protocol.md](protocol.md)) |
+| `crates/signer`         | `ome-signer`: the member's approval key, sealed at rest and signing only proposals `ome-protocol` accepts ([signer.md](signer.md))          |
 | `tools/vectors`         | `@ome-labs/vectors`: golden vectors computed with Aztec 6.0.0's own packages                                                                |
 | `scripts/`              | Repository scripts: guarded cargo runs, the WebAssembly build check, the contract's failure-message check and gate flamegraphs              |
 
@@ -78,6 +79,5 @@ own packages; CI fails when a committed vector file differs from what the pinned
 
 ## Planned components
 
-Not built yet; each will get a page here when it lands: `ome-signer`,
-`ome-net`, `ome-keeper`, `ome-relay`, `ome-api`, `ome-client`, `ome-wasm`, `ome-ffi`, `@ome-labs/wallet` and
+Not built yet; each will get a page here when it lands: `ome-net`, `ome-keeper`, `ome-relay`, `ome-api`, `ome-client`, `ome-wasm`, `ome-ffi`, `@ome-labs/wallet` and
 `@ome-labs/daemon`.
