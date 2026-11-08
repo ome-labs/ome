@@ -133,6 +133,15 @@ pub(crate) struct State {
     pub(crate) lobbies: HashMap<[u8; 16], LobbyRecord>,
 }
 
+impl State {
+    /// Whether ceremony `session` is running or recently finished here.
+    fn knows_ceremony(&self, session: &[u8; 32]) -> bool {
+        self.dkgs.contains_key(session)
+            || self.reshares.contains_key(session)
+            || self.lingering.contains_key(session)
+    }
+}
+
 pub(crate) struct VaultState {
     pub(crate) committee: Committee,
     pub(crate) status: ManifestStatus,
@@ -421,13 +430,13 @@ impl Keeper {
             (None, _) => None,
         };
         match bound {
-            Some(true) => {}
             Some(false) => {
                 tracing::warn!("dropped frame: identity does not match the channel");
                 return;
             }
-            None if is_ceremony_message(&message.body) => {
-                // Possibly a ceremony this keeper's owner has not started yet: keep a bounded backlog.
+            // A ceremony this keeper's owner has not started yet, from a stranger or from a fellow committee member
+            // (whose frames were delivered, so they are not retried): keep a bounded backlog until it starts.
+            _ if is_ceremony_message(&message.body) && !state.knows_ceremony(&scope) => {
                 if state.early.len() < EARLY_SESSIONS || state.early.contains_key(&scope) {
                     let backlog = state.early.entry(scope).or_default();
                     if backlog.len() < EARLY_PER_SESSION {
@@ -436,6 +445,7 @@ impl Keeper {
                 }
                 return;
             }
+            Some(true) => {}
             None => return,
         }
         // Replicated records are idempotent and verified on their own, and may arrive late through a mailbox or a
