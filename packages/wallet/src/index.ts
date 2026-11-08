@@ -6,6 +6,7 @@
 export { fromApiPoint, fromHex32, toApiPoint, toHex32 } from "./aztec/convert.ts";
 export { initBarretenberg } from "./barretenberg.ts";
 export { KeeperClient, KeeperError } from "./keeper/client.ts";
+export { PROTOCOL_VERSION, vaultManifest } from "./keeper/manifest.ts";
 export { KeeperPartialsSource } from "./keeper/partials-source.ts";
 export type { EcdhProvider, EcdhPurpose } from "./keys/ecdh.ts";
 export {
@@ -18,6 +19,15 @@ export {
   ThresholdKeyStore,
   ThresholdViewingError,
 } from "./keys/threshold-key-store.ts";
+export { VaultAccountContract, VaultWitnessProvider } from "./vault/account.ts";
+export { vaultArtifact } from "./vault/artifact.ts";
+export { readSignerKeys, readVaultConfig } from "./vault/config.ts";
+export {
+  MAX_SIGNERS,
+  type VaultDeployment,
+  type VaultSetup,
+  deriveVault,
+} from "./vault/deployment.ts";
 export {
   type VaultProtocolSecrets,
   decodeVaultProtocolSecrets,
@@ -26,4 +36,13 @@ export {
   thresholdAccountKeys,
   vaultPublicKeys,
 } from "./vault/keys.ts";
+export { fromVaultRequest, toVaultRequest } from "./vault/payload.ts";
+export {
+  OmeWallet,
+  type OmeWalletOptions,
+  type ProposalTerms,
+  type VaultTx,
+  VaultTxError,
+  type VaultViewing,
+} from "./wallet/ome-wallet.ts";
 export { AZTEC_VERSION } from "./version.ts";
