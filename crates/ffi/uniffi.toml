@@ -1,0 +1,6 @@
+# Names of the generated bindings.
+[bindings.swift]
+module_name = "OmeFfi"
+
+[bindings.kotlin]
+package_name = "labs.ome.ffi"

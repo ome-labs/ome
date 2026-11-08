@@ -1,0 +1,20 @@
+{
+  "name": "@ome-labs/ffi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Swift and Kotlin bindings of ome-ffi, the phone core of an Ome member's signing device",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "mobile:android": "node scripts/mobile.ts android",
+    "mobile:apple": "node scripts/mobile.ts apple",
+    "mobile:kotlin": "node scripts/mobile.ts kotlin",
+    "mobile:swift": "node scripts/mobile.ts swift",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "klarity": "catalog:",
+    "typescript": "catalog:"
+  }
+}

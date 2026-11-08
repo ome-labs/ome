@@ -19,6 +19,7 @@ verified decisions about the components that exist; each component gets its own 
 | `crates/api`            | `ome-api`: every method, event and error of the keeper and daemon APIs, and their TypeScript ([api.md](api.md))                                                            |
 | `crates/client`         | `ome-client`: typed keeper and daemon clients and daemon discovery ([api.md](api.md))                                                                                      |
 | `crates/wasm`           | `ome-wasm` / `@ome-labs/wasm`: the core for TypeScript as WebAssembly, for Node and the browser ([bindings.md](bindings.md))                                               |
+| `crates/ffi`            | `ome-ffi`: the phone core of a member's signing device, with Swift and Kotlin bindings ([bindings.md](bindings.md), [mobile.md](mobile.md))                                |
 | `crates/relay`          | `ome-relay`: the untrusted circuit relay and sealed mailbox store, its binary and the `ome-node` image ([relay.md](relay.md))                                              |
 | `packages/daemon`       | `@ome-labs/daemon`: `omed`, a member's service: the API server, the sealed signer, keeper supervision, founding, proposals and membership changes ([daemon.md](daemon.md)) |
 | `packages/wallet`       | `@ome-labs/wallet`: Aztec's PXE for Ome vaults, with the threshold key store, deployment and proposals ([pxe-integration.md](pxe-integration.md))                          |
@@ -89,4 +90,4 @@ own packages; CI fails when a committed vector file differs from what the pinned
 
 ## Planned components
 
-Not built yet; it will get a page here when it lands: `ome-ffi`.
+None: the mobile apps will build on `ome-ffi`.

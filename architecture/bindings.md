@@ -4,7 +4,7 @@ The Rust core (`ome-crypto`, `ome-protocol`, `ome-signer`) reaches other languag
 
 - **WebAssembly** (`crates/wasm`, `@ome-labs/wasm`) for TypeScript, in Node (the daemon, the wallet, an SDK) and in
   the browser;
-- **FFI** (`ome-ffi`, phase 13) for Swift and Kotlin, not built yet.
+- **FFI** (`crates/ffi`, `ome-ffi`) for Swift and Kotlin: the phone core of a member's signing device.
 
 Bindings convert values and errors; they hold no protocol logic. What a binding exposes is tested at the boundary,
 and the logic itself is tested in Rust.
@@ -137,3 +137,85 @@ Rust on the same machine:
 Combining is about 2.5 times slower than native. Reading a thousand notes takes about 1.4 s, so the narrow napi
 fallback the plan allows is not needed. Partials run in the keeper, which is native, so their wasm cost matters only
 in tests.
+
+## FFI (`ome-ffi`)
+
+`crates/ffi` is the phone core of a member's signing device (`architecture/mobile.md`), exposed through UniFFI
+0.32.2: Swift for iOS and Kotlin for Android. Unlike the WebAssembly bindings it is not a thin wrapper: it pairs,
+talks to the relays and keeps the device's files. The rules it applies are still `ome-protocol`'s and
+`ome-signer`'s. It depends on `ome-crypto`, `ome-wire`, `ome-protocol`, `ome-signer` and `ome-net`, never on the
+keeper or the threshold code.
+
+### Surface
+
+| Item             | What it is                                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `DeviceStore`    | implemented by the app: `read`, `write` and `remove` for the core's files, and `sealingKey(purpose)`              |
+| `KeyPurpose`     | `transport` (may open without the user) or `signing` (must ask the user)                                          |
+| `OmeDevice`      | `create(store, name)`, `open(store)`, `info`, `pairing`, `reviews`, `review(id)`, `policy`, `setPolicy`           |
+|                  | async: `pair(offer, waitSecs)`, `sync`, `approve(id)`, `reject(id, reason)`, `unpair`                             |
+| `parsePairOffer` | reads an `ome-pair-v0:` offer without pairing                                                                     |
+| `Review`         | the proposal as shown: kind, calls with decoded arguments and labels (pinned or claimed), every check, `signable` |
+| `Policy`         | allowed contracts, per-token limits, required pinned labels, pinned labels                                        |
+| `FfiError`       | `invalid`, `refused`, `denied` (no sealing key), `notPaired`, `network`, `storage`; each with a `reason`          |
+
+- **Files** in the app's store: `device.json` (public keys), `keys.sealed` (identity and transport secrets under the
+  transport sealing key, ChaCha20-Poly1305 with associated data `ome.device.keys.v0` and the public keys),
+  `signer.json` (an `ome-signer` sealed key, `kdf: external`, under the signing sealing key), `pairing.json`,
+  `reviews.json` (at most 64) and `policy.json`. None of them holds a secret in the clear.
+- **Signing** re-runs every check, asks the store for the signing sealing key (the app asks the user), opens the key
+  for that one signature and drops it. It signs through `ome_signer::approve`, `approve_rotation`,
+  `approve_signer_swap` or `reject` only.
+- **Network** calls run on the device's own two-thread tokio runtime and are awaited through their join handles, so
+  an app may await them from any executor. Each call starts a client-mode libp2p node (no listener, no circuit),
+  uses the relays' mailboxes and stops it.
+- **Error fields** are named `reason`: Kotlin exceptions already have a `message`.
+- `unsafe_code` stays forbidden: UniFFI's generated scaffolding comes from its macros.
+
+### Build and packaging
+
+`scripts/mobile.ts` builds with the `mobile` profile (release, `opt-level = "z"`, fat LTO) and writes everything to
+`dist/`:
+
+| Command             | Output                                                                                                                                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `mobile.ts apple`   | `dist/apple/OmeFfi.xcframework` (iOS, iOS Simulator, macOS; static libraries) and `dist/apple/OmeFfi.swift`                              |
+| `mobile.ts android` | `dist/android/ome-ffi.aar`: `jni/arm64-v8a` and `jni/x86_64` built with `cargo ndk`, and the Kotlin bindings compiled into `classes.jar` |
+| `mobile.ts swift`   | host test: the macOS library, the generated Swift as a SwiftPM package in `dist/swift`, `swift test`                                     |
+| `mobile.ts kotlin`  | host test: the host library, the generated Kotlin as a Gradle project in `dist/kotlin`, `gradle test`                                    |
+
+- Bindings are generated in library mode by the crate's own `uniffi-bindgen` binary (feature `bindgen`), so the
+  generator always matches the scaffolding. Names come from `uniffi.toml`: Swift module `OmeFfi`, Kotlin package
+  `labs.ome.ffi`.
+- Stripped release libraries keep no UniFFI metadata, so the bindings are generated from the host build.
+- Deployment targets: macOS 14 and iOS 16. The AAR asks for the `INTERNET` permission; an app adds JNA (Android
+  AAR) and kotlinx-coroutines.
+- Nothing is published until a mobile app exists.
+
+Measured sizes (Apple Silicon host, `mobile` profile):
+
+| Library                          | Size                                         |
+| -------------------------------- | -------------------------------------------- |
+| `arm64-v8a/libome_ffi.so`        | 6.9 MiB                                      |
+| `x86_64/libome_ffi.so`           | 8.0 MiB                                      |
+| macOS `libome_ffi.dylib`         | 5.7 MiB                                      |
+| static `libome_ffi.a`, per slice | 111.5 MiB, before the app's linker strips it |
+
+### `ome-device`
+
+A development signing device in a directory (feature `cli`): the same core with its sealing keys as plain files,
+for the daemon's end-to-end tests. Commands: `create`, `info`, `pair`, `sync`, `reviews`, `approve`, `reject` and
+`unpair`, each printing one JSON value. It must never hold a real vault's key.
+
+### Tests
+
+- `tests/device.rs`, against a real relay with the keeper's side played by the test:
+  - an expired offer is refused; a valid one pairs once, and pairing again is refused;
+  - reviews arrive through the mailbox; a valid payment is signable, with its function and amount decoded;
+  - a tampered outer hash fails its check and cannot be approved;
+  - the phone's token limit refuses the payment, and a denied signing key is `denied`;
+  - the approval reaches the keeper's mailbox and verifies for the vault, and a second vote is refused;
+  - a reopened device keeps its keys, pairing and reviews.
+- `bindings/swift/Tests` (`swift test`, macOS) and `bindings/kotlin` (`gradle test`, JVM): the generated bindings
+  load the library and cross the boundary both ways: a store implemented in Swift or Kotlin, records, errors and
+  async methods.
