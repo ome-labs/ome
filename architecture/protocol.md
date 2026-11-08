@@ -60,6 +60,11 @@ A proposal payload is `canonical(ExecutionRequest { calls, extras })`. Each `Cal
 - the arguments;
 - optionally its function signature, which must hash to the selector.
 
+`arguments(signature, args)` splits a call's arguments by its signature's parameter types for display: one field per
+`Field`, integer or `bool`, the members of a tuple or struct in order, `N` times an array element's width for
+`[T;N]`, and `N` for `str<N>`. A type it doesn't know, or a count that doesn't add up, is
+`UndecodableArguments`.
+
 Calls the entrypoint would mishandle are refused:
 
 - a zero target (silently skipped);
@@ -127,6 +132,18 @@ It requires every share to lie on one polynomial of degree `t_v − 1` and that 
    well formed, so this closes that gap for approvers;
 3. no new share equals a current one. A rotation that keeps the old shares would leave removed members able to
    decrypt.
+
+**Signer swaps** move one member's signing key to another device (`architecture/mobile.md`):
+
+- `Rotation::signer_swap(vault, slot, key)` builds the `rotate_membership` that replaces one slot's key and keeps the
+  committee and both thresholds.
+- `check_signer_swap(vault, rotation)` runs before an approver signs one. It requires the committee, `k` and the
+  member count unchanged, exactly one key replaced by a key that is not a signer yet (`NotASignerSwap` otherwise),
+  and the contract's own transition. It returns the swapped slot and the next config.
+- `swapped_manifest(manifest, config, calls)` is how a keeper adopts the new key. One of an executed proposal's
+  calls must be a signer swap of the manifest (its current keys the manifest's, its committee and thresholds
+  unchanged), and the manifest with that key replaced must pass `Vault::from_manifest` against the config read after
+  it ran. The epoch stays: the committee did not change.
 
 `policy::warnings(k, t_v, n)` reports configurations the contract allows but members should choose knowingly:
 

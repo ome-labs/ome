@@ -6,12 +6,14 @@
 //! show one transaction and collect approvals for another. Golden-tested against `@aztec-labs/entrypoints` 6.0.0.
 
 mod app_payload;
+mod arguments;
 mod call;
 mod outer_hash;
 mod request;
 mod selector;
 
 pub use app_payload::{app_payload_fields, app_payload_hash};
+pub use arguments::{Argument, arguments};
 pub use call::{Call, CallKind};
 pub use outer_hash::{ChainInfo, outer_hash};
 pub use request::ExecutionRequest;

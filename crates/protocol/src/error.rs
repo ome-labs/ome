@@ -62,9 +62,15 @@ pub enum Error {
     /// A `rotate_membership` call's arguments are not a rotation of this vault.
     #[error("rotate_membership call is invalid: {0}")]
     InvalidRotationCall(&'static str),
+    /// A rotation is not a signer swap: it changes more than one signer key.
+    #[error("not a signer swap: {0}")]
+    NotASignerSwap(&'static str),
     /// More calls than Aztec's account entrypoint executes.
     #[error("{0} calls; an entrypoint executes at most 5")]
     TooManyCalls(usize),
+    /// A call's arguments do not split by its function signature.
+    #[error("cannot decode the call's arguments: {0}")]
+    UndecodableArguments(&'static str),
     /// A function signature contains whitespace.
     #[error("function signature contains whitespace")]
     InvalidSignatureText,

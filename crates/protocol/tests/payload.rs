@@ -1,4 +1,5 @@
-//! Payload hashing equals Aztec's entrypoint encoder, so members sign exactly the calls they review.
+//! Payload hashing equals Aztec's entrypoint encoder, so members sign exactly the calls they review, and a call's
+//! arguments split by its signature for display.
 // Helpers outside `#[test]` unwrap like the tests do.
 #![allow(clippy::unwrap_used)]
 
@@ -9,7 +10,7 @@ use ome_protocol::{
     Error,
     payload::{
         Call, CallKind, ChainInfo, ExecutionRequest, app_payload_fields, app_payload_hash,
-        outer_hash, selector,
+        arguments, outer_hash, selector,
     },
 };
 use ome_wire::{messages::proposals::ProposalPayload, types::field};
@@ -192,4 +193,50 @@ fn calls_the_entrypoint_would_mishandle_are_refused() {
     let mut crowded = request(10);
     crowded.calls = vec![crowded.calls[0].clone(); 6];
     assert_eq!(crowded.to_payload().err(), Some(Error::TooManyCalls(6)));
+}
+
+#[test]
+fn arguments_split_by_the_signature_types() {
+    let f = |n: u64| field(&Base::from(n));
+    let transfer = arguments(
+        "transfer_private_to_private((Field),(Field),u128,Field)",
+        &[f(1), f(2), f(3), f(4)],
+    )
+    .unwrap();
+    let kinds: Vec<&str> = transfer.iter().map(|a| a.kind.as_str()).collect();
+    assert_eq!(kinds, ["(Field)", "(Field)", "u128", "Field"]);
+    assert_eq!(transfer[2].fields, [f(3)]);
+
+    let rotation: Vec<_> = (0..51).map(f).collect();
+    let split = arguments(
+        "rotate_membership([(Field,Field);8],[(Field,Field);8],u32,u32,u32,[(Field,Field);8])",
+        &rotation,
+    )
+    .unwrap();
+    let widths: Vec<usize> = split.iter().map(|a| a.fields.len()).collect();
+    assert_eq!(widths, [16, 16, 1, 1, 1, 16]);
+    assert_eq!(arguments("noop()", &[]).unwrap(), []);
+    assert_eq!(
+        arguments("set_name(str<3>,bool)", &[f(1), f(2), f(3), f(4)]).unwrap()[0]
+            .fields
+            .len(),
+        3
+    );
+
+    assert_eq!(
+        arguments("f(Field)", &[f(1), f(2)]),
+        Err(Error::UndecodableArguments(
+            "more arguments than parameters"
+        ))
+    );
+    assert_eq!(
+        arguments("f(Field,Field)", &[f(1)]),
+        Err(Error::UndecodableArguments(
+            "fewer arguments than parameters"
+        ))
+    );
+    assert_eq!(
+        arguments("f(Mystery)", &[f(1)]),
+        Err(Error::UndecodableArguments("unknown parameter type"))
+    );
 }

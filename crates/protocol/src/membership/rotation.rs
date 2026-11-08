@@ -63,7 +63,17 @@ impl Rotation {
     /// [`Error::InvalidRotationCall`] if the call is not `rotate_membership` on this vault or its arguments are not a
     /// well-formed rotation of the current signer set, or signer-set and committee errors.
     pub fn from_call(call: &Call, vault: &Vault) -> Result<Self, Error> {
-        if !is_rotation_call(call, vault) || call.kind != CallKind::Private {
+        if !is_rotation_call(call, vault) {
+            return Err(Error::InvalidRotationCall(
+                "not rotate_membership on this vault",
+            ));
+        }
+        Self::decode(call, vault.signers().keys())
+    }
+
+    /// Decodes a `rotate_membership` call's arguments, requiring its current keys to be `current`.
+    pub(super) fn decode(call: &Call, current: &[Point]) -> Result<Self, Error> {
+        if call.kind != CallKind::Private {
             return Err(Error::InvalidRotationCall(
                 "not rotate_membership on this vault",
             ));
@@ -76,7 +86,7 @@ impl Rotation {
             .iter()
             .map(parse_field)
             .collect::<Result<Vec<_>, _>>()?;
-        if args[..KEYS] != padded(vault.signers().keys()) {
+        if args[..KEYS] != padded(current) {
             return Err(Error::InvalidRotationCall(
                 "current keys are not the vault's signer set",
             ));
