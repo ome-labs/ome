@@ -34,7 +34,7 @@ fn prefixed(bytes: &[u8]) -> String {
 macro_rules! fixed_hex {
     ($(#[$doc:meta])* $name:ident, $len:literal) => {
         $(#[$doc])*
-        #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, TS)]
+        #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, TS)]
         #[ts(type = "string")]
         pub struct $name(pub [u8; $len]);
 
@@ -91,6 +91,11 @@ fixed_hex!(
     /// 32 bytes: addresses, field elements, hashes, keys, session ids.
     Hex32,
     32
+);
+fixed_hex!(
+    /// 64 bytes: ceremony transcript hashes.
+    Hex64,
+    64
 );
 fixed_hex!(
     /// 16 bytes: lobby ids.

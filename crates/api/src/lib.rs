@@ -17,7 +17,7 @@ pub mod typescript;
 
 pub use amount::Amount;
 pub use error::{ErrorData, ErrorKind, RpcError};
-pub use hex::{Hex16, Hex32, HexBytes, HexError, Point};
+pub use hex::{Hex16, Hex32, Hex64, HexBytes, HexError, Point};
 pub use jsonrpc::{AuthParams, Empty, Method, MethodInfo};
 
 /// API version served in `keeper.info` and `daemon.info`. Adding a method, an optional param or a result field keeps

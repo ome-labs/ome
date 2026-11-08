@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use ts_rs::{Config, TS};
 
 use crate::{
-    API_VERSION, Amount, AuthParams, Empty, ErrorData, ErrorKind, Hex16, Hex32, HexBytes,
+    API_VERSION, Amount, AuthParams, Empty, ErrorData, ErrorKind, Hex16, Hex32, Hex64, HexBytes,
     MethodInfo, Point, RpcError, daemon, keeper,
 };
 
@@ -39,7 +39,7 @@ fn types(cfg: &Config) -> Vec<Declared> {
     use keeper as k;
     declare![cfg;
         // Shared.
-        Hex32, Hex16, HexBytes, Point, Amount, Empty, AuthParams, ErrorKind, ErrorData, RpcError,
+        Hex32, Hex64, Hex16, HexBytes, Point, Amount, Empty, AuthParams, ErrorKind, ErrorData, RpcError,
         // Keeper.
         k::KeeperInfo, k::KeeperContact, k::Member, k::Manifest, k::VaultStatus, k::Vault, k::VaultConfig,
         k::Observation, k::Observed, k::Reachability, k::AuditEntry, k::VaultParams, k::SessionParams,

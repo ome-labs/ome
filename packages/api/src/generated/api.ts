@@ -6,6 +6,11 @@
 export type Hex32 = string;
 
 /**
+ * 64 bytes: ceremony transcript hashes.
+ */
+export type Hex64 = string;
+
+/**
  * 16 bytes: lobby ids.
  */
 export type Hex16 = string;
@@ -476,7 +481,7 @@ export type DkgResult = {
   /**
    * Transcript hash every member must agree on.
    */
-  transcript: Hex32;
+  transcript: Hex64;
 };
 
 /**
@@ -498,7 +503,7 @@ export type ReshareResult = {
   /**
    * Transcript hash, if this keeper stays.
    */
-  transcript: Hex32 | null;
+  transcript: Hex64 | null;
 };
 
 /**

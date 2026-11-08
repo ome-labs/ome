@@ -114,7 +114,7 @@ fn ceremony_results_decode_by_shape() {
     let dkg = json!({
         "kind": "dkg", "status": "completed", "failure": null,
         "result": { "index": 1, "threshold": 2, "groupKey": point, "verificationShares": [point],
-                    "transcript": format!("0x{}", "11".repeat(32)) },
+                    "transcript": format!("0x{}", "11".repeat(64)) },
     });
     let ceremony: keeper::Ceremony = serde_json::from_value(dkg).unwrap();
     assert!(matches!(

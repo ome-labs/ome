@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{KeeperContact, Manifest};
-use crate::{Hex32, Point};
+use crate::{Hex32, Hex64, Point};
 
 /// A member of a reshare's new committee.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -68,7 +68,7 @@ pub struct DkgResult {
     /// Verification shares in member order.
     pub verification_shares: Vec<Point>,
     /// Transcript hash every member must agree on.
-    pub transcript: Hex32,
+    pub transcript: Hex64,
 }
 
 /// A finished reshare.
@@ -82,7 +82,7 @@ pub struct ReshareResult {
     /// The new manifest, if this keeper stays.
     pub manifest: Option<Manifest>,
     /// Transcript hash, if this keeper stays.
-    pub transcript: Option<Hex32>,
+    pub transcript: Option<Hex64>,
 }
 
 /// A ceremony's outcome.
