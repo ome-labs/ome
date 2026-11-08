@@ -191,12 +191,15 @@ through a mailbox. Everything else must be fresh and unseen.
 
 ## RPC
 
-JSON-RPC 2.0, newline-delimited, over a Unix socket (`0600`), or a local-only named pipe on Windows.
+The keeper serves the keeper API of `ome-api` (`architecture/api.md`):
 
-- **Authentication**: a session must first call `session.auth` with the launch token, compared in constant time.
-- **Encoding**: 32-byte values are `0x` hex, points are `{ x, y }`, and message bodies are hex of their canonical
-  wire encoding.
-- **Errors**: unauthenticated `-32001`, keeper errors `-32000`, standard JSON-RPC codes otherwise.
+- JSON-RPC 2.0, newline-delimited, over a Unix socket (`0600`), or a local-only named pipe on Windows;
+- `session.auth` with the launch token first, compared in constant time;
+- typed params and results;
+- errors carry a kind (`not-found`, `invalid`, `not-ready`, `failed`) and its code.
+
+`src/rpc/methods.rs` has one typed route per method, and `src/rpc/convert.rs` converts between the keeper's own types
+and the API shapes. Points are checked to be on the curve on the way in. Events are `ome-api`'s `KeeperEvent`.
 
 | Area      | Methods                                                                                                                                        |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -207,8 +210,6 @@ JSON-RPC 2.0, newline-delimited, over a Unix socket (`0600`), or a local-only na
 | spending  | `proposals.put` / `get` / `list`, `payloads.put` / `get`, `approvals.put` / `list`, `rejections.put` / `list`, `receipts.put` / `list`         |
 | lobbies   | `lobby.open`, `lobby.join`, `lobby.status`, `lobby.inspect`, `lobby.start`, `lobby.leave`, `lobby.close`, `lobby.list`                         |
 | mailboxes | `mailbox.poll`                                                                                                                                 |
-
-The request and response types move to `ome-api` in phase 9.
 
 ## Binary
 
@@ -291,7 +292,7 @@ Checkpoint 7b adds:
   - guests see the roster and receive the same plan, secrets and protocol version;
   - a join with the wrong invite secret is refused;
   - a guest leaves and the host closes.
-- `tests/rpc.rs`, over a real socket:
+- `tests/rpc.rs`, on the wire over a real socket:
   - sessions must authenticate, and the socket is owner-only;
   - a daemon drives a live vault: ECDH, config observation, payloads, proposals and the audit log;
-  - keeper errors and unknown methods come back as errors.
+  - keeper errors, malformed params and unknown methods come back with their kind and code.

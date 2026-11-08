@@ -16,11 +16,14 @@ verified decisions about the components that exist; each component gets its own 
 | `crates/signer`         | `ome-signer`: the member's approval key, sealed at rest and signing only proposals `ome-protocol` accepts ([signer.md](signer.md))                                   |
 | `crates/net`            | `ome-net`: transport, libp2p node, framing, admission and relay mailboxes ([networking.md](networking.md))                                                           |
 | `crates/keeper`         | `ome-keeper`: viewing-share custody, ceremonies, threshold ECDH, replication, lobbies, mailboxes, the local RPC and the `ome-keeper` binary ([keeper.md](keeper.md)) |
+| `crates/api`            | `ome-api`: every method, event and error of the keeper and daemon APIs, and their TypeScript ([api.md](api.md))                                                      |
+| `crates/client`         | `ome-client`: typed keeper and daemon clients and daemon discovery ([api.md](api.md))                                                                                |
 | `crates/relay`          | `ome-relay`: the untrusted circuit relay and sealed mailbox store, its binary and the `ome-node` image ([relay.md](relay.md))                                        |
+| `packages/api`          | `@ome-labs/api`: the API's TypeScript declarations, generated from `crates/api`                                                                                      |
 | `tools/vectors`         | `@ome-labs/vectors`: golden vectors computed with Aztec 6.0.0's own packages                                                                                         |
 | `scripts/`              | Repository scripts: guarded cargo runs, the WebAssembly build check, the contract's failure-message check and gate flamegraphs                                       |
 
-The TypeScript packages (`packages/`) are empty; crates and packages join as they are built.
+Crates and packages join as they are built.
 
 ## The vault contract
 
@@ -82,5 +85,5 @@ own packages; CI fails when a committed vector file differs from what the pinned
 
 ## Planned components
 
-Not built yet; each will get a page here when it lands: `ome-api`, `ome-client`, `ome-wasm`, `ome-ffi`, `@ome-labs/wallet` and
+Not built yet; each will get a page here when it lands: `ome-wasm`, `ome-ffi`, `@ome-labs/wallet` and
 `@ome-labs/daemon`.
