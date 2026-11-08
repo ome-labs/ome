@@ -1,0 +1,395 @@
+//! Proposals: what a member asks the vault to do, how members review and vote, and execution.
+
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+use super::{Secret, TokenInfo};
+use crate::{Amount, Hex32};
+
+/// One call of a `calls` intent.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct IntentCall {
+    /// Contract.
+    pub to: Hex32,
+    /// Function name.
+    #[serde(rename = "fn")]
+    pub function: String,
+    /// Arguments as the CLI parses them.
+    pub args: Vec<String>,
+}
+
+/// What a proposal is for. Carried as JSON in the proposal's summary (at most 4 KiB).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Intent {
+    /// A private token transfer.
+    Transfer {
+        /// Token.
+        token: Hex32,
+        /// Recipient.
+        to: Hex32,
+        /// Amount.
+        amount: Amount,
+        /// Note for the members, at most 280 characters.
+        memo: Option<String>,
+    },
+    /// Up to 8 contract calls.
+    Calls {
+        /// Calls.
+        calls: Vec<IntentCall>,
+        /// Note.
+        memo: Option<String>,
+    },
+    /// Cancels a proposal by spending its nonce.
+    Cancel {
+        /// The proposal cancelled.
+        cancels: Hex32,
+        /// Note.
+        memo: Option<String>,
+    },
+}
+
+/// Where a proposal is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum ProposalStatus {
+    /// Gathering approvals.
+    Collecting,
+    /// Enough approvals to execute.
+    Ready,
+    /// Enough rejections that it cannot pass.
+    Blocked,
+    /// Executed.
+    Executed,
+    /// Its nonce was spent by a cancel.
+    Cancelled,
+    /// Past its expiry.
+    Expired,
+    /// Made under an older config.
+    Stale,
+}
+
+/// A member's approval or rejection.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Vote {
+    /// Signer slot, 0-based.
+    pub slot: u32,
+    /// Member index.
+    pub index: u32,
+    /// Name.
+    pub name: String,
+    /// Whether the signature verifies.
+    pub valid: bool,
+    /// Reason, for rejections.
+    pub reason: Option<String>,
+}
+
+/// A call as the payload encodes it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DecodedCall {
+    /// Contract.
+    pub to: Hex32,
+    /// Its label, from the address book, tokens or members.
+    pub to_label: Option<String>,
+    /// Function.
+    #[serde(rename = "fn")]
+    pub function: String,
+    /// Arguments.
+    pub args: Vec<String>,
+    /// Static call.
+    pub is_static: bool,
+}
+
+/// The proposer.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Proposer {
+    /// Member index.
+    pub index: u32,
+    /// Name.
+    pub name: String,
+}
+
+/// An execution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Execution {
+    /// Transaction.
+    pub tx_hash: Hex32,
+    /// Unix seconds.
+    pub at: u64,
+}
+
+/// A proposal as this member sees it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalView {
+    /// Proposal id.
+    pub id: Hex32,
+    /// Vault.
+    pub vault: Hex32,
+    /// What it is for.
+    pub intent: Intent,
+    /// Who proposed it.
+    pub proposer: Proposer,
+    /// Where it is.
+    pub status: ProposalStatus,
+    /// Spending threshold.
+    pub threshold: u32,
+    /// Members.
+    pub members: u32,
+    /// Approvals.
+    pub approvals: Vec<Vote>,
+    /// Valid rejections from slots that have not also approved.
+    pub rejections: Vec<Vote>,
+    /// This member's slot.
+    pub my_slot: u32,
+    /// Whether this member approved.
+    pub approved_by_me: bool,
+    /// Whether this member rejected.
+    pub rejected_by_me: bool,
+    /// Config version it was made under.
+    pub config_version: u32,
+    /// The vault's current config version.
+    pub current_config_version: u32,
+    /// Unix seconds it expires.
+    pub expires_at: u64,
+    /// Transaction nonce.
+    pub tx_nonce: Hex32,
+    /// Outer hash the approvals sign over.
+    pub outer_hash: Hex32,
+    /// The message an approval signs.
+    pub approval_message: Hex32,
+    /// How fees are paid.
+    pub fee_method: String,
+    /// Decoded calls.
+    pub calls: Vec<DecodedCall>,
+    /// For transfers, the token as this member knows it.
+    pub token: Option<TokenInfo>,
+    /// The execution, once executed.
+    pub execution: Option<Execution>,
+    /// The cancel proposal targeting it, or the proposal a cancel targets.
+    pub cancelled_by: Option<Hex32>,
+}
+
+/// Gas a simulation used.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Gas {
+    /// DA gas.
+    pub da: u64,
+    /// L2 gas.
+    pub l2: u64,
+}
+
+/// Checks a review ran on this device.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewChecks {
+    /// The payload was rebuilt from the intent and matches.
+    pub rebuilt: bool,
+    /// The recomputed outer hash.
+    pub outer_hash: Hex32,
+    /// Made under the current config.
+    pub config_current: bool,
+    /// Not expired.
+    pub not_expired: bool,
+    /// What failed, if anything.
+    pub failure: Option<String>,
+}
+
+/// Where a recipient's label came from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum LabelSource {
+    /// The address book.
+    AddressBook,
+    /// A vault member.
+    Member,
+}
+
+/// A transfer's recipient.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Recipient {
+    /// Address.
+    pub address: Hex32,
+    /// Label, if known.
+    pub label: Option<String>,
+    /// Where the label came from.
+    pub source: Option<LabelSource>,
+}
+
+/// A simulation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Simulation {
+    /// Succeeded.
+    pub ok: bool,
+    /// Gas used.
+    pub gas: Option<Gas>,
+    /// Why it failed.
+    pub error: Option<String>,
+}
+
+/// What a signature covers.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Signs {
+    /// The message.
+    pub message: Hex32,
+    /// How it is computed.
+    pub formula: String,
+}
+
+/// What `ome approve` shows before the member signs, all rebuilt and checked on this device.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Review {
+    /// The proposal.
+    pub proposal: ProposalView,
+    /// Vault name.
+    pub vault_name: String,
+    /// This member's name.
+    pub my_name: String,
+    /// Checks.
+    pub checks: ReviewChecks,
+    /// One line, e.g. "transfer 25 JADE (25000000000000000000 base units)".
+    pub action: String,
+    /// For transfers.
+    pub recipient: Option<Recipient>,
+    /// Simulation.
+    pub simulation: Simulation,
+    /// What an approval signs.
+    pub signs: Signs,
+    /// What a rejection signs.
+    pub rejects: Signs,
+}
+
+/// A dry run of a proposal before it is made.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ProposalPreview {
+    /// Succeeded.
+    pub ok: bool,
+    /// Calls it would make.
+    pub calls: Vec<DecodedCall>,
+    /// Gas used.
+    pub gas: Option<Gas>,
+    /// Why it failed.
+    pub error: Option<String>,
+}
+
+/// Params naming a proposal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ProposalRef {
+    /// Vault.
+    pub vault: Hex32,
+    /// Proposal id.
+    pub id: Hex32,
+}
+
+/// Params of `proposals.preview` and `proposals.create`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposeParams {
+    /// Vault.
+    pub vault: Hex32,
+    /// What to do.
+    pub intent: Intent,
+    /// Validity, 1 to 720 hours.
+    pub expires_in_hours: u32,
+}
+
+/// Params of `proposals.approve`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ApproveParams {
+    /// Vault.
+    pub vault: Hex32,
+    /// Proposal id.
+    pub id: Hex32,
+    /// Unseals the signer for this call when it is locked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub secret: Option<Secret>,
+}
+
+/// Params of `proposals.reject`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct RejectParams {
+    /// Vault.
+    pub vault: Hex32,
+    /// Proposal id.
+    pub id: Hex32,
+    /// Reason shown to the members, at most 280 characters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reason: Option<String>,
+    /// Unseals the signer for this call when it is locked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub secret: Option<Secret>,
+}
+
+/// Where an execution on this device is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum ExecutionPhase {
+    /// Rebuilding the transaction.
+    Rebuilding,
+    /// Proving.
+    Proving,
+    /// Sending.
+    Sending,
+    /// Included in a block.
+    Mined,
+    /// Failed.
+    Failed,
+}
+
+/// Progress of an execution on this device.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionProgress {
+    /// Vault.
+    pub vault: Hex32,
+    /// Proposal.
+    pub proposal: Hex32,
+    /// Phase.
+    pub phase: ExecutionPhase,
+    /// Why it failed.
+    pub error: Option<String>,
+    /// Transaction, once sent.
+    pub tx_hash: Option<Hex32>,
+}
+
+/// A function of a contract, for building `calls` intents.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractFunction {
+    /// Name.
+    pub name: String,
+    /// `private`, `public` or `utility`.
+    pub kind: FunctionKind,
+    /// Static.
+    pub is_static: bool,
+    /// Parameters.
+    pub params: Vec<FunctionParam>,
+}
+
+/// Where a function runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum FunctionKind {
+    /// Private.
+    Private,
+    /// Public.
+    Public,
+    /// Utility (unconstrained).
+    Utility,
+}
+
+/// A function parameter.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct FunctionParam {
+    /// Name.
+    pub name: String,
+    /// ABI type, as text.
+    #[serde(rename = "type")]
+    pub kind: String,
+}

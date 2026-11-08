@@ -5,7 +5,7 @@ set -eu
 cd "$(dirname "$0")/../crates"
 
 packages=""
-for crate in crypto wire protocol signer; do
+for crate in api crypto wire protocol signer; do
   if [ -f "$crate/Cargo.toml" ]; then
     packages="$packages -p ome-$crate"
   fi

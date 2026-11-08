@@ -1,0 +1,18 @@
+[package]
+name = "ome-api"
+description = "The local APIs of an Ome member's keeper and daemon: every method, event and error, with generated TypeScript"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ts-rs = { workspace = true }
