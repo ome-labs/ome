@@ -137,6 +137,13 @@ It requires every share to lie on one polynomial of degree `t_v − 1` and that 
 | `TwoCanRead`    | `t_v = 2` with three or more members |
 | `NoSpareViewer` | `t_v = n`                            |
 
+`epoch_tagging_secret(vault, epoch, transcript)` is the tagging secret for the vault's own unconstrained notes in a
+committee epoch: `s · G`, where `s = Poseidon2("ome.epoch-tagging.v0", [vault, epoch, t_0, t_1, t_2, t_3])` and
+`t_i` are the 16-byte big-endian limbs of the epoch's 64-byte ceremony transcript (the founding DKG, then each
+reshare). Only the epoch's committee takes part in that ceremony, so a member removed earlier can't derive later
+epochs' secrets, provided reshare dealers are members who stay. The wallet uses it
+(`architecture/pxe-integration.md`).
+
 ## Lobbies (`lobby`)
 
 - **Join proof**: `HMAC-SHA256(invite secret, "ome.lobby.join.v0" ‖ lobby ‖ identity ‖ transport)`, compared in
@@ -149,10 +156,11 @@ It requires every share to lie on one polynomial of degree `t_v − 1` and that 
 
 ## Tags
 
-| Tag                 | Used for                         |
-| ------------------- | -------------------------------- |
-| `ome.approval.v0`   | approval message (contract)      |
-| `ome.signers.v0`    | signer-set commitment (contract) |
-| `ome.committee.v0`  | committee commitment (contract)  |
-| `ome.rejection.v0`  | rejection message                |
-| `ome.lobby.join.v0` | join proof                       |
+| Tag                    | Used for                         |
+| ---------------------- | -------------------------------- |
+| `ome.approval.v0`      | approval message (contract)      |
+| `ome.signers.v0`       | signer-set commitment (contract) |
+| `ome.committee.v0`     | committee commitment (contract)  |
+| `ome.rejection.v0`     | rejection message                |
+| `ome.lobby.join.v0`    | join proof                       |
+| `ome.epoch-tagging.v0` | epoch tagging secret             |

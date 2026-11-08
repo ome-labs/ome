@@ -20,6 +20,8 @@ verified decisions about the components that exist; each component gets its own 
 | `crates/client`         | `ome-client`: typed keeper and daemon clients and daemon discovery ([api.md](api.md))                                                                                |
 | `crates/wasm`           | `ome-wasm` / `@ome-labs/wasm`: the core for TypeScript as WebAssembly, for Node and the browser ([bindings.md](bindings.md))                                         |
 | `crates/relay`          | `ome-relay`: the untrusted circuit relay and sealed mailbox store, its binary and the `ome-node` image ([relay.md](relay.md))                                        |
+| `packages/wallet`       | `@ome-labs/wallet`: Aztec's PXE for Ome vaults, with the threshold key store, deployment and proposals ([pxe-integration.md](pxe-integration.md))                    |
+| `patches/`              | The guarded `@aztec-labs/pxe` 6.0.0 patch the wallet needs ([pxe-integration.md](pxe-integration.md))                                                                |
 | `packages/api`          | `@ome-labs/api`: the API's TypeScript declarations, generated from `crates/api`                                                                                      |
 | `tools/vectors`         | `@ome-labs/vectors`: golden vectors computed with Aztec 6.0.0's own packages                                                                                         |
 | `scripts/`              | Repository scripts: guarded cargo runs, the WebAssembly build check, the contract's failure-message check and gate flamegraphs                                       |
@@ -86,5 +88,4 @@ own packages; CI fails when a committed vector file differs from what the pinned
 
 ## Planned components
 
-Not built yet; each will get a page here when it lands: `ome-ffi`, `@ome-labs/wallet` and
-`@ome-labs/daemon`.
+Not built yet; each will get a page here when it lands: `ome-ffi` and `@ome-labs/daemon`.

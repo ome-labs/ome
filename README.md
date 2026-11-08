@@ -47,6 +47,13 @@ pnpm --filter @ome-labs/contracts profile               # gate counts per functi
 pnpm --filter @ome-labs/contracts profile:flamegraphs   # target/flamegraphs/<artifact>/<function>.svg
 ```
 
+Wallet (`@ome-labs/wallet`):
+
+```sh
+pnpm --filter @ome-labs/wallet test       # unit tests (no network)
+pnpm --filter @ome-labs/wallet test:e2e   # against `aztec start --local-network`, with real ome-keeper processes
+```
+
 WebAssembly (`@ome-labs/wasm`):
 
 ```sh
