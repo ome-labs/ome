@@ -2,6 +2,7 @@
 //! (named pipe on Windows), owner-only, with a per-launch token presented through `session.auth` before anything else.
 
 mod convert;
+mod devices;
 mod lobby;
 mod methods;
 mod server;

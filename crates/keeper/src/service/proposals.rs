@@ -383,7 +383,7 @@ impl Keeper {
     }
 
     /// The stored proposal `id` of `vault`.
-    fn stored_proposal(&self, vault: [u8; 32], id: &[u8; 32]) -> Result<Proposal> {
+    pub(crate) fn stored_proposal(&self, vault: [u8; 32], id: &[u8; 32]) -> Result<Proposal> {
         let (stored_vault, body) = self
             .0
             .store
@@ -427,7 +427,7 @@ impl Keeper {
         }
     }
 
-    async fn store_approval(&self, vault: [u8; 32], approval: &Approval) -> Result<()> {
+    pub(crate) async fn store_approval(&self, vault: [u8; 32], approval: &Approval) -> Result<()> {
         let proposal = self.stored_proposal(vault, &approval.proposal)?;
         let message = approval_message(
             parse_field(&vault)?,
@@ -452,7 +452,11 @@ impl Keeper {
         Ok(())
     }
 
-    async fn store_rejection(&self, vault: [u8; 32], rejection: &Rejection) -> Result<()> {
+    pub(crate) async fn store_rejection(
+        &self,
+        vault: [u8; 32],
+        rejection: &Rejection,
+    ) -> Result<()> {
         self.stored_proposal(vault, &rejection.proposal)?;
         let message = rejection_message(parse_field(&vault)?, &rejection.proposal);
         self.verify_vote(vault, rejection.slot, message, &rejection.signature)
@@ -474,7 +478,7 @@ impl Keeper {
 
     /// Signs `body` for `vault` and sends it to every other member; one that cannot be reached gets it through its
     /// relay mailbox, and the next sync.
-    async fn broadcast(&self, vault: [u8; 32], body: Message) -> Result<()> {
+    pub(crate) async fn broadcast(&self, vault: [u8; 32], body: Message) -> Result<()> {
         let (peers, epoch) = {
             let state = self.0.state.lock().await;
             let v = state.vaults.get(&vault).ok_or(Error::UnknownVault)?;

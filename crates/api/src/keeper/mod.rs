@@ -1,6 +1,7 @@
 //! The keeper's API: what a member's daemon calls on its own keeper.
 
 mod ceremonies;
+mod devices;
 mod events;
 mod lobby;
 mod records;
@@ -10,6 +11,10 @@ pub use ceremonies::{
     Ceremony, CeremonyKind, CeremonyResult, CeremonyStatus, DkgParams, DkgResult, EcdhParams,
     EcdhPurpose, EcdhResult, Failure, MemberPartials, NewMember, Partial, ReshareParams,
     ReshareResult,
+};
+pub use devices::{
+    Chain, Device, DeviceLabel, DeviceOffer, DeviceOfferParams, DeviceParams, DeviceReviewParams,
+    DeviceReviewSent, DeviceRotation, UpdateSignersParams,
 };
 pub use events::KeeperEvent;
 pub use lobby::{
@@ -109,6 +114,8 @@ methods! {
     VaultObserveConfig = "vault.observeConfig" (ObserveConfigParams) -> Observed;
     /// Destroys a kept share once the chain shows a newer committee.
     VaultRetire = "vault.retire" (RetireParams) -> Vault;
+    /// Adopts the signer key an executed signer swap put on chain.
+    VaultUpdateSigners = "vault.updateSigners" (UpdateSignersParams) -> Vault;
     /// Asks every reachable member for records this keeper lacks.
     VaultSync = "vault.sync" (VaultParams) -> ();
     /// Checks a vault transaction against the execution receipts.
@@ -165,4 +172,12 @@ methods! {
     LobbyClose = "lobby.close" (LobbyParams) -> Lobby;
     /// Leaves a lobby (guest).
     LobbyLeave = "lobby.leave" (LobbyParams) -> Lobby;
+    /// Creates a one-time offer to pair a signing device.
+    DevicesOffer = "devices.offer" (DeviceOfferParams) -> DeviceOffer;
+    /// Paired devices.
+    DevicesList = "devices.list" (Empty) -> Vec<Device>;
+    /// Unpairs a device and tells it.
+    DevicesRevoke = "devices.revoke" (DeviceParams) -> ();
+    /// Sends a proposal to the device holding this member's signing key in the vault.
+    DevicesReview = "devices.review" (DeviceReviewParams) -> DeviceReviewSent;
 }

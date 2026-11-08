@@ -7,7 +7,11 @@ mod migrations;
 use std::{path::Path, sync::Mutex};
 
 use ome_protocol::vault::Config;
-use ome_wire::{Message, decode_body, encode_body, messages::ceremony::Manifest, types::field};
+use ome_wire::{
+    IdentityPublic, Message, decode_body, encode_body,
+    messages::ceremony::Manifest,
+    types::{WirePoint, field, parse_field},
+};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -739,6 +743,133 @@ impl Store {
         })
     }
 }
+/// A paired signing device.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeviceRecord {
+    /// Ed25519 identity.
+    pub identity: IdentityPublic,
+    /// X25519 transport key.
+    pub transport: [u8; 32],
+    /// The Grumpkin key it signs approvals with.
+    pub signer_key: WirePoint,
+    /// Display name.
+    pub name: String,
+    /// When it paired (unix seconds).
+    pub paired_at: u64,
+}
+
+impl Store {
+    // --- Devices -----------------------------------------------------------------------------------------------------
+
+    /// Stores a paired device, replacing an earlier pairing of the same identity.
+    ///
+    /// # Errors
+    /// Storage errors, or a transport key another device uses.
+    pub fn put_device(&self, device: &DeviceRecord) -> Result<()> {
+        let mut key = Vec::with_capacity(64);
+        key.extend_from_slice(&device.signer_key.x);
+        key.extend_from_slice(&device.signer_key.y);
+        self.with(|c| {
+            c.execute(
+                "INSERT INTO devices (identity, transport, signer_key, name, paired_at) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT (identity) DO UPDATE SET transport = excluded.transport,
+                 signer_key = excluded.signer_key, name = excluded.name, paired_at = excluded.paired_at",
+                params![device.identity.0, device.transport, key, device.name, ts(device.paired_at)],
+            )
+            .map(drop)
+        })
+    }
+
+    /// Every paired device.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn devices(&self) -> Result<Vec<DeviceRecord>> {
+        type Row = ([u8; 32], [u8; 32], Vec<u8>, String, i64);
+        let rows: Vec<Row> = self.with(|c| {
+            let mut statement = c.prepare(
+                "SELECT identity, transport, signer_key, name, paired_at FROM devices ORDER BY paired_at",
+            )?;
+            statement
+                .query_map([], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+                })?
+                .collect()
+        })?;
+        rows.into_iter()
+            .map(|(identity, transport, key, name, paired_at)| {
+                let (x, y) = key
+                    .split_at_checked(32)
+                    .filter(|(_, y)| y.len() == 32)
+                    .ok_or_else(|| Error::Storage("stored device key is not a point".into()))?;
+                Ok(DeviceRecord {
+                    identity: IdentityPublic(identity),
+                    transport,
+                    signer_key: WirePoint {
+                        x: x.try_into().unwrap_or_default(),
+                        y: y.try_into().unwrap_or_default(),
+                    },
+                    name,
+                    paired_at: u64::try_from(paired_at).unwrap_or(0),
+                })
+            })
+            .collect()
+    }
+
+    /// Forgets a device. Returns whether it was paired.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn remove_device(&self, identity: &IdentityPublic) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "DELETE FROM devices WHERE identity = ?1",
+                params![identity.0],
+            )
+            .map(|n| n > 0)
+        })
+    }
+
+    /// The newest config observed for `vault`.
+    ///
+    /// # Errors
+    /// Storage errors, or a stored commitment that is not a field.
+    pub fn latest_observation(&self, vault: &[u8; 32]) -> Result<Option<Config>> {
+        type Row = (u32, u32, u32, [u8; 32], u32, [u8; 32]);
+        let row: Option<Row> = self.with(|c| {
+            c.query_row(
+                "SELECT version, threshold, signer_count, signer_set_commitment, viewing_threshold,
+                 committee_commitment FROM observations WHERE vault = ?1 ORDER BY version DESC LIMIT 1",
+                params![vault],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )
+            .optional()
+        })?;
+        row.map(
+            |(version, threshold, signer_count, signers, viewing_threshold, committee)| {
+                Ok(Config {
+                    threshold,
+                    signer_count,
+                    version,
+                    signer_set_commitment: parse_field(&signers)?,
+                    viewing_threshold,
+                    committee_commitment: parse_field(&committee)?,
+                })
+            },
+        )
+        .transpose()
+    }
+}
+
 /// Unix seconds as the `SQLite` integer type.
 fn ts(seconds: u64) -> i64 {
     i64::try_from(seconds).unwrap_or(i64::MAX)

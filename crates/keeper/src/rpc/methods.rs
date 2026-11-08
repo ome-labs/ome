@@ -8,11 +8,12 @@ use ome_api::{
     jsonrpc::Request,
     keeper::{
         self as api, ApprovalsList, ApprovalsPut, AuditList, CeremonyDkg, CeremonyReshare,
-        CeremonyStatusGet, EcdhBatch, KeeperInfoGet, KeeperJoinRequest, LobbyClose, LobbyInspect,
-        LobbyJoin, LobbyLeave, LobbyList, LobbyOpen, LobbyStart, LobbyStatusGet, MailboxPoll,
-        PayloadsGet, PayloadsPut, PeersStatus, ProposalsGet, ProposalsList, ProposalsPut,
-        ReceiptsList, ReceiptsPut, RejectionsList, RejectionsPut, VaultList, VaultObserveConfig,
-        VaultObserveTx, VaultRegister, VaultRetire, VaultStatusGet, VaultSync,
+        CeremonyStatusGet, DevicesList, DevicesOffer, DevicesReview, DevicesRevoke, EcdhBatch,
+        KeeperInfoGet, KeeperJoinRequest, LobbyClose, LobbyInspect, LobbyJoin, LobbyLeave,
+        LobbyList, LobbyOpen, LobbyStart, LobbyStatusGet, MailboxPoll, PayloadsGet, PayloadsPut,
+        PeersStatus, ProposalsGet, ProposalsList, ProposalsPut, ReceiptsList, ReceiptsPut,
+        RejectionsList, RejectionsPut, VaultList, VaultObserveConfig, VaultObserveTx,
+        VaultRegister, VaultRetire, VaultStatusGet, VaultSync, VaultUpdateSigners,
     },
 };
 use ome_protocol::vault::Config;
@@ -20,7 +21,7 @@ use ome_wire::messages::ecdh::EcdhPurpose;
 use serde_json::Value;
 use zeroize::Zeroizing;
 
-use super::{convert, lobby};
+use super::{convert, devices, lobby};
 use crate::{Keeper, ReshareRequest, Result, ceremony::dkg::DkgParams};
 
 /// Most audit entries one call returns.
@@ -95,6 +96,9 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
         };
         VaultRetire => |p: api::RetireParams| async move {
             Ok(convert::vault(&keeper.retire(p.vault.0, p.force.unwrap_or(false)).await?))
+        };
+        VaultUpdateSigners => |p: api::UpdateSignersParams| async move {
+            Ok(convert::vault(&keeper.update_signers(p.vault.0, p.proposal.0).await?))
         };
         VaultSync => |p: api::VaultParams| async move { keeper.sync(p.vault.0).await };
         VaultObserveTx => |p: api::TxParams| async move {
@@ -177,5 +181,11 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
         LobbyStart => |p| lobby::start(keeper, p);
         LobbyClose => |p: api::LobbyParams| lobby::close(keeper, p, api::LobbyRole::Host);
         LobbyLeave => |p: api::LobbyParams| lobby::close(keeper, p, api::LobbyRole::Guest);
+        DevicesOffer => |p| devices::offer(keeper, p);
+        DevicesList => |_| devices::list(keeper);
+        DevicesRevoke => |p: api::DeviceParams| async move {
+            keeper.revoke_device(ome_wire::IdentityPublic(p.identity.0)).await
+        };
+        DevicesReview => |p| devices::review(keeper, p);
     }
 }

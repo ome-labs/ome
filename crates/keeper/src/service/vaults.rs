@@ -376,7 +376,7 @@ impl Keeper {
             .collect()
     }
 
-    fn info(state: &State, vault: &[u8; 32], me: &IdentityPublic) -> Option<VaultInfo> {
+    pub(crate) fn info(state: &State, vault: &[u8; 32], me: &IdentityPublic) -> Option<VaultInfo> {
         let v = state.vaults.get(vault)?;
         Some(VaultInfo {
             manifest: v.committee.manifest.clone(),

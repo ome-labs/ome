@@ -207,6 +207,35 @@ through a mailbox. Everything else must be fresh and unseen.
   `ceremony.dkg`, so a person has agreed to found the vault.
 - **Leaving**: guests can leave, and hosts can close.
 
+## Paired devices
+
+A member's signing device (a phone) pairs with the member's keeper, which then carries the device's reviews and
+votes. The flows and the trust boundary are in `architecture/mobile.md`.
+
+- **Offers** (`devices.offer`): a one-time 32-byte secret, kept in memory only, open for 10 minutes; at most 8 open.
+  The offer (`ome-pair-v0:`) names the keeper, its configured relays, the member's name, the network label and the
+  fee payers the daemon trusts. Pairing needs a relay.
+- **Pairing**: every mailbox poll also fetches each open offer's pairing mailbox
+  (`ome_crypto::sealing::pairing`). The first `DevicePair` that opens under the offer's secret, is signed by its
+  sender and names the offer consumes it. The device's identity, transport key, signer key and name are stored in
+  the `devices` table, and the keeper answers `DevicePaired` through their pairwise mailbox.
+- **Reviews** (`devices.review`): the daemon names a stored proposal and passes what only it knows (the config it
+  read, the chain, labels, its simulation and, for a reshare rotation, the rotation this keeper reshared). The keeper
+  adds the manifest, the proposal and its payload and sends a `DeviceReview` to every device whose signer key is this
+  member's key in the vault.
+- **Votes**: a `DeviceVote` counts only if it arrives on a paired device's mailbox channel, is signed by that
+  device, and its slot's key in the manifest is the device's signer key. It is then verified, stored and replicated
+  exactly like a vote from the daemon, and the device gets `DeviceVoted` with the reason if it was refused.
+- **Revoking** (`devices.revoke`) forgets the device and sends it `DeviceUnpair`; a device may unpair itself the same
+  way. A revoked device's frames are dropped.
+- Device frames skip the replay window, like replicated records: they are idempotent, verified on their own, and may
+  wait days in a mailbox.
+
+**Signer swaps.** Keepers check votes against the manifest's signer keys, so after a swap each keeper adopts the new
+key with `vault.updateSigners(vault, proposal)`: the executed proposal's own `rotate_membership` call, through
+`ome_protocol::membership::swapped_manifest`, must match the newest config the daemon observed. The committee, its
+epoch and the share stay.
+
 ## RPC
 
 The keeper serves the keeper API of `ome-api` (`architecture/api.md`):
@@ -228,6 +257,7 @@ and the API shapes. Points are checked to be on the curve on the way in. Events 
 | spending  | `proposals.put` / `get` / `list`, `payloads.put` / `get`, `approvals.put` / `list`, `rejections.put` / `list`, `receipts.put` / `list`         |
 | lobbies   | `lobby.open`, `lobby.join`, `lobby.status`, `lobby.inspect`, `lobby.start`, `lobby.leave`, `lobby.close`, `lobby.list`                         |
 | mailboxes | `mailbox.poll`                                                                                                                                 |
+| devices   | `devices.offer`, `devices.list`, `devices.revoke`, `devices.review`, `vault.updateSigners`                                                     |
 
 ## Binary
 
@@ -242,7 +272,8 @@ and the API shapes. Points are checked to be on the curve on the way in. Events 
   - timeouts and the ECDH budget;
   - the sync and mailbox intervals and the mailbox TTL;
   - the pending-share lifetime.
-- **Startup**: `run` starts `Libp2pTransport`, plus `RelayMailbox` when relays are configured. When ready, it prints
+- **Startup**: `run` starts `Libp2pTransport`, plus `RelayMailbox` when relays are configured; the relay addresses
+  also go into device pairing offers. When ready, it prints
   one JSON line with its identity, transport key, peer id, addresses and socket, and writes the same to
   `keeper.json`. Logs go to stderr as text or JSON.
 - **Shutdown**: on SIGTERM or Ctrl-C it stops the node and removes the socket.
@@ -261,7 +292,8 @@ These are streamed to the daemon:
 - `Proposal`, `Payload`, `Approval`, `Rejection` and `Receipt` as records arrive;
 - `UnexpectedSpend`;
 - `Lobby` (status and roster size);
-- `Retired`.
+- `Retired`;
+- `DevicePaired`, `DeviceVote` and `DeviceUnpaired`.
 
 ## Tests
 
@@ -313,6 +345,12 @@ Checkpoint 7b adds:
   - guests see the roster and receive the same plan, secrets and protocol version;
   - a join with the wrong invite secret is refused;
   - a guest leaves and the host closes.
+- `tests/devices.rs`, a test phone on the in-memory mailbox:
+  - an offer pairs one device once, and a request sealed under another secret is ignored;
+  - the device receives a review with the manifest and proposal;
+  - its vote for a slot whose key it does not hold is refused, and its own slot's vote is replicated;
+  - a revoked device is told, gets no reviews and its votes are dropped;
+  - a keeper adopts a swapped signer key only once the observed config holds it, keeping its epoch and share.
 - `tests/rpc.rs`, on the wire over a real socket:
   - sessions must authenticate, and the socket is owner-only;
   - a daemon drives a live vault: ECDH, config observation, payloads, proposals and the audit log;

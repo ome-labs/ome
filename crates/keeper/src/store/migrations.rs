@@ -87,4 +87,14 @@ pub(super) const MIGRATIONS: &[&str] = &[
         updated_at INTEGER NOT NULL
     );
     ",
+    // 3: the member's paired signing devices (public keys only).
+    "
+    CREATE TABLE devices (
+        identity BLOB PRIMARY KEY,
+        transport BLOB NOT NULL UNIQUE,
+        signer_key BLOB NOT NULL,
+        name TEXT NOT NULL,
+        paired_at INTEGER NOT NULL
+    );
+    ",
 ];

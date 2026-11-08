@@ -2,8 +2,8 @@
 //! it out. It runs the DKG and reshare ceremonies with the other members' keepers, answers threshold ECDH requests with
 //! DLEQ-proven partials and gathers them for its own member, and activates, holds or destroys shares as the vault's
 //! on-chain committee changes, acting only on configs it can verify. It also stores and replicates proposals, payloads
-//! and votes, hosts and joins founding lobbies, uses relay mailboxes for offline members, and serves its member's
-//! daemon over a local JSON-RPC socket.
+//! and votes, hosts and joins founding lobbies, uses relay mailboxes for offline members, pairs its member's signing
+//! devices, and serves its member's daemon over a local JSON-RPC socket.
 //!
 //! A library first: [`Keeper::start`] takes its transport, clock and storage from outside, so tests run many keepers in
 //! one process and an app can embed one. See `architecture/keeper.md`.
@@ -27,6 +27,7 @@ pub use keeper::{Keeper, KeeperConfig, KeeperParts};
 pub use ome_api::keeper::{LobbyRole, LobbyStatus, Observation};
 pub use service::{
     ceremonies::{CeremonyInfo, DkgResult, NewMember, ReshareRequest, ReshareResult},
+    devices::DeviceReviewRequest,
     ecdh::MemberPartials,
     lobby::{LobbyInfo, LobbyOpen, LobbyPlanInfo},
     peers::MemberReachability,

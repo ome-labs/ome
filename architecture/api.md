@@ -71,6 +71,7 @@ The keeper maps its errors to kinds as follows:
 |           | `vault.observeConfig`                                                        | `{ vault, config: VaultConfig }` → `{ observation }`                           |
 |           | `vault.observeTx`                                                            | `{ vault, txHash }` → `{ known }` (an unknown spend raises `unexpectedSpend`)  |
 |           | `vault.sync`, `peers.status`                                                 | `{ vault }` → `null`; `Reachability[]`                                         |
+|           | `vault.updateSigners`                                                        | `{ vault, proposal }` (an executed signer swap) → `Vault`                      |
 | ECDH      | `ecdh.batch`                                                                 | `{ vault, epoch, purpose, points }` → `{ epoch, responses: MemberPartials[] }` |
 | ceremony  | `ceremony.dkg`, `ceremony.reshare`, `ceremony.status`                        | `DkgParams`, `ReshareParams` → `null`; `{ session }` → `Ceremony`              |
 | spending  | `proposals.put` / `get` / `list`, `payloads.put` / `get`                     | `{ vault, body }` → `{ id }` or `{ hash }`; bodies as `HexBytes`               |
@@ -79,6 +80,9 @@ The keeper maps its errors to kinds as follows:
 | lobbies   | `lobby.open`, `lobby.join`, `lobby.inspect`                                  | → `{ lobby, invite }`, `{ lobby }`, `Invite`                                   |
 |           | `lobby.status`, `lobby.list`, `lobby.start`, `lobby.close`, `lobby.leave`    | → `Lobby` (with its `plan` once started)                                       |
 | mailboxes | `mailbox.poll`                                                               | → `{ delivered }`                                                              |
+| devices   | `devices.offer`                                                              | `{ member, network, feePayers }` → `{ offer, expiresAt }` (`ome-pair-v0:`)     |
+|           | `devices.list`, `devices.revoke`                                             | → `Device[]`; `{ identity }` → `null`                                          |
+|           | `devices.review`                                                             | `DeviceReviewParams` → `{ devices }`                                           |
 
 `KeeperEvent` types:
 
@@ -88,7 +92,8 @@ The keeper maps its errors to kinds as follows:
 - `configMismatch` and `unexpectedSpend`, the alarms;
 - `proposal`, `payload`, `approval`, `rejection` and `receipt`;
 - `lobby`;
-- `pendingExpired`.
+- `pendingExpired`;
+- `devicePaired`, `deviceVote` (with `refused` when the keeper turned it down) and `deviceUnpaired`.
 
 ## Daemon methods
 

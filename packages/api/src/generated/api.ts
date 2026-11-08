@@ -1117,6 +1117,187 @@ export type Lobby = {
 };
 
 /**
+ * Params of `devices.offer`: what the pairing offer tells the device about its member.
+ */
+export type DeviceOfferParams = {
+  /**
+   * The member's display name.
+   */
+  member: string;
+  /**
+   * Network label, as in invites.
+   */
+  network: string;
+  /**
+   * Fee payer contracts the member's configuration trusts; the device allows a rotation to also call these.
+   */
+  feePayers: Array<Hex32>;
+};
+
+/**
+ * A pairing offer: the `ome-pair-v0:` string to show as a QR code. It holds a one-time secret.
+ */
+export type DeviceOffer = {
+  /**
+   * The offer string.
+   */
+  offer: string;
+  /**
+   * Unix time after which the keeper refuses it.
+   */
+  expiresAt: number;
+};
+
+/**
+ * A paired signing device.
+ */
+export type Device = {
+  /**
+   * The device's Ed25519 identity.
+   */
+  identity: Hex32;
+  /**
+   * Its X25519 transport key.
+   */
+  transport: Hex32;
+  /**
+   * The Grumpkin key it signs approvals with.
+   */
+  signerKey: Point;
+  /**
+   * Its display name.
+   */
+  name: string;
+  /**
+   * When it paired (unix seconds).
+   */
+  pairedAt: number;
+};
+
+/**
+ * Params naming a device.
+ */
+export type DeviceParams = {
+  /**
+   * The device's identity.
+   */
+  identity: Hex32;
+};
+
+/**
+ * The chain a vault lives on.
+ */
+export type Chain = {
+  /**
+   * L1 chain id, as a field.
+   */
+  chainId: Hex32;
+  /**
+   * Rollup version, as a field.
+   */
+  version: Hex32;
+};
+
+/**
+ * A name the daemon knows for an address.
+ */
+export type DeviceLabel = {
+  /**
+   * Address.
+   */
+  address: Hex32;
+  /**
+   * Label.
+   */
+  label: string;
+};
+
+/**
+ * The rotation this member's keeper reshared, sent with a `rotate_membership` proposal.
+ */
+export type DeviceRotation = {
+  /**
+   * New signer keys in slot order.
+   */
+  signers: Array<Point>;
+  /**
+   * New spending threshold.
+   */
+  threshold: number;
+  /**
+   * New viewing threshold.
+   */
+  viewingThreshold: number;
+  /**
+   * The reshared committee's verification shares.
+   */
+  verificationShares: Array<Point>;
+};
+
+/**
+ * Params of `devices.review`: a stored proposal to send to the device that holds this member's signing key in the
+ * vault, with what only the daemon knows.
+ */
+export type DeviceReviewParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * Proposal id; the keeper must hold the proposal and its payload.
+   */
+  proposal: Hex32;
+  /**
+   * The vault's display name.
+   */
+  vaultName: string;
+  /**
+   * The config note as the daemon read it.
+   */
+  config: VaultConfig;
+  /**
+   * The vault's chain.
+   */
+  chain: Chain;
+  /**
+   * Names for the addresses involved.
+   */
+  labels: Array<DeviceLabel>;
+  /**
+   * The daemon's simulation outcome.
+   */
+  simulation?: string;
+  /**
+   * For a reshare rotation, the rotation this member's keeper reshared.
+   */
+  rotation?: DeviceRotation;
+};
+
+/**
+ * The result of `devices.review`.
+ */
+export type DeviceReviewSent = {
+  /**
+   * Devices the review was sent to.
+   */
+  devices: number;
+};
+
+/**
+ * Params of `vault.updateSigners`.
+ */
+export type UpdateSignersParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * The executed signer-swap proposal.
+   */
+  proposal: Hex32;
+};
+
+/**
  * Something the member's daemon should know about.
  */
 export type KeeperEvent =
@@ -1278,6 +1459,47 @@ export type KeeperEvent =
        * Vault.
        */
       vault: Hex32;
+    }
+  | {
+      type: "devicePaired";
+      /**
+       * The device's identity.
+       */
+      identity: Hex32;
+      /**
+       * Its name.
+       */
+      name: string;
+    }
+  | {
+      type: "deviceVote";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Proposal id.
+       */
+      proposal: Hex32;
+      /**
+       * The device.
+       */
+      identity: Hex32;
+      /**
+       * Approval or rejection.
+       */
+      approved: boolean;
+      /**
+       * Why the vote was refused.
+       */
+      refused: string | null;
+    }
+  | {
+      type: "deviceUnpaired";
+      /**
+       * The device's identity.
+       */
+      identity: Hex32;
     }
   | {
       type: "pendingExpired";
@@ -3155,6 +3377,7 @@ export interface KeeperMethods {
   "vault.register": { params: RegisterParams; result: Vault };
   "vault.observeConfig": { params: ObserveConfigParams; result: Observed };
   "vault.retire": { params: RetireParams; result: Vault };
+  "vault.updateSigners": { params: UpdateSignersParams; result: Vault };
   "vault.sync": { params: VaultParams; result: null };
   "vault.observeTx": { params: TxParams; result: TxObserved };
   "peers.status": { params: VaultParams; result: Array<Reachability> };
@@ -3183,6 +3406,10 @@ export interface KeeperMethods {
   "lobby.start": { params: LobbyStartParams; result: Lobby };
   "lobby.close": { params: LobbyParams; result: Lobby };
   "lobby.leave": { params: LobbyParams; result: Lobby };
+  "devices.offer": { params: DeviceOfferParams; result: DeviceOffer };
+  "devices.list": { params: Empty; result: Array<Device> };
+  "devices.revoke": { params: DeviceParams; result: null };
+  "devices.review": { params: DeviceReviewParams; result: DeviceReviewSent };
 }
 
 /** Every daemon method: what it takes and returns. */

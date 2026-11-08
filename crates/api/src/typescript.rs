@@ -50,7 +50,9 @@ fn types(cfg: &Config) -> Vec<Declared> {
         k::PayloadParams, k::ReceiptParams, k::Receipt, k::TxParams, k::TxObserved, k::MailboxPolled,
         k::LobbyMemberParams, k::LobbyOpenParams, k::LobbyOpened, k::LobbyJoinParams, k::LobbyJoined,
         k::InviteParams, k::Invite, k::JoinRequestText, k::LobbyParams, k::LobbyStartParams, k::LobbyRole, k::LobbyStatus,
-        k::LobbyMember, k::LobbyPlan, k::Lobby, k::KeeperEvent,
+        k::LobbyMember, k::LobbyPlan, k::Lobby, k::DeviceOfferParams, k::DeviceOffer, k::Device, k::DeviceParams,
+        k::Chain, k::DeviceLabel, k::DeviceRotation, k::DeviceReviewParams, k::DeviceReviewSent, k::UpdateSignersParams,
+        k::KeeperEvent,
         // Daemon.
         d::DaemonInfo, d::Settings, d::SettingsPatch, d::RelaysParams, d::Profile, d::ProfileCreateParams,
         d::ServiceStatus, d::KeeperState, d::NodeStatus, d::SignerStatus, d::Secret, d::UnlockParams,

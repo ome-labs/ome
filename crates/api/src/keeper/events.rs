@@ -114,6 +114,31 @@ pub enum KeeperEvent {
         /// Vault.
         vault: Hex32,
     },
+    /// A signing device paired.
+    DevicePaired {
+        /// The device's identity.
+        identity: Hex32,
+        /// Its name.
+        name: String,
+    },
+    /// A paired device voted; the vote was stored and replicated unless `refused`.
+    DeviceVote {
+        /// Vault.
+        vault: Hex32,
+        /// Proposal id.
+        proposal: Hex32,
+        /// The device.
+        identity: Hex32,
+        /// Approval or rejection.
+        approved: bool,
+        /// Why the vote was refused.
+        refused: Option<String>,
+    },
+    /// A device was unpaired, by the member or by the device.
+    DeviceUnpaired {
+        /// The device's identity.
+        identity: Hex32,
+    },
     /// A reshare's committee never became active; its pending share was destroyed.
     PendingExpired {
         /// Vault.

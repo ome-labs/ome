@@ -184,7 +184,8 @@ async fn run(args: Run) -> Result<()> {
     if !listen.is_empty() {
         p2p.listen = multiaddrs(&listen)?;
     }
-    p2p.relays = multiaddrs(&pick(args.relay, file.relays.clone()))?;
+    let relays = pick(args.relay, file.relays.clone());
+    p2p.relays = multiaddrs(&relays)?;
     p2p.external = multiaddrs(&pick(args.external, file.external.clone()))?;
     let (transport, inbound) = Libp2pTransport::start(&keys.identity, p2p).await?;
     let addresses = transport.addresses().to_vec();
@@ -217,6 +218,7 @@ async fn run(args: Run) -> Result<()> {
         config: file.keeper_config(),
         addresses: addresses.clone(),
         mailbox,
+        relays,
     })?;
     let mut ready = public;
     ready["peerId"] = json!(transport.peer_id().to_string());

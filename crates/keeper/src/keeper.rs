@@ -29,10 +29,11 @@ use crate::{
     limits::RateLimiter,
     random::random_bytes,
     service::{
+        devices::{Offers, is_device_message},
         lobby::{LobbyRecord, is_lobby_message, lobby_admission},
         proposals::Vote,
     },
-    store::{ManifestStatus, Store},
+    store::{DeviceRecord, ManifestStatus, Store},
 };
 
 /// Tunables.
@@ -94,6 +95,8 @@ pub struct KeeperParts {
     pub addresses: Vec<String>,
     /// Relay mailboxes for members who are offline, if any relay is configured.
     pub mailbox: Option<Arc<dyn Mailbox>>,
+    /// The configured relays' addresses, each ending in `/p2p/<peer id>`, named in device pairing offers.
+    pub relays: Vec<String>,
 }
 
 /// A running keeper (cheap to clone).
@@ -109,6 +112,7 @@ pub(crate) struct Inner {
     pub(crate) config: KeeperConfig,
     pub(crate) addresses: Vec<String>,
     pub(crate) mailbox: Option<Arc<dyn Mailbox>>,
+    pub(crate) relays: Vec<String>,
     pub(crate) state: Mutex<State>,
     pub(crate) pending: SyncMutex<HashMap<[u8; 16], Waiting>>,
     pub(crate) events: broadcast::Sender<KeeperEvent>,
@@ -138,6 +142,10 @@ pub(crate) struct State {
     pub(crate) orphans: HashMap<[u8; 32], Vec<([u8; 32], Vote)>>,
     /// Lobbies this keeper hosts or joined.
     pub(crate) lobbies: HashMap<[u8; 16], LobbyRecord>,
+    /// Open device pairing offers.
+    pub(crate) offers: Offers,
+    /// Paired signing devices, by identity.
+    pub(crate) devices: HashMap<IdentityPublic, DeviceRecord>,
 }
 
 impl State {
@@ -180,6 +188,7 @@ impl Keeper {
             config,
             addresses,
             mailbox,
+            relays,
         } = parts;
         let now = clock.now();
         for session in store.running_ceremonies()? {
@@ -208,6 +217,8 @@ impl Keeper {
             last_mailbox_poll: 0,
             orphans: HashMap::new(),
             lobbies: HashMap::new(),
+            offers: Offers::new(),
+            devices: HashMap::new(),
         };
         let (events, _) = broadcast::channel(1024);
         let keeper = Self(Arc::new(Inner {
@@ -219,12 +230,14 @@ impl Keeper {
             config,
             addresses,
             mailbox,
+            relays,
             state: Mutex::new(state),
             pending: SyncMutex::new(HashMap::new()),
             events,
         }));
         keeper.load_lobbies()?;
         keeper.load_vaults()?;
+        keeper.load_devices()?;
 
         let receiver = keeper.clone();
         tokio::spawn(async move {
@@ -427,6 +440,12 @@ impl Keeper {
         }
         if is_lobby_message(&message.body) {
             self.on_lobby_frame(message, frame.channel).await;
+            return;
+        }
+        // A paired device's frames skip the replay window like replicated records: they are idempotent, verified on
+        // their own, and may wait days in a mailbox.
+        if is_device_message(&message.body) {
+            self.on_device_frame(message, frame.channel).await;
             return;
         }
         let signer = message.signer;

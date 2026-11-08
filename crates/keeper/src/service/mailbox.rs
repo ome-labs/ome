@@ -1,5 +1,6 @@
 //! Store-and-forward for members who are offline: frames a peer could not receive directly are sealed into that pair's
-//! daily mailbox (`ome_crypto::sealing::mailbox`) at the relays, and this keeper polls its own mailboxes.
+//! daily mailbox (`ome_crypto::sealing::mailbox`) at the relays, and this keeper polls its own mailboxes, its paired
+//! devices' and its open pairing offers'.
 
 use std::collections::HashMap;
 
@@ -59,6 +60,7 @@ impl Keeper {
         let Some(service) = self.0.mailbox.clone() else {
             return Ok(0);
         };
+        let mut delivered = self.poll_pairings().await?;
         let senders: Vec<[u8; 32]> = {
             let mut state = self.0.state.lock().await;
             state.last_mailbox_poll = self.now();
@@ -71,6 +73,7 @@ impl Keeper {
                 .map(|p| p.transport)
                 .collect();
             keys.extend(lobby_mailbox_senders(&state, &me));
+            keys.extend(Self::device_senders(&state));
             keys.sort_unstable();
             keys.dedup();
             keys
@@ -92,7 +95,6 @@ impl Keeper {
             }
         }
         let ids: Vec<[u8; 32]> = mailboxes.keys().copied().collect();
-        let mut delivered = 0;
         for chunk in ids.chunks(MAX_FETCH_MAILBOXES) {
             for _ in 0..MAX_FETCH_ROUNDS {
                 let envelopes = service.fetch(chunk.to_vec()).await?;

@@ -170,6 +170,11 @@ impl Harness {
             config: self.config.clone(),
             addresses: Vec::new(),
             mailbox: self.mailbox.clone().map(|m| m as Arc<dyn Mailbox>),
+            relays: if self.mailbox.is_some() {
+                vec!["/memory/relay".to_owned()]
+            } else {
+                Vec::new()
+            },
         })
         .unwrap()
     }
