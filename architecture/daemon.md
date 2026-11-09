@@ -128,8 +128,9 @@ payer the signer trusts in rotations and the one paired devices are told about.
     config version.
   - Calls come from the checked payload.
 - **`proposals.review`**: rebuilds the transaction on this device. `vaultTxOf` runs the wasm checks and Aztec's own
-  outer hash. Review then simulates the transaction with the stub account and shows what an approval and a rejection
-  would sign.
+  outer hash. Review then simulates the transaction with the vault's class overridden by `OmeVaultPreview` (the vault's
+  storage and functions, an entrypoint that needs no approvals; `pxe-integration.md`), so calls to the vault itself
+  run the contract's own checks, and shows what an approval and a rejection would sign.
 - **`approve`** / **`reject`**: sign with the signer, then store the vote with the keeper.
 - **`execute`**: tallies the votes into the witness, sends the transaction, stores the receipt, and reports
   `execution` progress.

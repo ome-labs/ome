@@ -123,6 +123,13 @@ A vault transaction is an Ome proposal.
    4. send through the vault's entrypoint, with the proposal's nonce pinned and `cancellable` set, so reusing the
       nonce cancels.
 
+**Previews.** `previewVaultTx` simulates a proposal before anyone has approved it. The vault's instance is overridden,
+for that simulation only, with the class of `OmeVaultPreview` (`contracts/ome_vault_preview`): the vault's storage
+and the functions a proposal can call on it, built from `ome_vault`'s modules, with an entrypoint that accepts any
+transaction. The request is built as for Aztec's stub account, whose entrypoint has the same ABI. Calls to the vault
+itself (`rotate_membership`, `set_threshold`) run the vault's real checks, so a rotation the contract would refuse is
+caught at review. The preview class is never deployed; its test pins its selectors to the vault's.
+
 **Fees.** The vault never pays its own fees. The entrypoint always runs with the `EXTERNAL` fee method; another
 method throws. A sponsored fee payer is paid by a call in the payload, so rotation approvals take the fee payers the
 member's configuration trusts (`architecture/signer.md`).
@@ -191,7 +198,7 @@ metadata leak stays (`architecture/daemon.md`).
 
 - both wallets agree with the keepers on the deployed config;
 - both find the vault's notes through threshold ECDH;
-- a transfer previews;
+- a transfer previews, and so does a `rotate_membership` proposal (daemon suite);
 - a proposal travels between keepers, is checked in the other wallet, and pays with two approvals;
 - one approval, a late proposal and a cancelled nonce are refused;
 - a reshare and a `rotate_membership` proposal (which pays its sponsored fee) take member 3 out:

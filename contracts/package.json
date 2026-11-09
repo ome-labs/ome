@@ -6,7 +6,8 @@
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
-    "./OmeVault.json": "./target/ome_vault-OmeVault.json"
+    "./OmeVault.json": "./target/ome_vault-OmeVault.json",
+    "./OmeVaultPreview.json": "./target/ome_vault_preview-OmeVaultPreview.json"
   },
   "scripts": {
     "build": "aztec compile",

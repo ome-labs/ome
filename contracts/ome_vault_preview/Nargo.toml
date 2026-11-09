@@ -1,0 +1,7 @@
+[package]
+name = "ome_vault_preview"
+type = "contract"
+
+[dependencies]
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "aztec" }
+ome_vault = { path = "../ome_vault" }

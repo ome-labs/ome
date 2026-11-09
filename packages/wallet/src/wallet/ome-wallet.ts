@@ -1,8 +1,5 @@
 import { SchnorrInitializerlessAccountContract } from "@aztec-labs/accounts/schnorr";
-import {
-  StubSchnorrAccountContractArtifact,
-  createStubSchnorrAccount,
-} from "@aztec-labs/accounts/schnorr/stub";
+import { createStubSchnorrAccount } from "@aztec-labs/accounts/schnorr/stub";
 import type { Account } from "@aztec-labs/aztec.js/account";
 import { NO_FROM, type NoFrom } from "@aztec-labs/aztec.js/account";
 import {
@@ -72,7 +69,7 @@ import { fromApiPoint } from "../aztec/convert.ts";
 import { type PartialsSource, ThresholdEcdhProvider } from "../keys/threshold-ecdh.ts";
 import { ThresholdKeyStore } from "../keys/threshold-key-store.ts";
 import { VaultAccountContract } from "../vault/account.ts";
-import { vaultArtifact } from "../vault/artifact.ts";
+import { vaultArtifact, vaultPreviewArtifact } from "../vault/artifact.ts";
 import { readVaultConfig } from "../vault/config.ts";
 import type { VaultDeployment } from "../vault/deployment.ts";
 import { thresholdAccountKeys } from "../vault/keys.ts";
@@ -164,7 +161,7 @@ export class OmeWallet extends BaseWallet {
   readonly #vaults = new Map<string, VaultRecord>();
   readonly #pinnedNonces = new Map<string, Fr>();
   readonly #taggingStrategy: ResolveTaggingSecretStrategy | undefined;
-  #stubClassId: Fr | undefined;
+  #previewClassId: Fr | undefined;
 
   private constructor(
     pxe: PXE,
@@ -480,19 +477,22 @@ export class OmeWallet extends BaseWallet {
   }
 
   /**
-   * Simulates a vault transaction before approvals exist, with the vault's class swapped for Aztec's stub account
-   * (whose authorization always passes). Shows the effects of app calls; calls into the vault itself are not
-   * previewable this way.
+   * Simulates a vault transaction before approvals exist, with the vault's class swapped for `OmeVaultPreview` (the
+   * vault's storage and functions, with an entrypoint that needs no approvals). App calls and calls into the vault
+   * itself (`rotate_membership`, `set_threshold`) both run, the latter with the vault's own checks. The request is
+   * built as for Aztec's stub account, whose entrypoint has the same ABI.
    */
   async previewVaultTx(tx: VaultTx): Promise<TxSimulationResult> {
     const { deployment } = this.#vault(tx.vault);
     await this.pxe.sync();
-    const stubClassId = await this.#registerStubClass();
+    const previewClassId = await this.#registerPreviewClass();
     const instance = await this.pxe.getContractInstance(tx.vault);
     if (!instance) throw new Error("Vault instance is not registered");
     const overrides = new SimulationOverrides({
       contracts: {
-        [tx.vault.toString()]: { instance: { ...instance, currentContractClassId: stubClassId } },
+        [tx.vault.toString()]: {
+          instance: { ...instance, currentContractClassId: previewClassId },
+        },
       },
     });
     const feeOptions = await this.completeFeeOptions({
@@ -648,14 +648,12 @@ export class OmeWallet extends BaseWallet {
     return captured;
   }
 
-  async #registerStubClass(): Promise<Fr> {
-    if (!this.#stubClassId) {
-      await this.pxe.registerContractClass(StubSchnorrAccountContractArtifact);
-      this.#stubClassId = (
-        await getContractClassFromArtifact(StubSchnorrAccountContractArtifact)
-      ).id;
+  async #registerPreviewClass(): Promise<Fr> {
+    if (!this.#previewClassId) {
+      await this.pxe.registerContractClass(vaultPreviewArtifact());
+      this.#previewClassId = (await getContractClassFromArtifact(vaultPreviewArtifact())).id;
     }
-    return this.#stubClassId;
+    return this.#previewClassId;
   }
 
   #resolveTaggingStrategy(request: TaggingSecretStrategyRequest): Promise<TaggingSecretStrategy> {

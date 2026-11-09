@@ -226,6 +226,9 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       }, "the rotation proposal");
       const id = rotation.proposal as Hex32;
       await proposal(bob, id);
+      // The review runs rotate_membership itself, with the contract's own checks of the new committee.
+      const review = await bob.client.call("proposals.review", { vault, id });
+      expect(review.simulation).toMatchObject({ ok: true, error: null });
       await bob.client.call("proposals.approve", { vault, id });
       await alice.client.call("proposals.approve", { vault, id });
       await status(alice, id, "ready");
