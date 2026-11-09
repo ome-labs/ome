@@ -140,15 +140,23 @@ jobs:
           keychain="$RUNNER_TEMP/sign.keychain-db"
           password=$(openssl rand -hex 24)
           printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/sign.p12"
+          echo "::group::Keychain"
           security create-keychain -p "$password" "$keychain"
           security set-keychain-settings -lut 900 "$keychain"
           security unlock-keychain -p "$password" "$keychain"
+          # codesign looks up the certificate's chain through the search list, so the keychain goes on it.
+          read -r -a existing <<< "$(security list-keychains -d user | tr -d '"' | xargs)"
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
           security import "$RUNNER_TEMP/sign.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
           rm -f "$RUNNER_TEMP/sign.p12"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          # Lets codesign use the key without a prompt; the -T access rule above already allows it.
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null \
+            || echo "::warning::set-key-partition-list failed; relying on the codesign access rule"
+          security find-identity -p codesigning "$keychain"
+          echo "::endgroup::"
           # Self-signed, so not "valid" to find-identity -v; codesign signs with it all the same.
           identity=$(security find-identity -p codesigning "$keychain" | awk '/\)/ { print $2; exit }')
-          [ -n "$identity" ] || { echo "::error::No signing identity in MACOS_SIGN_P12"; exit 1; }
+          [ -n "$identity" ] || { echo "::error::No code-signing identity in MACOS_SIGN_P12"; exit 1; }
           codesign --force --keychain "$keychain" --sign "$identity" --identifier network.ome.ome bin/ome
           codesign --force --keychain "$keychain" --sign "$identity" --identifier network.ome.keeper bin/ome-keeper
       - name: Remove the signing keychain
