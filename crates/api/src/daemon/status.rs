@@ -38,6 +38,9 @@ pub struct Settings {
     pub prover_enabled: bool,
     /// Longest signer unlock window.
     pub unlock_timeout_secs: u32,
+    /// Salt of the `SponsoredFPC` instance that pays this member's transactions: zero for the canonical one (local
+    /// network, Testnet), another for a member's own deployment where none is sponsored (Alpha).
+    pub fee_payer_salt: Hex32,
 }
 
 /// Params of `config.set`: the settings to change.
@@ -56,6 +59,10 @@ pub struct SettingsPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub unlock_timeout_secs: Option<u32>,
+    /// Salt of the fee payer's `SponsoredFPC` instance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub fee_payer_salt: Option<Hex32>,
 }
 
 /// Params of `relays.set`.

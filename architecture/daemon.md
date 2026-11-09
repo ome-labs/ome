@@ -75,9 +75,16 @@ command line or in the environment.
 
 ## Fees
 
-Every transaction pays through the sponsored fee payer (the canonical `SponsoredFPC`, salt 0), which the local
-network and Testnet provide. The vault never pays its own fees. The same address is the fee payer the signer trusts
-in rotations. Alpha has no sponsored fee payer, so a configurable fee payer is still to come.
+Every transaction pays through a `SponsoredFPC` instance, chosen by its salt (`settings.feePayerSalt`, changed live
+with `config.set`):
+
+- **zero** (the default): the canonical instance the local network and Testnet provide;
+- **another salt**: a member's own deployment of `SponsoredFPC`, funded with Fee Juice, for a network where nobody
+  sponsors (Alpha). Deploy it with that salt and bridge Fee Juice to its address; the daemon derives the address
+  from the salt.
+
+The vault never pays its own fees, and never in public: the fee payer contract does. The same address is the fee
+payer the signer trusts in rotations and the one paired devices are told about.
 
 ## Founding
 
@@ -117,6 +124,22 @@ in rotations. Alpha has no sponsored fee payer, so a configurable fee payer is s
 - **`approve`** / **`reject`**: sign with the signer, then store the vote with the keeper.
 - **`execute`**: tallies the votes into the witness, sends the transaction, stores the receipt, and reports
   `execution` progress.
+
+## Tokens and activity
+
+- `tokens.add` registers a token's instance in the PXE: the one the node publishes, or, for a token whose instance
+  was never published, the one its deployment (`deployment`: salt, deployer, and the constructor's admin, name,
+  symbol and decimals) derives, refused if it derives another address.
+- `vault.activity` lists proposals and **received transfers**: the tracked tokens' private `Transfer` events to the
+  vault that its PXE decrypted (through threshold ECDH, like notes), timed by their blocks. The vault's own change is
+  not "received".
+- `vault.counterparties` lists who paid the vault. A counterparty that paid before a member was removed is
+  **exposed**: the removed member's PXE derived the tagging secret it shares with the vault, so it can still tell
+  when that counterparty pays again, never what or how much, until the counterparty handshakes with the vault anew.
+  When a rotation that removed members activates, the daemon records it (in chain time) and emits
+  `handshakeAdvised` if any counterparty is exposed, so the member can ask them to.
+- Address-book contacts are registered in the PXE as tagging sources (`registerSender`), so their notes to the vault
+  are found by the tags they share with it.
 
 ## Membership
 

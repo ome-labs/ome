@@ -258,3 +258,22 @@ pub struct Contact {
     /// Label.
     pub label: String,
 }
+
+/// Someone who paid the vault, from the transfers it received.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Counterparty {
+    /// Sender.
+    pub address: Hex32,
+    /// The address-book label, if any.
+    pub label: Option<String>,
+    /// Transfers received from it.
+    pub received: u32,
+    /// First transfer (unix seconds).
+    pub first_at: u64,
+    /// Latest transfer (unix seconds).
+    pub last_at: u64,
+    /// It paid the vault before a member was removed: that member can still tell when it pays again, until it
+    /// handshakes with the vault anew.
+    pub exposed: bool,
+}

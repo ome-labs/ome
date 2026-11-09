@@ -62,4 +62,12 @@ pub enum DaemonEvent {
         /// Its state.
         rotation: Box<RotationState>,
     },
+    /// A rotation removed members, and counterparties who paid the vault before it should handshake with the vault
+    /// again so the removed members stop seeing when they pay (`vault.counterparties` lists them).
+    HandshakeAdvised {
+        /// Vault.
+        vault: Hex32,
+        /// Exposed counterparties.
+        counterparties: u32,
+    },
 }

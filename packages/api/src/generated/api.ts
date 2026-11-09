@@ -1567,6 +1567,11 @@ export type Settings = {
    * Longest signer unlock window.
    */
   unlockTimeoutSecs: number;
+  /**
+   * Salt of the `SponsoredFPC` instance that pays this member's transactions: zero for the canonical one (local
+   * network, Testnet), another for a member's own deployment where none is sponsored (Alpha).
+   */
+  feePayerSalt: Hex32;
 };
 
 /**
@@ -1585,6 +1590,10 @@ export type SettingsPatch = {
    * Longest unlock window, 60 to 86,400 seconds.
    */
   unlockTimeoutSecs?: number;
+  /**
+   * Salt of the fee payer's `SponsoredFPC` instance.
+   */
+  feePayerSalt?: Hex32;
 };
 
 /**
@@ -3288,6 +3297,17 @@ export type DaemonEvent =
        * Its state.
        */
       rotation: RotationState;
+    }
+  | {
+      type: "handshakeAdvised";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Exposed counterparties.
+       */
+      counterparties: number;
     };
 
 /**
@@ -3330,6 +3350,11 @@ export type TokenParams = {
    * Token contract.
    */
   token: Hex32;
+  /**
+   * How the token was deployed, for a token whose instance was never published: the daemon derives the instance
+   * from it and refuses one that derives another address.
+   */
+  deployment?: TokenDeployment;
 };
 
 /**
@@ -3428,6 +3453,67 @@ export type SwapSignerParams = {
   signerKey: Point;
 };
 
+/**
+ * A standard token's deployment: the `Token` constructor's arguments, its salt and its deployer.
+ */
+export type TokenDeployment = {
+  /**
+   * Deployment salt.
+   */
+  salt: Hex32;
+  /**
+   * Deployer address (zero for a universal deployment).
+   */
+  deployer: Hex32;
+  /**
+   * The constructor's `admin`.
+   */
+  admin: Hex32;
+  /**
+   * Name.
+   */
+  name: string;
+  /**
+   * Symbol.
+   */
+  symbol: string;
+  /**
+   * Decimals.
+   */
+  decimals: number;
+};
+
+/**
+ * Someone who paid the vault, from the transfers it received.
+ */
+export type Counterparty = {
+  /**
+   * Sender.
+   */
+  address: Hex32;
+  /**
+   * The address-book label, if any.
+   */
+  label: string | null;
+  /**
+   * Transfers received from it.
+   */
+  received: number;
+  /**
+   * First transfer (unix seconds).
+   */
+  firstAt: number;
+  /**
+   * Latest transfer (unix seconds).
+   */
+  lastAt: number;
+  /**
+   * It paid the vault before a member was removed: that member can still tell when it pays again, until it
+   * handshakes with the vault anew.
+   */
+  exposed: boolean;
+};
+
 /** Every keeper method: what it takes and returns. */
 export interface KeeperMethods {
   "session.auth": { params: AuthParams; result: null };
@@ -3504,6 +3590,7 @@ export interface DaemonMethods {
   "vault.peers": { params: VaultParams; result: Array<MemberReachability> };
   "vault.audit": { params: VaultAuditParams; result: Array<AuditView> };
   "vault.activity": { params: VaultParams; result: Array<ActivityEntry> };
+  "vault.counterparties": { params: VaultParams; result: Array<Counterparty> };
   "vault.alias": { params: AliasParams; result: Array<VaultSummary> };
   "vault.retire": { params: VaultParams; result: Array<VaultSummary> };
   "vault.use": { params: VaultParams; result: Array<VaultSummary> };

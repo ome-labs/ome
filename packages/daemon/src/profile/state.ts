@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
   nodeUrl: "http://localhost:8080",
   relays: [],
   proverEnabled: false,
+  feePayerSalt: `0x${"00".repeat(32)}`,
   unlockTimeoutSecs: 3600,
 };
 

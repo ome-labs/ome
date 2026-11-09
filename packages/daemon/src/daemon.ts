@@ -5,7 +5,7 @@ import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee";
 import { Fr } from "@aztec-labs/foundation/curves/bn254";
 import { GrumpkinScalar } from "@aztec-labs/foundation/curves/grumpkin";
 import { SponsoredFPCContract } from "@aztec-labs/noir-contracts.js/SponsoredFPC";
-import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import { getContractInstanceFromInstantiationParams } from "@aztec-labs/stdlib/contract";
 import {
   API_VERSION,
@@ -141,6 +141,19 @@ export class Daemon implements Context {
 
   fee() {
     return { paymentMethod: new SponsoredFeePaymentMethod(this.feePayer()) };
+  }
+
+  /**
+   * Pays through the `SponsoredFPC` instance with `salt`: zero is the canonical one the local network and Testnet
+   * provide; on Alpha a member deploys and funds their own. It is also the fee payer the signer trusts in rotations
+   * and that paired devices are told about.
+   */
+  async setFeePayer(salt: string): Promise<void> {
+    const fpc = await getContractInstanceFromInstantiationParams(SponsoredFPCContract.artifact, {
+      salt: Fr.fromString(salt),
+    });
+    await this.wallet().registerContract(fpc, SponsoredFPCContract.artifact);
+    this.#feePayer = fpc.address;
   }
 
   emit(event: DaemonEvent): void {
@@ -290,11 +303,7 @@ export class Daemon implements Context {
       pxe: { dataDirectory: this.paths.pxe, proverEnabled: settings.proverEnabled },
     });
     this.#wallet = wallet;
-    const fpc = await getContractInstanceFromInstantiationParams(SponsoredFPCContract.artifact, {
-      salt: new Fr(0n),
-    });
-    await wallet.registerContract(fpc, SponsoredFPCContract.artifact);
-    this.#feePayer = fpc.address;
+    await this.setFeePayer(settings.feePayerSalt);
     const stored = await this.secrets().get(ACCOUNT_SECRET);
     if (!stored) throw new DaemonError("failed", "the member's account secrets are missing");
     const account = JSON.parse(stored.toString("utf8")) as Account;
@@ -314,6 +323,9 @@ export class Daemon implements Context {
       if ("vault" in event) this.emit({ type: "vaultActivity", vault: event.vault });
       this.devices.onKeeperEvent(event);
     });
+    for (const contact of this.state.file.contacts)
+      // oxlint-disable-next-line no-await-in-loop
+      await wallet.registerSender(AztecAddress.fromStringUnsafe(contact.address));
     await this.vaults.load();
     await this.membership.load();
     this.#sync = setInterval(() => void this.vaults.sync(), SYNC_INTERVAL_MS);

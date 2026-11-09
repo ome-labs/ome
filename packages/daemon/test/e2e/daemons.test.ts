@@ -1,3 +1,5 @@
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 // Three members found a 2-of-3 vault through their daemons, pay from it with two approvals, see a rejection block a
 // proposal, and then rotate: Carol leaves and a newcomer joins with a join request, receiving the vault's protocol
 // secrets in the reshare. Everything goes through the daemons' sockets, as an app would; each daemon runs its own
@@ -130,6 +132,36 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       ).toBe(true);
     });
 
+    it("shows a transfer into the vault as received, and refuses a token deployment that is not its own", async () => {
+      const bobAccount = (await bob.client.call("status", {})).profile?.account as Hex32;
+      await alice.client.call("contacts.put", { address: bobAccount, label: "bob" });
+      await TokenContract.at(AztecAddress.fromStringUnsafe(token), bob.daemon.wallet())
+        .methods.transfer(AztecAddress.fromStringUnsafe(vault), 10n)
+        .send({ from: AztecAddress.fromStringUnsafe(bobAccount), fee: bob.daemon.fee() });
+      const received = await until(async () => {
+        const entries = await alice.client.call("vault.activity", { vault });
+        return entries.find((e) => e.kind === "received" && e.from === bobAccount);
+      }, "Bob's transfer in Alice's activity");
+      expect(received).toMatchObject({ kind: "received", amount: "10" });
+      const [counterparty] = await alice.client.call("vault.counterparties", { vault });
+      expect(counterparty).toMatchObject({ address: bobAccount, label: "bob", exposed: false });
+
+      await expect(
+        carol.client.call("tokens.add", {
+          vault,
+          token,
+          deployment: {
+            salt: `0x${"00".repeat(32)}`,
+            deployer: bobAccount,
+            admin: bobAccount,
+            name: "Ome Test",
+            symbol: "OMET",
+            decimals: 18,
+          },
+        }),
+      ).rejects.toThrow(/another address/u);
+    });
+
     it("blocks a proposal two members reject", async () => {
       const created = await alice.client.call("proposals.create", {
         vault,
@@ -205,7 +237,7 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
 
       // Dave's daemon now holds the vault, its committee and its secrets, and reads its balance.
       await dave.client.call("tokens.add", { vault, token });
-      expect(await until(() => balance(dave), "Dave's balance")).toBe(1000n * 10n ** 18n - 100n);
+      expect(await until(() => balance(dave), "Dave's balance")).toBe(1000n * 10n ** 18n - 90n);
 
       // A payment after the rotation, approved by the newcomer.
       const bobAccount = (await bob.client.call("status", {})).profile?.account as Hex32;
@@ -227,7 +259,7 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       expect((await alice.client.call("proposals.execute", { vault, id: fresh.id })).status).toBe(
         "executed",
       );
-      const after = 1000n * 10n ** 18n - 105n;
+      const after = 1000n * 10n ** 18n - 95n;
       for (const m of [alice, dave]) {
         // oxlint-disable-next-line no-await-in-loop
         await until(
@@ -235,6 +267,14 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
           `${m.name}'s new balance`,
         );
       }
+
+      // Bob paid the vault while Carol was a member: she can still tell when he pays it again, so Alice is advised to
+      // ask him to handshake with the vault anew.
+      const [exposed] = await alice.client.call("vault.counterparties", { vault });
+      expect(exposed).toMatchObject({ address: bobAccount, exposed: true });
+      expect(alice.events.some((e) => e.type === "handshakeAdvised" && e.vault === vault)).toBe(
+        true,
+      );
 
       // Carol left: the new committee does not answer her keeper, so her daemon cannot see what the vault holds now
       // (at most what it knew before she left). She retires the share her keeper kept.

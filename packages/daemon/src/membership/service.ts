@@ -31,6 +31,7 @@ import { readAllJson, writeJson } from "../profile/files.ts";
 import { summaryOf } from "../proposals/intents.ts";
 import type { Stored } from "../proposals/views.ts";
 import { decodeHandoff, encodeHandoff } from "../secrets/handoff.ts";
+import { counterparties } from "../vaults/activity.ts";
 import type { DeploymentRecord, VaultRecord } from "../vaults/records.ts";
 import { secretsName } from "../vaults/records.ts";
 
@@ -578,6 +579,7 @@ export class MembershipService {
         2000,
       );
       this.#mark(rotating, "execute", "done");
+      await this.#recordRemoval(plan);
       return;
     }
     const nullifier = await siloNullifier(
@@ -614,5 +616,27 @@ export class MembershipService {
     record.status = "active";
     await this.#context.vaults.save(record);
     await this.#context.vaults.attach(plan.vault);
+    await this.#recordRemoval(plan);
+  }
+
+  /**
+   * Notes when a rotation that removed members took effect, and advises re-handshakes: counterparties who paid the vault
+   * before it can still be noticed by the removed members until they handshake with the vault again.
+   */
+  async #recordRemoval(plan: PlanFile): Promise<void> {
+    if (plan.remove.length === 0) return;
+    const record = this.#context.vaults.record(plan.vault);
+    // Chain time: received transfers are timed by their blocks.
+    record.removals = [...(record.removals ?? []), await this.#context.wallet().chainTime()];
+    await this.#context.vaults.save(record);
+    const exposed = (await counterparties(this.#context, plan.vault).catch(() => [])).filter(
+      (c) => c.exposed,
+    );
+    if (exposed.length > 0)
+      this.#context.emit({
+        type: "handshakeAdvised",
+        vault: plan.vault,
+        counterparties: exposed.length,
+      });
   }
 }

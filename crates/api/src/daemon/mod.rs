@@ -33,8 +33,8 @@ pub use status::{
 use ts_rs::TS;
 pub use vaults::{
     ActivityEntry, AuditView, CommitteeMember, CommitteeView, ConfigView, Contact, ContractInfo,
-    FoundingInfo, MemberReachability, NamedKey, TokenBalance, TokenInfo, VaultDetails,
-    VaultSummary,
+    Counterparty, FoundingInfo, MemberReachability, NamedKey, TokenBalance, TokenInfo,
+    VaultDetails, VaultSummary,
 };
 
 use crate::{
@@ -62,12 +62,34 @@ pub struct AliasParams {
 }
 
 /// Params of `tokens.add`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct TokenParams {
     /// Vault.
     pub vault: Hex32,
     /// Token contract.
     pub token: Hex32,
+    /// How the token was deployed, for a token whose instance was never published: the daemon derives the instance
+    /// from it and refuses one that derives another address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub deployment: Option<TokenDeployment>,
+}
+
+/// A standard token's deployment: the `Token` constructor's arguments, its salt and its deployer.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct TokenDeployment {
+    /// Deployment salt.
+    pub salt: Hex32,
+    /// Deployer address (zero for a universal deployment).
+    pub deployer: Hex32,
+    /// The constructor's `admin`.
+    pub admin: Hex32,
+    /// Name.
+    pub name: String,
+    /// Symbol.
+    pub symbol: String,
+    /// Decimals.
+    pub decimals: u8,
 }
 
 /// Params of `contracts.functions`.
@@ -155,6 +177,8 @@ methods! {
     VaultAudit = "vault.audit" (VaultAuditParams) -> Vec<AuditView>;
     /// Proposals and received transfers, newest first.
     VaultActivity = "vault.activity" (VaultParams) -> Vec<ActivityEntry>;
+    /// Who has paid the vault, and whether a member removed since could still notice their payments.
+    VaultCounterparties = "vault.counterparties" (VaultParams) -> Vec<Counterparty>;
     /// Sets a vault's alias.
     VaultAlias = "vault.alias" (AliasParams) -> Vec<VaultSummary>;
     /// Retires the viewing share the keeper kept for a vault whose newer committee it could not verify: after a

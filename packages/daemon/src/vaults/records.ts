@@ -30,6 +30,8 @@ export interface VaultRecord {
   config: { config: VaultConfig; readAt: number; matchesCommittee: boolean } | null;
   /** `joining` until a rotation that adds this member activates. */
   status: "active" | "removed" | "joining";
+  /** When rotations that removed members activated (chain time, unix seconds), for the counterparties they expose. */
+  removals?: number[];
 }
 
 /** The setup `deriveVault` takes, from a record and its secrets. */

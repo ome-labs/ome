@@ -100,21 +100,21 @@ The keeper maps its errors to kinds as follows:
 The daemon is built in phase 12; these are the methods it will implement. They follow Clave's daemon contract, with
 two changes: times are Unix seconds, and hex values are typed.
 
-| Area       | Methods                                                                                                                                  |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| session    | `session.auth`, `events.subscribe`                                                                                                       |
-| daemon     | `daemon.info` (with `apiVersion`), `daemon.stop`, `status`, `profile.create`                                                             |
-| settings   | `config.get`, `config.set` (a `SettingsPatch`), `relays.set`                                                                             |
-| signer     | `signer.status`, `signer.unlock` (`Secret` is `{ passphrase }` or `{ key }`), `signer.lock`, `signer.sealingKey`                         |
-| node       | `node.status`                                                                                                                            |
-| founding   | `lobby.inspect`, `lobby.create`, `lobby.join`, `lobby.get`, `lobby.list`, `lobby.start`, `lobby.leave`, `founding.begin`, `founding.get` |
-| vaults     | `vault.list`, `vault.details`, `vault.peers`, `vault.audit`, `vault.activity`, `vault.alias`, `vault.use`, `vault.retire`                |
-| tokens     | `tokens.list`, `tokens.add`, `tokens.deployTest` (local network only)                                                                    |
-| proposals  | `proposals.list`, `get`, `preview`, `create`, `review`, `approve`, `reject`, `execute`, `cancel`                                         |
-| contracts  | `contracts.functions`                                                                                                                    |
-| contacts   | `contacts.list`, `contacts.put`, `contacts.remove`                                                                                       |
-| membership | `membership.request`, `membership.plan`, `membership.begin`, `membership.get`, `membership.list`, `membership.swapSigner`                |
-| devices    | `devices.pair`, `devices.list`, `devices.revoke`, `devices.enroll`, `devices.forward`                                                    |
+| Area       | Methods                                                                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| session    | `session.auth`, `events.subscribe`                                                                                                                |
+| daemon     | `daemon.info` (with `apiVersion`), `daemon.stop`, `status`, `profile.create`                                                                      |
+| settings   | `config.get`, `config.set` (a `SettingsPatch`), `relays.set`                                                                                      |
+| signer     | `signer.status`, `signer.unlock` (`Secret` is `{ passphrase }` or `{ key }`), `signer.lock`, `signer.sealingKey`                                  |
+| node       | `node.status`                                                                                                                                     |
+| founding   | `lobby.inspect`, `lobby.create`, `lobby.join`, `lobby.get`, `lobby.list`, `lobby.start`, `lobby.leave`, `founding.begin`, `founding.get`          |
+| vaults     | `vault.list`, `vault.details`, `vault.peers`, `vault.audit`, `vault.activity`, `vault.counterparties`, `vault.alias`, `vault.use`, `vault.retire` |
+| tokens     | `tokens.list`, `tokens.add`, `tokens.deployTest` (local network only)                                                                             |
+| proposals  | `proposals.list`, `get`, `preview`, `create`, `review`, `approve`, `reject`, `execute`, `cancel`                                                  |
+| contracts  | `contracts.functions`                                                                                                                             |
+| contacts   | `contacts.list`, `contacts.put`, `contacts.remove`                                                                                                |
+| membership | `membership.request`, `membership.plan`, `membership.begin`, `membership.get`, `membership.list`, `membership.swapSigner`                         |
+| devices    | `devices.pair`, `devices.list`, `devices.revoke`, `devices.enroll`, `devices.forward`                                                             |
 
 - `proposals.approve` and `proposals.reject` take an optional `secret`, which unseals a locked signer for that one
   call.
@@ -142,7 +142,8 @@ two changes: times are Unix seconds, and hex values are typed.
 - `lobby` and `founding`;
 - `vaultActivity`;
 - `execution`;
-- `rotation`.
+- `rotation`;
+- `handshakeAdvised` (a rotation removed members, and counterparties who paid before it are exposed).
 
 ## Versioning
 

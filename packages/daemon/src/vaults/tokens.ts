@@ -1,7 +1,12 @@
 import { readFieldCompressedString } from "@aztec-labs/aztec.js/utils";
+import { Fr } from "@aztec-labs/foundation/curves/bn254";
 import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
-import type { Hex32, TokenBalance, TokenInfo } from "@ome-labs/api";
+import {
+  type ContractInstanceWithAddress,
+  getContractInstanceFromInstantiationParams,
+} from "@aztec-labs/stdlib/contract";
+import type { Hex32, TokenBalance, TokenDeployment, TokenInfo } from "@ome-labs/api";
 
 import type { Context } from "../context.ts";
 import { DaemonError } from "../errors.ts";
@@ -10,16 +15,53 @@ import { DaemonError } from "../errors.ts";
 const LOCAL_CHAIN_ID = 31_337;
 
 /**
- * A token's name, symbol and decimals. They are public, so they are read from the member's own account: a private call
- * as the vault would need an approved proposal. The token's published instance is registered in the member's PXE
- * first, so a member who did not deploy it can still read and transfer it.
+ * The token's instance: from its deployment when given (checked to derive the token's address), else as the node
+ * publishes it.
  */
-export async function tokenInfo(context: Context, vault: Hex32, token: Hex32): Promise<TokenInfo> {
+async function tokenInstance(
+  context: Context,
+  address: AztecAddress,
+  deployment: TokenDeployment | undefined,
+): Promise<ContractInstanceWithAddress> {
+  if (deployment) {
+    const instance = await getContractInstanceFromInstantiationParams(TokenContract.artifact, {
+      salt: Fr.fromString(deployment.salt),
+      deployer: AztecAddress.fromStringUnsafe(deployment.deployer),
+      constructorArgs: [
+        AztecAddress.fromStringUnsafe(deployment.admin),
+        deployment.name,
+        deployment.symbol,
+        deployment.decimals,
+      ],
+    });
+    if (!instance.address.equals(address))
+      throw new DaemonError("invalid", "this deployment derives another address than the token's");
+    return instance;
+  }
+  const instance = await context.node.node.getContract(address);
+  if (!instance)
+    throw new DaemonError(
+      "not-found",
+      `no published token at ${address.toString()}; pass its deployment to add it`,
+    );
+  return instance;
+}
+
+/**
+ * A token's name, symbol and decimals. They are public, so they are read from the member's own account: a private call
+ * as the vault would need an approved proposal. The token's instance is registered in the member's PXE first, so a
+ * member who did not deploy it can still read and transfer it: the published one, or the one its deployment derives.
+ */
+export async function tokenInfo(
+  context: Context,
+  vault: Hex32,
+  token: Hex32,
+  deployment?: TokenDeployment,
+): Promise<TokenInfo> {
   context.vaults.record(vault);
   const from = context.account();
   const address = AztecAddress.fromStringUnsafe(token);
-  const instance = await context.node.node.getContract(address);
-  if (!instance) throw new DaemonError("not-found", `no published token at ${token}`);
+  const instance = await tokenInstance(context, address, deployment);
   await context.wallet().registerContract(instance, TokenContract.artifact);
   const contract = TokenContract.at(address, context.wallet());
   const read = async (method: "private_get_name" | "private_get_symbol" | "private_get_decimals") =>

@@ -12,6 +12,7 @@ import type {
 import type { Daemon } from "../daemon.ts";
 import { DaemonError, require } from "../errors.ts";
 import { artifactOf } from "../proposals/intents.ts";
+import { counterparties, receivedTransfers } from "../vaults/activity.ts";
 import { balances, deployTestToken, tokenInfo } from "../vaults/tokens.ts";
 
 type Served = Exclude<DaemonMethod, "session.auth" | "events.subscribe">;
@@ -49,7 +50,9 @@ export const handlers: Handlers = {
       if (p.nodeUrl !== undefined) file.settings.nodeUrl = p.nodeUrl;
       if (p.proverEnabled !== undefined) file.settings.proverEnabled = p.proverEnabled;
       if (p.unlockTimeoutSecs !== undefined) file.settings.unlockTimeoutSecs = p.unlockTimeoutSecs;
+      if (p.feePayerSalt !== undefined) file.settings.feePayerSalt = lower(p.feePayerSalt);
     });
+    if (p.feePayerSalt !== undefined) await d.setFeePayer(d.state.file.settings.feePayerSalt);
     return d.state.file.settings;
   },
   "relays.set": async (d, p) => {
@@ -95,14 +98,23 @@ export const handlers: Handlers = {
     return d.vaults.audit(lower(p.vault), p.limit);
   },
   "vault.activity": async (d, p) => {
-    const proposals = await d.proposals.list(lower(p.vault));
-    const entries: ActivityEntry[] = proposals.map((proposal) => ({
-      kind: "proposal",
-      at: proposal.execution?.at ?? proposal.expiresAt,
-      proposal,
-    }));
+    const vault = lower(p.vault);
+    const [proposals, received] = await Promise.all([
+      d.proposals.list(vault),
+      receivedTransfers(d, vault),
+    ]);
+    const entries: ActivityEntry[] = [
+      ...proposals.map((proposal) => ({
+        kind: "proposal" as const,
+        at: proposal.execution?.at ?? proposal.expiresAt,
+        proposal,
+      })),
+      ...received.map((r) => r.entry),
+    ];
     return entries.toSorted((a, b) => b.at - a.at);
   },
+  "vault.counterparties": async (d, p) =>
+    counterparties(d, d.vaults.record(lower(p.vault)).address),
   "vault.alias": async (d, p) => {
     const vault = d.vaults.record(lower(p.vault)).address;
     require(ALIAS.test(p.alias), "aliases are lowercase letters, digits, - and _");
@@ -130,7 +142,7 @@ export const handlers: Handlers = {
   "tokens.list": async (d, p) => balances(d, lower(p.vault)),
   "tokens.add": async (d, p) => {
     const vault = d.vaults.record(lower(p.vault)).address;
-    const info = await tokenInfo(d, vault, lower(p.token));
+    const info = await tokenInfo(d, vault, lower(p.token), p.deployment);
     await d.state.update((file) => {
       file.tokens[vault] = [
         ...(file.tokens[vault] ?? []).filter((t) => t.address !== info.address),
@@ -192,6 +204,8 @@ export const handlers: Handlers = {
         { address, label: p.label },
       ];
     });
+    // A contact's notes to the member's vaults are then found through the tags it shares with them.
+    await d.wallet().registerSender(AztecAddress.fromStringUnsafe(address));
     return d.state.file.contacts;
   },
   "contacts.remove": async (d, p) => {

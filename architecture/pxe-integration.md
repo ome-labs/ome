@@ -158,8 +158,10 @@ DKG, then each reshare).
 
 **Content and amounts.** A removed member can't read anything that arrives after removal. Every note's decryption
 needs `address_secret · ephPk` for a fresh ephemeral key, and only the new committee can produce it. What leaks is
-metadata: who sent to the vault, and when, for counterparties whose secret the member knew. The daemon (phase 12)
-will prompt counterparties to handshake again after a rotation. Until a counterparty does, that metadata leak stays.
+metadata: who sent to the vault, and when, for counterparties whose secret the member knew. After a rotation that
+removed members, the daemon lists those counterparties as exposed (`vault.counterparties`) and emits
+`handshakeAdvised`, so the member can ask them to handshake with the vault again; until a counterparty does, that
+metadata leak stays (`architecture/daemon.md`).
 
 ## Code and tests
 
