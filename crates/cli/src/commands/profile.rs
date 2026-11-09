@@ -15,16 +15,25 @@ pub(crate) async fn run(ctx: &mut Ctx, command: ProfileCommand) -> Result<()> {
     match command {
         ProfileCommand::List => list(ctx).await,
         ProfileCommand::Show { name } => show(ctx, name).await,
-        ProfileCommand::Use { name } => use_profile(ctx, &name),
+        ProfileCommand::Use { name } => {
+            let name = match name {
+                Some(name) => name,
+                None => prompt::select(
+                    ctx,
+                    "<name>",
+                    "Which profile should commands use?",
+                    crate::context::set_up_profiles(&ctx.home)
+                        .into_iter()
+                        .map(|(name, member)| {
+                            (name.clone(), member.unwrap_or_else(|| name.clone()), name)
+                        })
+                        .collect(),
+                )?,
+            };
+            use_profile(ctx, &name)
+        }
         ProfileCommand::Remove { name, confirm } => remove(ctx, &name, confirm.as_deref()).await,
     }
-}
-
-/// The member's name, from the profile's public state file.
-fn member_name(dir: &std::path::Path) -> Option<String> {
-    let text = std::fs::read_to_string(dir.join("profile.json")).ok()?;
-    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
-    value["profile"]["name"].as_str().map(String::from)
 }
 
 async fn list(ctx: &Ctx) -> Result<()> {
@@ -48,7 +57,7 @@ async fn list(ctx: &Ctx) -> Result<()> {
         rows.push(serde_json::json!({
             "name": name,
             "current": name == ctx.profile.name(),
-            "member": member_name(profile.dir()),
+            "member": launch::member_name(&profile),
             "setUp": launch::profile_exists(&profile),
             "daemon": running.map(|i| i.pid),
         }));
@@ -120,7 +129,7 @@ async fn show(ctx: &Ctx, name: Option<String>) -> Result<()> {
         None if launch::profile_exists(&profile) => {
             lines.push(format!(
                 "member     {}",
-                member_name(profile.dir()).unwrap_or_else(|| "?".into())
+                launch::member_name(&profile).unwrap_or_else(|| "?".into())
             ));
             lines.push(theme::dim("the daemon is stopped: start it for the rest").to_string());
         }

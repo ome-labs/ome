@@ -1,7 +1,6 @@
 //! One module per group of the command tree.
 
 mod config;
-mod contact;
 mod daemon;
 mod device;
 mod keeper;
@@ -47,7 +46,6 @@ pub(crate) async fn run(ctx: &mut Ctx, command: Option<Command>) -> Result<()> {
         Command::Activity(args) => vault::activity(ctx, args).await,
         Command::Counterparties => vault::counterparties(ctx).await,
         Command::Token(command) => token::run(ctx, command).await,
-        Command::Contact(command) => contact::run(ctx, command).await,
         Command::Propose(command) => propose::run(ctx, command).await,
         Command::Proposals(args) | Command::Proposal(ProposalCommand::List(args)) => {
             proposal::list(ctx, args).await

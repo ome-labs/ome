@@ -125,14 +125,13 @@ test("they pay from it: proposed, reviewed and approved by two, executed", async
   const token = await json<{ address: string; symbol: string }>("alice", ["token", "deploy-test"]);
   await ok("bob", ["token", "add", token.address]);
   const bob = await json<{ profile: { account: string } }>("bob", ["status"]);
-  await ok("alice", ["contact", "add", bob.profile.account, "bob"]);
 
   const dry = await json<{ ok: boolean }>("alice", [
     "propose",
     "transfer",
     "25",
     token.symbol,
-    "bob",
+    bob.profile.account,
     "--dry-run",
   ]);
   assert.equal(dry.ok, true);
@@ -141,7 +140,7 @@ test("they pay from it: proposed, reviewed and approved by two, executed", async
     "transfer",
     "25",
     token.symbol,
-    "contact:bob",
+    bob.profile.account,
     "--memo",
     "rent",
     "--yes",

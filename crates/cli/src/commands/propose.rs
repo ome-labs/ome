@@ -145,7 +145,7 @@ async fn transfer(
         ctx,
         to,
         "<to>",
-        "To whom? (0x…, accounts:<name>, contact:<label>)",
+        "To whom? (0x…, or accounts:<name> from aztec-wallet)",
         None,
         |_| Ok(()),
     )?;

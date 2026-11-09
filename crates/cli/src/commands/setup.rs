@@ -39,22 +39,23 @@ pub(crate) async fn home(ctx: &Ctx) -> Result<()> {
     Ok(())
 }
 
-#[expect(clippy::too_many_lines, reason = "a guided flow reads top to bottom")]
-pub(crate) async fn init(ctx: &mut Ctx, args: InitArgs) -> Result<()> {
-    if launch::profile_exists(&ctx.profile) {
-        let client = ctx.client().await?;
-        if client.call::<StatusGet>(&Empty {}).await?.profile.is_some() {
-            return Err(Error::usage(format!(
-                "Profile {:?} is already set up.",
-                ctx.profile.name()
-            ))
-            .hint(format!(
-                "See it with `{}`, or set up another: `ome --profile <name> init`.",
-                ctx.ome("status")
-            )));
+/// A profile name from a member's name: `Alice Smith` → `alice-smith`.
+fn profile_name(member: &str) -> String {
+    let mut out = String::new();
+    for c in member.trim().to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            out.push(c);
+        } else if !out.is_empty() && !out.ends_with('-') {
+            out.push('-');
         }
     }
-    ctx.intro(&format!("Set up Ome · profile {}", ctx.profile.name()));
+    let out: String = out.trim_end_matches('-').chars().take(32).collect();
+    if out.is_empty() { "member".into() } else { out }
+}
+
+#[expect(clippy::too_many_lines, reason = "a guided flow reads top to bottom")]
+pub(crate) async fn init(ctx: &mut Ctx, args: InitArgs) -> Result<()> {
+    ctx.intro("Set up Ome");
     let name = prompt::text(
         ctx,
         args.name,
@@ -70,6 +71,30 @@ pub(crate) async fn init(ctx: &mut Ctx, args: InitArgs) -> Result<()> {
             }
         },
     )?;
+    // Without --profile, each member gets a profile named after them: `ome init` twice on one machine sets up two
+    // members, and nobody has to type --profile afterwards.
+    if !ctx.profile_given {
+        ctx.profile = ctx
+            .home
+            .profile(&profile_name(&name))
+            .map_err(|e| Error::usage(e.to_string()))?;
+    }
+    if launch::profile_exists(&ctx.profile) {
+        let set_up = ctx
+            .client()
+            .await?
+            .call::<StatusGet>(&Empty {})
+            .await?
+            .profile
+            .is_some();
+        if set_up {
+            return Err(Error::usage(format!(
+                "Profile {:?} is already set up.",
+                ctx.profile.name()
+            ))
+            .hint("Set up another member under another name: `ome init --profile <name>`."));
+        }
+    }
     let node_url = match args.node.node_url {
         Some(url) => url,
         None if ctx.interactive => {
@@ -198,10 +223,21 @@ pub(crate) async fn init(ctx: &mut Ctx, args: InitArgs) -> Result<()> {
         return ctx.json(&status);
     }
     ctx.outro(&format!(
-        "{} is ready on {}",
+        "{} is ready on {} · profile {}",
         name.trim(),
-        theme::name(&node_url)
+        theme::name(&node_url),
+        theme::name(ctx.profile.name())
     ));
+    if crate::context::set_up_profiles(&ctx.home).len() > 1 {
+        eprintln!(
+            "  {}",
+            theme::dim(format!(
+                "Several members on this machine: in {}'s terminal, `export OME_PROFILE={}`.",
+                name.trim(),
+                ctx.profile.name()
+            ))
+        );
+    }
     ctx.next("vault create");
     ctx.next("vault join <invite>");
     Ok(())
@@ -627,4 +663,15 @@ pub(crate) async fn doctor(ctx: &Ctx, args: NodeArgs) -> Result<()> {
 
 pub(crate) fn completions(shell: clap_complete::Shell) {
     clap_complete::generate(shell, &mut Cli::command(), "ome", &mut std::io::stdout());
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn profiles_are_named_after_members() {
+        assert_eq!(super::profile_name("Alice"), "alice");
+        assert_eq!(super::profile_name("  Alice Smith "), "alice-smith");
+        assert_eq!(super::profile_name("Zoë!"), "zo");
+        assert_eq!(super::profile_name("…"), "member");
+    }
 }

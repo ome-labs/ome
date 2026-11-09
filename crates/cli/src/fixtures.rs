@@ -96,7 +96,7 @@ pub(crate) fn review() -> Review {
         recipient: Some(Recipient {
             address: hex("2b1f", "9e04"),
             label: Some("bob".into()),
-            source: Some(LabelSource::AddressBook),
+            source: Some(LabelSource::AztecWallet),
         }),
         simulation: Simulation {
             ok: true,

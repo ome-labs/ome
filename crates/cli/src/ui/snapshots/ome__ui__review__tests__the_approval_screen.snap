@@ -3,7 +3,7 @@ source: cli/src/ui/review.rs
 expression: "to_text(&render(&review, &review.signs, false))"
 ---
 ◇  What happens if it executes
-│  Pay 250 USDC to bob (your contact)  0x2b1f…9e04  (250000000 base units)
+│  Pay 250 USDC to bob (accounts:bob in aztec-wallet)  0x2b1f…9e04  (250000000 base units)
 │  Memo from Alice: "March rent"
 │  The fee is paid by the sponsored fee payer 0x2d8f…69d3, never by the vault in public
 │
@@ -19,7 +19,7 @@ expression: "to_text(&render(&review, &review.signs, false))"
 │  ✓ the config is current (version 4)
 │  ✓ the deadline is in 5h 12m
 │  ✓ it simulates: 12,840 L2 gas, 1,024 DA gas
-│  ▲ bob is a label you added, not something the vault verified
+│  ▲ bob is your aztec-wallet alias, a name you set that the vault never verified
 │
 ◇  Votes
 │  1 of 2 approvals

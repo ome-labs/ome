@@ -36,7 +36,14 @@ async fn main() -> ExitCode {
     };
     theme::configure(cli.global.no_color);
     let (json, verbose) = (cli.global.json, cli.global.verbose);
-    let result = match Ctx::new(&cli.global) {
+    // Choosing a profile is for commands that act as a member, not for setting one up or managing them.
+    let choose = !matches!(
+        cli.command,
+        Some(
+            args::Command::Init(_) | args::Command::Profile(_) | args::Command::Completions { .. }
+        )
+    );
+    let result = match Ctx::new(&cli.global, choose) {
         Ok(mut ctx) => commands::run(&mut ctx, cli.command).await,
         Err(error) => Err(error),
     };

@@ -89,6 +89,17 @@ pub(crate) fn select<T: Clone + Eq>(
     label: &str,
     items: Vec<(T, String, String)>,
 ) -> Result<T> {
+    select_from(ctx, flag, label, items, None)
+}
+
+/// One of `items`, starting on `initial`.
+pub(crate) fn select_from<T: Clone + Eq>(
+    ctx: &Ctx,
+    flag: &str,
+    label: &str,
+    items: Vec<(T, String, String)>,
+    initial: Option<T>,
+) -> Result<T> {
     if !ctx.interactive {
         return Err(Error::missing(label, flag));
     }
@@ -98,6 +109,9 @@ pub(crate) fn select<T: Clone + Eq>(
     }
     for (value, label, hint) in items {
         select = select.item(value, label, hint);
+    }
+    if let Some(initial) = initial {
+        select = select.initial_value(initial);
     }
     Ok(select.interact()?)
 }

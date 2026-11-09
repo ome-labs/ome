@@ -26,7 +26,7 @@ SET UP      init · status · doctor · config get|set|unset · profile list|sho
 SIGNER      unlock [--for 15m] [--touch-id] · lock · signer status|touch-id on|off
 VAULTS      vault create|join|list|show|use|alias|members|peers|audit|receive|balance|retire
             balance [token] · activity [--follow] · counterparties
-            token add|list|remove|deploy-test · contact add|list|remove
+            token add|list|remove|deploy-test
 PROPOSALS   propose transfer <amount> <token> <to> | call <fn> -ca <contract> --args … | cancel <proposal>
             (each with --memo, --expires 24h, --dry-run)
             proposals [--status open|ready|done|all] · proposal list|show|review|approve|reject|execute
@@ -44,17 +44,28 @@ On screen, `k` is "approvals to spend" and `t_v` "members to read"; `--approvals
 
 ### Globals
 
-| Flag                        | Meaning                                                                                      |
-| --------------------------- | -------------------------------------------------------------------------------------------- |
-| `--profile` (`OME_PROFILE`) | the profile; else the one `ome profile use` chose (`<home>/current-profile`), else `default` |
-| `--vault` (`OME_VAULT`)     | the vault; else the profile's chosen vault, else its only vault, else a prompt               |
-| `--json`                    | one JSON value on stdout (the API's shapes); errors as JSON on stderr; never prompts         |
-| `--plain`                   | one record per line, tab-separated; never prompts                                            |
-| `--no-input`                | never prompt                                                                                 |
-| `-y, --yes`                 | answer yes to confirmations; never to authentication, never to a typed confirmation          |
-| `-q, --quiet`               | only the essential line (an id, a hash)                                                      |
-| `--no-color`                | also `NO_COLOR`, `TERM=dumb`, or a pipe                                                      |
-| `-v, --verbose`             | full values instead of short ones, causes of errors                                          |
+| Flag                            | Meaning                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| `-P, --profile` (`OME_PROFILE`) | the profile (below)                                                                  |
+| `--vault` (`OME_VAULT`)         | the vault (below)                                                                    |
+| `--json`                        | one JSON value on stdout (the API's shapes); errors as JSON on stderr; never prompts |
+| `--plain`                       | one record per line, tab-separated; never prompts                                    |
+| `--no-input`                    | never prompt                                                                         |
+| `-y, --yes`                     | answer yes to confirmations; never to authentication, never to a typed confirmation  |
+| `-q, --quiet`                   | only the essential line (an id, a hash)                                              |
+| `--no-color`                    | also `NO_COLOR`, `TERM=dumb`, or a pipe                                              |
+| `-v, --verbose`                 | full values instead of short ones, causes of errors                                  |
+
+### Which profile and which vault
+
+Nobody should have to type `--profile` or `--vault` again and again.
+
+- **Profile:** `--profile`, else `OME_PROFILE` (set it once per terminal when several members share a machine), else
+  the one `ome profile use` chose (`<home>/current-profile`), else the only profile set up. With several and none
+  chosen, a terminal asks; scripts get an error naming the three ways to choose. `ome init` names a new profile after
+  its member (`Alice Smith` → `alice-smith`), so `ome init` twice sets up two members.
+- **Vault:** `--vault`, else `OME_VAULT`, else the only vault. With several, a terminal asks every time, starting on
+  the one `ome vault use` chose; scripts use that one.
 
 ### References
 
@@ -65,13 +76,13 @@ One resolver (`src/refs.rs`) takes every address argument:
 | `0x…` (64 hex digits)                 | itself                                                      |
 | `accounts:<name>`, `contracts:<name>` | `aztec-wallet`'s alias store, through `aztec.aliases`       |
 | `vault:<name>`                        | a vault by alias or name                                    |
-| `contact:<label>`                     | the address book                                            |
 | a bare name                           | all of the above; the same address found twice is one match |
 | a token symbol or name                | a token the vault tracks                                    |
 | a hex prefix                          | a proposal, vault or device by the start of its id          |
 
 A bare name that matches several things is asked about in a terminal, and otherwise fails naming the typed forms
-(`contact:treasury, vault:treasury`). The arguments of `propose call` are resolved the same way when they use a typed
+(`vault:treasury, accounts:treasury`). Ome keeps no address book: name people with
+`aztec-wallet alias accounts bob 0x…`, and reviews say the name is that alias, which nobody verified. The arguments of `propose call` are resolved the same way when they use a typed
 form; anything else is passed as typed.
 
 ## Output
@@ -95,7 +106,7 @@ form; anything else is passed as typed.
 1. what happens if it executes (who is paid, how much, the memo, who pays the fee: never the vault in public);
 2. the calls, as rebuilt;
 3. the checks: the calls hash to the outer hash, the config is current, the deadline, the simulation, and a warning
-   when a recipient's label is the member's own;
+   when the recipient's name is the member's own `aztec-wallet` alias, or when it has none;
 4. the votes so far;
 5. the exact message signed and its formula.
 

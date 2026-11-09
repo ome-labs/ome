@@ -39,6 +39,13 @@ pub(crate) fn profile_exists(profile: &Profile) -> bool {
     profile.dir().join("profile.json").is_file()
 }
 
+/// The member's name, from the profile's public state file (readable while the daemon is stopped).
+pub(crate) fn member_name(profile: &Profile) -> Option<String> {
+    let text = fs::read_to_string(profile.dir().join("profile.json")).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value["profile"]["name"].as_str().map(String::from)
+}
+
 /// The repository root, for development builds (`crates/cli` → `../..`).
 fn repo_root() -> PathBuf {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");

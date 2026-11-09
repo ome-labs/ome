@@ -37,8 +37,10 @@ pub(crate) enum Mode {
 pub(crate) struct Ctx {
     pub(crate) home: Home,
     pub(crate) profile: Profile,
-    /// Whether the profile was named (`--profile`, `OME_PROFILE`), so hints repeat it.
+    /// Whether the profile was named with `--profile`, so hints repeat it.
     pub(crate) named_profile: bool,
+    /// Whether `--profile` or `OME_PROFILE` named it.
+    pub(crate) profile_given: bool,
     pub(crate) mode: Mode,
     /// Prompts allowed: a terminal on stdin and stderr, human mode, no `--no-input`.
     pub(crate) interactive: bool,
@@ -63,15 +65,9 @@ impl Drop for Nested<'_> {
 }
 
 impl Ctx {
-    pub(crate) fn new(global: &Global) -> Result<Self> {
+    /// `choose`: the command acts as a member, so with several profiles and none chosen it may ask which.
+    pub(crate) fn new(global: &Global, choose: bool) -> Result<Self> {
         let home = Home::from_env().map_err(Error::from)?;
-        let (name, named_profile) = match &global.profile {
-            Some(name) => (name.clone(), true),
-            None => (current_profile(&home), false),
-        };
-        let profile = home
-            .profile(&name)
-            .map_err(|e| Error::usage(e.to_string()))?;
         let mode = if global.json {
             Mode::Json
         } else if global.plain {
@@ -80,12 +76,23 @@ impl Ctx {
             Mode::Human
         };
         let terminal = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+        let interactive = terminal && mode == Mode::Human && !global.no_input;
+        let from_env = std::env::var("OME_PROFILE").ok().filter(|v| !v.is_empty());
+        let (name, named_profile) = match &global.profile {
+            // A profile from OME_PROFILE holds for the whole terminal: hints need not repeat it.
+            Some(name) => (name.clone(), from_env.as_deref() != Some(name.as_str())),
+            None => (pick_profile(&home, choose, interactive)?, false),
+        };
+        let profile = home
+            .profile(&name)
+            .map_err(|e| Error::usage(e.to_string()))?;
         Ok(Self {
             home,
             profile,
             named_profile,
+            profile_given: global.profile.is_some(),
             mode,
-            interactive: terminal && mode == Mode::Human && !global.no_input,
+            interactive,
             yes: global.yes,
             quiet: global.quiet,
             verbose: global.verbose,
@@ -245,11 +252,55 @@ impl Ctx {
     }
 }
 
-/// The profile `ome profile use` chose, or the default.
-fn current_profile(home: &Home) -> String {
-    std::fs::read_to_string(home.root().join(CURRENT_PROFILE))
+/// The profile to act as when none is named: the one `ome profile use` chose, else the only one set up, else (in a
+/// terminal, for a command that acts as a member) the one the person picks, else `default`.
+fn pick_profile(home: &Home, choose: bool, interactive: bool) -> Result<String> {
+    let chosen = std::fs::read_to_string(home.root().join(CURRENT_PROFILE))
         .map(|name| name.trim().to_owned())
         .ok()
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| DEFAULT_PROFILE.to_owned())
+        .filter(|name| !name.is_empty());
+    if let Some(chosen) = chosen {
+        return Ok(chosen);
+    }
+    let set_up = set_up_profiles(home);
+    match set_up.as_slice() {
+        [] => Ok(DEFAULT_PROFILE.to_owned()),
+        [(only, _)] => Ok(only.clone()),
+        _ if choose && interactive => {
+            let mut select = cliclack::select("Which profile?");
+            for (name, member) in &set_up {
+                select = select.item(
+                    name.clone(),
+                    member.clone().unwrap_or_else(|| name.clone()),
+                    name,
+                );
+            }
+            let name: String = select.interact()?;
+            let _ = cliclack::log::remark(format!(
+                "To stop being asked: `ome profile use {name}`, or `export OME_PROFILE={name}` in this terminal."
+            ));
+            Ok(name)
+        }
+        _ if choose => Err(Error::usage("There are several profiles; which one?").hint(
+            "Pass --profile <name>, set OME_PROFILE, or choose one with `ome profile use <name>`.",
+        )),
+        _ => Ok(DEFAULT_PROFILE.to_owned()),
+    }
+}
+
+/// The profiles that ran `ome init`, by name, with their member's name.
+pub(crate) fn set_up_profiles(home: &Home) -> Vec<(String, Option<String>)> {
+    let mut out: Vec<(String, Option<String>)> = std::fs::read_dir(home.root().join("profiles"))
+        .map(|entries| {
+            entries
+                .filter_map(std::result::Result::ok)
+                .filter_map(|e| e.file_name().into_string().ok())
+                .filter_map(|name| home.profile(&name).ok())
+                .filter(launch::profile_exists)
+                .map(|p| (p.name().to_owned(), launch::member_name(&p)))
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort();
+    out
 }

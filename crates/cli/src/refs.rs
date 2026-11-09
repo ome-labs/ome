@@ -1,14 +1,15 @@
 //! One resolver for every reference, so people can say what they mean: `0x…`; `accounts:<name>` and
-//! `contracts:<name>` from `aztec-wallet`'s alias store; `vault:<name>`; `contact:<label>`; or a bare name, which
+//! `contracts:<name>` from `aztec-wallet`'s alias store, the only names for addresses Ome uses; `vault:<name>`; or a
+//! bare name, which
 //! is looked up in all of them. A token is its symbol, a proposal a unique prefix of its id. When a bare name matches
 //! more than one thing, a terminal asks; otherwise the error names the typed forms.
 
 use ome_api::{
     Empty, Hex32,
     daemon::{
-        AztecAlias, AztecAliases, CommitteeMember, Contact, ContactsList, DeviceView, DevicesList,
-        ProposalView, ProposalsList, ServiceStatus, SignerUnlock, StatusGet, TokenInfo, TokensList,
-        UnlockParams, VaultList, VaultSummary,
+        AztecAlias, AztecAliases, CommitteeMember, DeviceView, DevicesList, ProposalView,
+        ProposalsList, ServiceStatus, SignerUnlock, StatusGet, TokenInfo, TokensList, UnlockParams,
+        VaultList, VaultSummary,
     },
     keeper::VaultParams,
 };
@@ -24,9 +25,9 @@ use crate::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Candidate<T> {
     pub(crate) value: T,
-    /// What it is, for the person: "bob (contact)".
+    /// What it is, for the person: "accounts:bob (aztec-wallet)".
     pub(crate) label: String,
-    /// The typed form that names only it: `contact:bob`.
+    /// The typed form that names only it: `accounts:bob`.
     pub(crate) form: String,
 }
 
@@ -158,9 +159,7 @@ pub(crate) fn vault_in(
             .cloned()
             .unwrap_or_else(|| matches[0].clone()));
     }
-    if let Some(chosen) = vaults.iter().find(|v| v.is_default) {
-        return Ok(chosen.clone());
-    }
+    let chosen = vaults.iter().find(|v| v.is_default);
     match vaults {
         [] => Err(Error::usage("You have no vault yet.").hint(format!(
             "Create one with `{}`, or join one with `{}`.",
@@ -168,75 +167,78 @@ pub(crate) fn vault_in(
             ctx.ome("vault join <invite>")
         ))),
         [only] => Ok(only.clone()),
+        // Several vaults: ask every time in a terminal, starting on the chosen one, so nothing lands in the wrong
+        // vault unseen.
         _ if ctx.interactive => {
-            let address = prompt::select(
+            let address = prompt::select_from(
                 ctx,
                 "--vault",
                 "Which vault?",
                 vaults
                     .iter()
-                    .map(|v| (v.address, v.name.clone(), vault_form(v)))
+                    .map(|v| {
+                        let hint = format!(
+                            "{}{}",
+                            describe::shape(v.threshold, v.viewing_threshold, v.members),
+                            if v.is_default { " · chosen" } else { "" }
+                        );
+                        (v.address, v.name.clone(), hint)
+                    })
                     .collect(),
+                chosen.map(|v| v.address),
             )?;
-            Ok(vaults
+            vaults
                 .iter()
                 .find(|v| v.address == address)
                 .cloned()
-                .unwrap_or_else(|| vaults[0].clone()))
+                .ok_or_else(|| Error::failed("the vault vanished"))
         }
-        _ => Err(
+        _ => chosen.cloned().ok_or_else(|| {
             Error::usage("You have several vaults; which one?").hint(format!(
-                "Pass --vault <name>, or choose one with `{}`.",
+                "Pass --vault <name>, or choose one for scripts with `{}`.",
                 ctx.ome("vault use <name>")
-            )),
-        ),
+            ))
+        }),
     }
 }
 
 // Addresses.
 
-/// What names resolve against.
+/// What names resolve against: `aztec-wallet`'s aliases and the member's vaults.
 #[derive(Default)]
 pub(crate) struct Book {
-    pub(crate) contacts: Vec<Contact>,
     pub(crate) aliases: Vec<AztecAlias>,
     pub(crate) vaults: Vec<VaultSummary>,
 }
 
 impl Book {
-    /// The address book, `aztec-wallet`'s aliases and the vaults; a missing alias store reads as empty.
+    /// `aztec-wallet`'s aliases and the vaults; a missing alias store reads as empty.
     pub(crate) async fn load(ctx: &Ctx) -> Result<Self> {
         let client = ctx.client().await?;
-        let (contacts, aliases, vaults) = tokio::join!(
-            client.call::<ContactsList>(&Empty {}),
+        let (aliases, vaults) = tokio::join!(
             client.call::<AztecAliases>(&Empty {}),
             client.call::<VaultList>(&Empty {}),
         );
         Ok(Self {
-            contacts: contacts?,
             aliases: aliases.unwrap_or_default(),
             vaults: vaults?,
         })
     }
 
-    /// A label for an address, from the book.
+    /// A name for an address: a vault's, else its `aztec-wallet` alias (`bob` for `accounts:bob`, accounts first).
     pub(crate) fn label(&self, address: &Hex32) -> Option<String> {
-        self.contacts
+        let alias = |kind: &str| {
+            self.aliases.iter().find_map(|a| {
+                let name = a.key.strip_prefix(kind)?;
+                (a.value.parse::<Hex32>().ok() == Some(*address)).then(|| name.to_owned())
+            })
+        };
+        self.vaults
             .iter()
-            .find(|c| c.address == *address)
-            .map(|c| c.label.clone())
-            .or_else(|| {
-                self.vaults
-                    .iter()
-                    .find(|v| v.address == *address)
-                    .map(|v| v.name.clone())
-            })
-            .or_else(|| {
-                self.aliases
-                    .iter()
-                    .find(|a| a.value.parse::<Hex32>().ok() == Some(*address))
-                    .map(|a| a.key.clone())
-            })
+            .find(|v| v.address == *address)
+            .map(|v| v.name.clone())
+            .or_else(|| alias("accounts:"))
+            .or_else(|| alias("contracts:"))
     }
 
     /// Every address `input` could mean.
@@ -278,21 +280,10 @@ impl Book {
             add(address, format!("{input} (aztec-wallet)"), input.to_owned());
             return Ok(out);
         }
-        if !kind.is_empty() && kind != "contact" && kind != "vault" {
+        if !kind.is_empty() && kind != "vault" {
             return Err(Error::usage(format!("{input:?} is not a reference.")).hint(
-                "Use 0x…, accounts:<name>, contracts:<name>, contact:<label> or vault:<name>.",
+                "Use 0x…, accounts:<name> or contracts:<name> (aztec-wallet), or vault:<name>.",
             ));
-        }
-        if kind.is_empty() || kind == "contact" {
-            for c in &self.contacts {
-                if c.label.eq_ignore_ascii_case(name) {
-                    add(
-                        c.address,
-                        format!("{} (contact)", c.label),
-                        format!("contact:{}", c.label),
-                    );
-                }
-            }
         }
         if kind.is_empty() || kind == "vault" {
             for v in match_vaults(&self.vaults, name) {
@@ -320,8 +311,7 @@ impl Book {
         let candidates = self.matches(input)?;
         if candidates.is_empty() {
             return Err(Error::usage(format!("Nothing is called {input:?}.")).hint(format!(
-                "Use 0x…, accounts:<name> or contracts:<name> (aztec-wallet), or add a contact: `{}`.",
-                ctx.ome("contact add <address> <label>")
+                "Use 0x…, or name it in aztec-wallet: `aztec-wallet alias accounts {input} <address>`."
             )));
         }
         pick(ctx, input, candidates)
@@ -331,7 +321,7 @@ impl Book {
     pub(crate) fn call_args(&self, ctx: &Ctx, args: &[String]) -> Result<Vec<String>> {
         args.iter()
             .map(|arg| {
-                let reference = ["accounts:", "contracts:", "contact:", "vault:"]
+                let reference = ["accounts:", "contracts:", "vault:"]
                     .iter()
                     .any(|p| arg.starts_with(p));
                 if reference {
@@ -597,20 +587,18 @@ mod tests {
 
     fn book() -> Book {
         Book {
-            contacts: vec![
-                Contact {
-                    address: hex("b0b"),
-                    label: "bob".into(),
-                },
-                Contact {
-                    address: hex("ca401"),
-                    label: "treasury".into(),
-                },
-            ],
             aliases: vec![
                 AztecAlias {
                     key: "accounts:bob".into(),
                     value: hex("b0b").to_string(),
+                },
+                AztecAlias {
+                    key: "contracts:bob".into(),
+                    value: hex("b0b").to_string(),
+                },
+                AztecAlias {
+                    key: "accounts:treasury".into(),
+                    value: hex("ca401").to_string(),
                 },
                 AztecAlias {
                     key: "accounts:main".into(),
@@ -641,27 +629,30 @@ mod tests {
         };
         assert_eq!(one("accounts:main"), [hex("a11ce")]);
         assert_eq!(one("contracts:usdc"), [hex("05dc")]);
-        assert_eq!(one("contact:treasury"), [hex("ca401")]);
+        assert_eq!(one("accounts:treasury"), [hex("ca401")]);
         assert_eq!(one("vault:treasury"), [hex("7a11")]);
         assert_eq!(one(&hex("123").to_string()), [hex("123")]);
         assert!(book.matches("accounts:nobody").is_err());
         assert!(book.matches("0x12").is_err());
         assert!(book.matches("secrets:x").is_err());
+        assert!(book.matches("contact:bob").is_err());
     }
 
     #[test]
     fn a_bare_name_searches_everything_and_merges_the_same_address() {
         let book = book();
-        // `bob` is a contact and an aztec-wallet account with the same address: one candidate.
+        // `bob` is an aztec-wallet account and contract with the same address: one candidate.
         assert_eq!(book.matches("bob").unwrap().len(), 1);
-        // `treasury` is a contact and a vault with different addresses: ambiguous, each with its typed form.
+        // `treasury` is an aztec-wallet account and a vault with different addresses: ambiguous, each with its form.
         let forms: Vec<_> = book
             .matches("treasury")
             .unwrap()
             .into_iter()
             .map(|c| c.form)
             .collect();
-        assert_eq!(forms, ["contact:treasury", "vault:treasury"]);
+        assert_eq!(forms, ["vault:treasury", "accounts:treasury"]);
+        assert_eq!(book.label(&hex("b0b")).as_deref(), Some("bob"));
+        assert_eq!(book.label(&hex("7a11")).as_deref(), Some("Treasury"));
         assert_eq!(book.matches("main").unwrap()[0].form, "accounts:main");
         assert_eq!(book.matches("nobody").unwrap().len(), 0);
     }

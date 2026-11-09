@@ -130,13 +130,13 @@ pub(crate) fn render(
     if let Some(recipient) = &review.recipient {
         let name = recipient.label.clone().unwrap_or_default();
         match recipient.source {
-            Some(LabelSource::AddressBook) => checks.push(format!(
-                "{} {name} is a label you added, not something the vault verified",
+            Some(LabelSource::AztecWallet) => checks.push(format!(
+                "{} {name} is your aztec-wallet alias, a name you set that the vault never verified",
                 theme::caution()
             )),
             Some(LabelSource::Member) => {}
             None => checks.push(format!(
-                "{} the recipient is not in your address book: check the address",
+                "{} the recipient has no name in your aztec-wallet aliases: check the address",
                 theme::caution()
             )),
         }
@@ -166,8 +166,8 @@ fn effect(review: &Review, full: &dyn Fn(&ome_api::Hex32) -> String) -> Vec<Stri
         Intent::Transfer { to, amount, .. } => {
             let who = match &review.recipient {
                 Some(r) => match (&r.label, r.source) {
-                    (Some(label), Some(LabelSource::AddressBook)) => {
-                        format!("{label} (your contact)")
+                    (Some(label), Some(LabelSource::AztecWallet)) => {
+                        format!("{label} (accounts:{label} in aztec-wallet)")
                     }
                     (Some(label), Some(LabelSource::Member)) => format!("{label} (a member)"),
                     (Some(label), None) => label.clone(),

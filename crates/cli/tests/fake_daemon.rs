@@ -13,7 +13,7 @@ use std::{
 use ome_api::{
     Amount, ErrorKind, Hex32, Method, RpcError,
     daemon::{
-        ApproveParams, ContactsList, Intent, ProposalStatus, ProposalView, ProposalsApprove,
+        ApproveParams, AztecAliases, Intent, ProposalStatus, ProposalView, ProposalsApprove,
         ProposalsList, ProposalsReview, Proposer, Review, ReviewChecks, Secret, SignerStatus,
         SignerStatusGet, Signs, Simulation, TokenInfo, VaultList, VaultSummary, Vote,
     },
@@ -142,7 +142,7 @@ fn answer(daemon: &Daemon, request: &Request) -> Result<Value, RpcError> {
             locked: true,
             unlocked_until: None,
         }),
-        ContactsList::NAME => to(Vec::<()>::new()),
+        AztecAliases::NAME => to(Vec::<()>::new()),
         ProposalsReview::NAME => to(review(daemon.proposals[0].clone())),
         ProposalsApprove::NAME => {
             let params: ApproveParams = request.params().unwrap();

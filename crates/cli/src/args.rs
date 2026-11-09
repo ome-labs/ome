@@ -35,7 +35,6 @@ const COMMANDS: &str = "\
   \x1b[36mactivity\x1b[0m        proposals and received transfers
   \x1b[36mcounterparties\x1b[0m  who paid the vault, and who should handshake again
   \x1b[36mtoken\x1b[0m           add, list, remove or deploy a test token
-  \x1b[36mcontact\x1b[0m         your address book
 
 \x1b[1;32mProposals:\x1b[0m
   \x1b[36mpropose\x1b[0m         a transfer, a contract call, or a cancel
@@ -54,7 +53,8 @@ const COMMANDS: &str = "\
 
 const AFTER: &str = "\
 References: an address can be 0x…, accounts:<name> or contracts:<name> (aztec-wallet's aliases), vault:<name>,
-contact:<label>, or a bare name; a token its symbol; a proposal a unique prefix of its id.
+or a bare name; a token its symbol; a proposal a unique prefix of its id. Name people with
+`aztec-wallet alias accounts <name> <address>`: ome keeps no address book of its own.
 
 Run `ome <command> --help` for a command's flags. Docs: architecture/cli.md";
 
@@ -86,8 +86,14 @@ pub(crate) struct Cli {
     reason = "independent command-line switches"
 )]
 pub(crate) struct Global {
-    /// The profile to act as.
-    #[arg(long, global = true, env = "OME_PROFILE", value_name = "NAME")]
+    /// The profile to act as (else `ome profile use`'s, the only one, or you are asked).
+    #[arg(
+        short = 'P',
+        long,
+        global = true,
+        env = "OME_PROFILE",
+        value_name = "NAME"
+    )]
     pub(crate) profile: Option<String>,
     /// The vault to act on (default: the profile's chosen or only vault).
     #[arg(long, global = true, env = "OME_VAULT", value_name = "VAULT")]
@@ -161,9 +167,6 @@ pub(crate) enum Command {
     /// The tokens the vault tracks.
     #[command(subcommand)]
     Token(TokenCommand),
-    /// Your address book.
-    #[command(subcommand)]
-    Contact(ContactCommand),
 
     /// Propose a transfer, a contract call, or a cancel.
     #[command(subcommand)]
@@ -282,8 +285,8 @@ pub(crate) enum ProfileCommand {
     },
     /// Make a profile the one commands use.
     Use {
-        /// The profile.
-        name: String,
+        /// The profile (asked for when left out).
+        name: Option<String>,
     },
     /// Stop a profile's daemon and delete everything it holds.
     Remove {
@@ -386,7 +389,7 @@ pub(crate) enum VaultCommand {
         #[arg(value_name = "VAULT")]
         target: Option<String>,
     },
-    /// Make a vault the one commands use.
+    /// Choose the vault scripts use and prompts start on.
     Use {
         /// The vault.
         #[arg(value_name = "VAULT")]
@@ -490,24 +493,6 @@ pub(crate) struct TokenAddArgs {
     pub(crate) decimals: Option<u8>,
 }
 
-#[derive(Debug, Subcommand)]
-pub(crate) enum ContactCommand {
-    /// Add or relabel a contact.
-    Add {
-        /// The address: 0x…, or accounts:<name>.
-        address: Option<String>,
-        /// The label, as you will type it.
-        label: Option<String>,
-    },
-    /// Your contacts.
-    List,
-    /// Remove a contact.
-    Remove {
-        /// Label or address.
-        contact: Option<String>,
-    },
-}
-
 #[derive(Debug, Args)]
 pub(crate) struct ProposeOptions {
     /// A note for the members.
@@ -529,7 +514,7 @@ pub(crate) enum ProposeCommand {
         amount: Option<String>,
         /// Symbol or address of a tracked token.
         token: Option<String>,
-        /// The recipient: 0x…, accounts:<name>, contact:<label>, or a name.
+        /// The recipient: 0x…, accounts:<name> (aztec-wallet), or a name.
         to: Option<String>,
         #[command(flatten)]
         options: ProposeOptions,
