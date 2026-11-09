@@ -2060,9 +2060,9 @@ export type FoundingInfo = {
    */
   session: Hex32;
   /**
-   * DKG transcript.
+   * DKG transcript hash.
    */
-  transcript: Hex32 | null;
+  transcript: Hex64 | null;
   /**
    * Deployment transaction.
    */

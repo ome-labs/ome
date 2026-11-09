@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::ProposalView;
-use crate::{Amount, Hex32, Point};
+use crate::{Amount, Hex32, Hex64, Point};
 
 /// One of the member's vaults.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -131,8 +131,8 @@ pub struct CommitteeView {
 pub struct FoundingInfo {
     /// DKG session.
     pub session: Hex32,
-    /// DKG transcript.
-    pub transcript: Option<Hex32>,
+    /// DKG transcript hash.
+    pub transcript: Option<Hex64>,
     /// Deployment transaction.
     pub deploy_tx: Option<Hex32>,
 }
