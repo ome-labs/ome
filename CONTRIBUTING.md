@@ -1,18 +1,74 @@
 # Contributing
 
-How code is written, tested and committed in this repository.
+How code is written, tested and committed in this repository. Security issues go through [SECURITY.md](SECURITY.md),
+not public issues.
+
+## Setup
+
+| Concern     | Tool                                                                                                               |
+| ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| Contracts   | Aztec 6.0.0 (`aztec compile`, `aztec test`, `aztec-nargo fmt / check`); install with `aztec-up install 6.0.0`      |
+| Rust        | 1.99.1 (`rust-toolchain.toml`), `rustfmt`, `clippy -D warnings`, `cargo-deny` (`cargo install cargo-deny`)         |
+| WebAssembly | `wasm32-unknown-unknown`, `wasm-bindgen` CLI 0.2.108 (`cargo install wasm-bindgen-cli --version 0.2.108 --locked`) |
+| Mobile      | UniFFI 0.32.2; Xcode for iOS; JDK 21, Gradle, the Android NDK and `cargo-ndk` for Android                          |
+| TypeScript  | Node 24 (`.node-version`), pnpm 12, Turborepo, TypeScript 7, oxfmt, oxlint (klarity presets)                       |
+| Hooks       | lefthook, commitlint (Conventional Commits)                                                                        |
+
+The `wasm-bindgen` CLI must match the `wasm-bindgen` crate in `crates/Cargo.lock`. For Android, install
+`sdkmanager "platform-tools" "platforms;android-37.2" "ndk;30.0.16248370"` and set `JAVA_HOME`, `ANDROID_HOME` and
+`ANDROID_NDK_HOME`.
+
+```sh
+pnpm install        # also installs the git hooks
+pnpm check          # format check, lint (oxlint, clippy, nargo check), typecheck, build, cargo-deny
+pnpm test           # aztec test, cargo test, vitest
+pnpm format         # oxfmt, rustfmt, nargo fmt
+pnpm cli:install    # build ome, ome-keeper and an omed wrapper for this checkout into ~/.ome/bin
+```
+
+Narrower lanes:
+
+```sh
+pnpm --filter @ome-labs/contracts test                  # contract unit, integration (TXE) and end-to-end tests
+pnpm --filter @ome-labs/contracts check:failures        # every assert message is expected by a test
+pnpm --filter @ome-labs/contracts profile               # gate counts per function
+cargo test --manifest-path crates/Cargo.toml -p <crate> # one crate, e.g. ome-keeper or ome-cli
+pnpm --filter @ome-labs/wasm build|test                 # the WebAssembly package
+pnpm --filter @ome-labs/wallet test                     # wallet unit tests (no network)
+pnpm --filter @ome-labs/daemon test                     # daemon unit tests (no network)
+pnpm --filter @ome-labs/ffi mobile:swift|mobile:kotlin  # the phone bindings
+```
+
+Slow suites, outside `pnpm test` (Docker; the first three need `aztec start --local-network`, which `--start` starts
+for you):
+
+```sh
+pnpm test:e2e         # wallet and daemons end to end: founding, paying, rotating, a phone, a keeper on a server
+pnpm test:removal     # the member removal drill, 2-of-3 and 3-of-4
+pnpm test:cli         # three members through `ome` only
+pnpm test:network     # a relay and three keepers on separate Docker networks
+pnpm bench:proving    # timings with real client-side proofs
+pnpm drill:testnet    # found, fund, pay and rotate on Aztec Testnet with real proofs
+```
+
+CI runs the fast checks on every push to `main` (`.github/workflows/ci.yml`); the slow suites and the Testnet drill
+run by hand (`.github/workflows/extended.yml`). Releases are described in
+[architecture/release.md](architecture/release.md).
 
 ## Workflow
 
 - Inspect the branch, working tree and recent commits before changing anything; keep unrelated work intact.
 - Commit after each coherent change with a [Conventional Commit](https://www.conventionalcommits.org/). Scopes are the
   component's short name: `contracts`, `crypto`, `wire`, `protocol`, `signer`, `net`, `keeper`, `relay`, `api`,
-  `client`, `wasm`, `ffi`, `wallet`, `daemon`, `repo`. Commit messages are checked by commitlint (body lines up to 100
-  characters).
+  `client`, `cli`, `wasm`, `ffi`, `wallet`, `pxe`, `daemon`, `repo`. The release pull request and `CHANGELOG.md` are
+  written from these messages: `feat` and `fix` appear in the changelog, and a `!` or `BREAKING CHANGE:` footer marks a
+  breaking change. Commit messages are checked by commitlint (body lines up to 100 characters).
 - Run the narrowest relevant check first, then `pnpm check` and `pnpm test`. Report skipped lanes and pre-existing
   failures rather than hiding them.
 - Update the owning page in `architecture/` in the same change when a contract, wire format, key flow or trust
   boundary changes.
+- Open a pull request against `main`; CI must pass. Protocol `v0` is frozen from the first release: wire formats, the
+  contract and sealed files change only with a migration.
 
 ## Code
 
@@ -82,7 +138,7 @@ testing lives in the library and is tested there.
   just `is_err()`.
 - **Errors over panics.** Library code returns `Result`; reserve `#[should_panic]` for genuine invariants.
 - **Plain asserts.** `assert_eq!` and `assert!(matches!(..))`; no assertion libraries.
-- **Spacing and size** follow the clean-code skill: arrange, act and assert separated by blank lines; test files under
+- **Spacing and size**: arrange, act and assert separated by blank lines; test files under
   ~400–500 lines, split by feature when they grow.
 
 ### Speed tiers

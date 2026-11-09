@@ -3,72 +3,36 @@
 A private k-of-n multisig on [Aztec](https://aztec.network) with threshold viewing: `k` members to spend, `t` members
 to read, and nobody ever holds the vault's viewing key.
 
-## Status
+- **Spending** is enforced by the vault's account contract: a payment runs only when the proof carries valid
+  signatures from at least `k` registered members. Signers, thresholds and the committee are never written to public
+  storage or public arguments.
+- **Reading** is threshold decryption: each member's keeper holds a share of the vault's incoming viewing secret, and
+  the wallet decrypts by asking `t` keepers for their part of each Diffie-Hellman exchange, each part with a DLEQ
+  proof. The secret is never assembled anywhere.
+- **Membership changes** reshare the viewing key and update the signers together. The vault keeps its address, and a
+  removed member's keeper cannot read anything that arrives afterwards.
 
-The core is complete and tested as a system: the vault contract, the Rust core (cryptography, wire, protocol, signer,
-networking, keeper, relay, API), the WebAssembly and mobile bindings, the PXE host, the member's daemon (`omed`) and
-their command line (`ome`).
+[Website](https://ome.network) · [Architecture](architecture/README.md) · [CLI guide](architecture/cli.md) ·
+[Releases](https://github.com/ome-labs/ome/releases) · [Security](SECURITY.md)
 
-**What works**, end to end on Aztec 6.0.0's local network, and on Testnet with real proofs:
+## Install
 
-- founding a k-of-n vault through a lobby and a DKG, with every member deriving the same address;
-- paying with `k` approvals, rejecting, cancelling; a removed member's open approval going stale;
-- reading the vault's notes through threshold ECDH, the viewing key never in one place;
-- adding and removing members with a reshare, the vault keeping its address, and the contract refusing a committee that
-  does not hold the vault's viewing key; a removed member's keeper, even
-  restarted from before the removal, cannot read anything sent afterwards (`pnpm test:removal`);
-- keepers on separate networks reaching each other only through a relay, and catching up through its mailboxes
-  (`pnpm test:network`);
-- a member's signing key on a phone (`crates/ffi`, Swift and Kotlin), enrolled with a signer swap;
-- a member's keeper on their own server, reached over TLS pinned by fingerprint;
-- received transfers in a vault's activity, and the counterparties a removed member could still notice.
-
-**Measured:** see `pnpm bench:proving` and the architecture pages; the numbers from the latest run are in
-[architecture/README.md](architecture/README.md#measurements).
-
-**Lost keys and shares:** a vault needs `k` signing keys to spend and `t_v` keepers to read, and cannot spend what it
-cannot read. A lost key or keeper is replaced by a signer swap or a membership change while enough remain;
-`ome vault health` shows the margin. Shares are never backed up. See [architecture/recovery.md](architecture/recovery.md).
-
-**Not built yet:** the desktop and mobile apps (the command line is the way in today); a recovery keeper (a viewer
-without a signing key); push notifications; P-256 signer keys held by the Secure Enclave or StrongBox; an external
-audit.
-
-## Layout
-
-```text
-contracts/   Nargo workspace (Aztec.nr 6.0.0): the vault contract
-crates/      Cargo workspace (Rust): crypto, wire, protocol, signer, net, keeper, relay, api, client, cli, wasm, ffi
-packages/    TypeScript: the generated API, the wallet (PXE host) and the daemon (omed)
-tools/       golden vectors and the multi-network suite
-scripts/     repository scripts
-architecture/ design pages: what is built, decided and measured
-```
-
-## Toolchain
-
-| Concern     | Tool                                                                                                                |
-| ----------- | ------------------------------------------------------------------------------------------------------------------- |
-| Contracts   | Aztec 6.0.0 (`aztec compile`, `aztec test`, `aztec-nargo fmt / check`)                                              |
-| Rust        | 1.99.1 (`rust-toolchain.toml`), `rustfmt`, `clippy -D warnings`, `cargo-deny`                                       |
-| WebAssembly | `wasm32-unknown-unknown` (`rust-toolchain.toml`), `wasm-bindgen` CLI 0.2.108                                        |
-| Mobile      | UniFFI 0.32.2; iOS and Android targets (added by the build script), Xcode, JDK 21, Gradle, Android NDK, `cargo-ndk` |
-| TypeScript  | Node 24, pnpm 12, Turborepo, TypeScript 7, oxfmt, oxlint (klarity presets)                                          |
-| Hooks       | lefthook, commitlint (Conventional Commits)                                                                         |
-
-Install Aztec with `aztec-up install 6.0.0`, `cargo-deny` with `cargo install cargo-deny`, and the `wasm-bindgen` CLI
-with `cargo install wasm-bindgen-cli --version 0.2.108 --locked` (it must match the `wasm-bindgen` crate in
-`crates/Cargo.lock`).
-
-The mobile bindings (`crates/ffi`) also need Xcode (iOS), and for Android a JDK 21, Gradle, the Android
-command-line tools with an NDK (`sdkmanager "platform-tools" "platforms;android-37.2" "ndk;30.0.16248370"`), and
-`cargo install cargo-ndk`; set `JAVA_HOME`, `ANDROID_HOME` and `ANDROID_NDK_HOME`.
-
-## Using Ome
+macOS on Apple silicon, or Linux (x64, arm64). Any of:
 
 ```sh
-pnpm cli:install                  # ome, ome-keeper and omed into ~/.ome/bin; prints the PATH line
-ome init                          # your profile: name, network, passphrase
+curl -fsSL https://ome.network/install.sh | sh     # into ~/.ome; fetches Node 24 if you have none
+brew install ome-labs/tap/ome                       # Homebrew, with its Node 24
+npm install --global @ome-labs/ome                  # Node 24 or later
+```
+
+Each installs the same three programs: `ome`, the command line; `omed`, the daemon `ome` starts for each profile; and
+`ome-keeper`, which holds your share of each vault's viewing key. `ome doctor` checks the install and says how to
+update it. Every release is built in public CI with provenance: see [verifying a release](architecture/release.md).
+
+## Quick start
+
+```sh
+ome init                          # your profile: name, network (Testnet or a local network), passphrase
 ome vault create                  # found a vault with co-founders: prints the invite
 ome vault join <invite>           # each co-founder
 ome vault receive                 # the vault's address, and the aztec-wallet line to fund it
@@ -76,81 +40,66 @@ ome propose transfer 250 USDC bob # a payment; members review and approve it
 ome approve 4f2a                  # the review on your device, then your signature
 ome execute 4f2a                  # prove and send once enough approved
 ome watch                         # proposals and activity, live
+ome daemon install-service        # keep your keeper answering while no terminal is open
 ```
 
-`ome --help` lists every command; [architecture/cli.md](architecture/cli.md) describes them, and how `ome` works
-alongside `aztec-wallet`.
+`ome` works beside `aztec-wallet` and uses its address aliases; it keeps no address book of its own. `ome --help`
+lists every command.
 
-## Commands
+## What each party holds
 
-```sh
-pnpm install        # also installs git hooks
-pnpm check          # format check, lint (oxlint, clippy, nargo check), typecheck, build, cargo-deny
-pnpm test           # aztec test, cargo test, vitest
-pnpm format         # oxfmt, rustfmt, nargo fmt
+| Party             | Holds                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| A member          | their signing key (never leaves their device) and, through their keeper, one viewing share    |
+| A member's keeper | one share, sealed on the member's device or their own server; answers reads with proofs       |
+| A relay           | ciphertext and peer ids: it forwards keeper traffic and keeps sealed mailboxes                |
+| The Aztec network | proofs, encrypted notes and nullifiers; not who signed, the thresholds or the members         |
+| Ome Labs          | runs one relay for Testnet, so it sees which peer ids talk; never a share, a key or a balance |
+
+Fees are never paid from the vault in public. Shares are never backed up or exported: a lost key or keeper is
+replaced by a key swap or a membership change while enough remain, and `ome vault health` shows the margin
+([recovery](architecture/recovery.md)).
+
+## Status
+
+Ome runs on Aztec 6.0.0's Testnet and on a local network; mainnet is refused. It has not had an external audit yet:
+use Testnet funds.
+
+Working end to end: founding a vault through a lobby and a distributed key generation; paying with `k` approvals,
+rejecting and cancelling; threshold reads; adding and removing members with a reshare (and the contract refusing a
+committee that does not hold the vault's viewing key); keepers on separate networks reaching each other through
+relays and catching up from their mailboxes; a member's signing key on a phone; a keeper on a member's own server over
+pinned TLS. Proving times are in [architecture/README.md](architecture/README.md#measurements).
+
+Not built yet: desktop and mobile apps (the command line is the way in), a recovery keeper (a viewer without a
+signing key), push notifications, and P-256 signer keys held by the Secure Enclave or StrongBox.
+
+## What is published
+
+| Artifact                                   | What it is                                                                        |
+| ------------------------------------------ | --------------------------------------------------------------------------------- |
+| `@ome-labs/ome`                            | the `ome`, `omed` and `ome-keeper` commands; pulls in the build for your platform |
+| `@ome-labs/daemon`                         | `omed`, a member's daemon: wallet, sealed signer, keeper supervision, API         |
+| `@ome-labs/wallet`                         | Aztec's PXE host for Ome vaults: the threshold key store, deployment, proposals   |
+| `@ome-labs/pxe`                            | Aztec's `@aztec-labs/pxe` 6.0.0 with the key-store hook Ome needs                 |
+| `@ome-labs/api`                            | TypeScript types of the keeper and daemon APIs                                    |
+| `@ome-labs/wasm`                           | the Rust core (cryptography, wire, protocol, signer) as WebAssembly               |
+| `@ome-labs/contracts`                      | the `OmeVault` contract artifacts                                                 |
+| `ghcr.io/ome-labs/ome-keeper`, `ome-relay` | a keeper for your own server, and a relay; amd64 and arm64, signed with cosign    |
+| `ome-<version>-<platform>.tar.gz`          | the release archives the install script and Homebrew use, with SBOMs              |
+
+## Repository
+
+```text
+contracts/      Aztec.nr 6.0.0: the OmeVault account contract and its tests
+crates/         Rust: crypto, wire, protocol, signer, net, keeper, relay, api, client, cli, wasm, ffi
+packages/       TypeScript: ome (launcher), daemon, wallet, pxe (fork), api
+tools/          golden vectors from Aztec's own packages, and the multi-network suite
+scripts/        repository scripts, the install script and release packaging
+architecture/   one page per component: what is built, decided and measured
 ```
 
-Contracts:
-
-```sh
-pnpm --filter @ome-labs/contracts test                  # unit, integration (TXE) and end-to-end tests
-pnpm --filter @ome-labs/contracts check:failures        # every assert message is expected by a test
-pnpm --filter @ome-labs/contracts profile               # gate counts per function
-pnpm --filter @ome-labs/contracts profile:flamegraphs   # target/flamegraphs/<artifact>/<function>.svg
-```
-
-Slow suites (each needs Docker; the first three `aztec start --local-network`, which `--start` starts for you):
-
-```sh
-pnpm test:e2e         # wallet and daemons end to end: founding, paying, rotating, a phone, a keeper on a server
-pnpm test:removal     # the member removal drill, 2-of-3 and 3-of-4
-pnpm test:cli         # three members through `ome` only: founding, paying, removing a member
-pnpm test:network     # a relay and three keepers on separate Docker networks
-pnpm bench:proving    # timings with real client-side proofs
-pnpm drill:testnet    # found, fund, pay and rotate on Aztec Testnet with real proofs
-```
-
-CI runs the fast checks on every push to `main` (`.github/workflows/ci.yml`); the slow suites, the mobile bindings
-and, on request, the Testnet drill run by hand (`.github/workflows/extended.yml`).
-
-Command line (`ome-cli`, `crates/cli`):
-
-```sh
-cargo test --manifest-path crates/Cargo.toml -p ome-cli   # parsing, references, renderers, a stand-in daemon
-```
-
-Daemon (`@ome-labs/daemon`):
-
-```sh
-pnpm --filter @ome-labs/daemon test       # unit tests (no network)
-pnpm --filter @ome-labs/daemon test:e2e   # three or four daemons against `aztec start --local-network`
-node packages/daemon/src/omed.ts --profile <name>   # run omed
-```
-
-Wallet (`@ome-labs/wallet`):
-
-```sh
-pnpm --filter @ome-labs/wallet test       # unit tests (no network)
-pnpm --filter @ome-labs/wallet test:e2e   # against `aztec start --local-network`, with real ome-keeper processes
-```
-
-WebAssembly (`@ome-labs/wasm`):
-
-```sh
-pnpm --filter @ome-labs/wasm build      # dist/{main,testing}/{node,web}
-pnpm --filter @ome-labs/wasm test       # Vitest against the built package
-pnpm --filter @ome-labs/wasm generate   # src/types.d.ts from the Rust boundary types
-pnpm --filter @ome-labs/wasm bench      # timings of combine, outer hash and unseal
-```
-
-Mobile bindings (`@ome-labs/ffi`, `crates/ffi`):
-
-```sh
-pnpm --filter @ome-labs/ffi mobile:swift     # Swift bindings on the macOS host: swift test
-pnpm --filter @ome-labs/ffi mobile:kotlin    # Kotlin bindings on the JVM: gradle test
-pnpm --filter @ome-labs/ffi mobile:apple     # dist/apple/OmeFfi.xcframework and OmeFfi.swift
-pnpm --filter @ome-labs/ffi mobile:android   # dist/android/ome-ffi.aar
-```
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the toolchain, the commands and how changes are made and tested.
 
 ## License
 

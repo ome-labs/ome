@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in ome, omed, ome-keeper, a package or the contract does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A security issue? Report it privately instead: see SECURITY.md.
+        Never paste a passphrase, signing key, viewing share or a profile's sealed files.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The commands, from a fresh profile if you can.
+      render: shell
+  - type: textarea
+    id: doctor
+    attributes:
+      label: ome doctor --json
+      description: Its output; it says the version, how Ome was installed and which checks fail.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant part of `ome daemon logs` or `ome keeper logs`.
+      render: text
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network
+      options: [Testnet, Local network]
+    validations:
+      required: true

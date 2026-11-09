@@ -56,7 +56,7 @@ References: an address can be 0x…, accounts:<name> or contracts:<name> (aztec-
 or a bare name; a token its symbol; a proposal a unique prefix of its id. Name people with
 `aztec-wallet alias accounts <name> <address>`: ome keeps no address book of its own.
 
-Run `ome <command> --help` for a command's flags. Docs: architecture/cli.md";
+Run `ome <command> --help` for a command's flags. Docs: https://github.com/ome-labs/ome/blob/main/architecture/cli.md";
 
 /// `ome`: an Ome member's command line. Vault work only: everything else stays with `aztec-wallet`.
 #[derive(Debug, Parser)]
