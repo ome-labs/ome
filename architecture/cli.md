@@ -24,7 +24,7 @@ signer stays sealed in the daemon, and viewing shares stay in the keeper.
 SET UP      init · status · doctor · config get|set|unset · profile list|show|use|remove
             daemon start|stop|restart|logs · keeper status|connect|use-local|logs · completions <shell>
 SIGNER      unlock [--for 15m] [--touch-id] · lock · signer status|touch-id on|off
-VAULTS      vault create|join|list|show|use|alias|members|peers|audit|receive|balance|retire
+VAULTS      vault create|join|list|show|use|alias|members|peers|health|audit|receive|balance|retire
             balance [token] · activity [--follow] · counterparties
             token add|list|remove|deploy-test
 PROPOSALS   propose transfer <amount> <token> <to> | call <fn> -ca <contract> --args … | cancel <proposal>
@@ -112,6 +112,10 @@ form; anything else is passed as typed.
 
 A failed check refuses the approval (rejecting stays possible); a failed simulation is a warning. `--yes` skips only
 the final question.
+
+Thresholds that can strand the funds for good (every keeper needed to read, or every key needed to spend: see
+`architecture/recovery.md`) are shown when a vault is created or its members change, and need a deliberate yes
+(`--yes` in scripts); the other policy warnings are shown only.
 
 Irreversible actions ask the member to type the vault's (or profile's) name, and take `--confirm <name>` in scripts:
 `vault retire`, `member change` with a removal, `device enroll`, `profile remove`. `--yes` does not satisfy them.

@@ -157,9 +157,57 @@ pub(crate) fn shape(threshold: u32, viewing_threshold: u32, members: u32) -> Str
     format!("{threshold} of {members} to spend · {viewing_threshold} of {members} to read")
 }
 
+/// A risk in a vault's thresholds, in words, and whether it can strand the funds for good.
+pub(crate) struct Risk {
+    pub(crate) severe: bool,
+    pub(crate) text: String,
+}
+
+/// The risks of `k` to spend and `t_v` to read among `n` members (`ome-protocol`'s policy warnings).
+pub(crate) fn risks(threshold: u32, viewing_threshold: u32, members: u32) -> Vec<Risk> {
+    use ome_protocol::membership::policy::{Warning, warnings};
+    warnings(threshold, viewing_threshold, members)
+        .into_iter()
+        .map(|warning| match warning {
+            Warning::SingleSigner => Risk {
+                severe: false,
+                text: "any one member can spend alone".into(),
+            },
+            Warning::NoSpareSigner => Risk {
+                severe: true,
+                text: format!(
+                    "all {members} members must approve: one lost signing key stops all spending for good"
+                ),
+            },
+            Warning::TwoCanRead => Risk {
+                severe: false,
+                text: "any 2 members, even 2 who later leave, can read what arrived while they were members"
+                    .into(),
+            },
+            Warning::NoSpareViewer => Risk {
+                severe: true,
+                text: format!(
+                    "all {members} keepers are needed to read: lose one and the vault can never find its notes \
+                     again, so its funds are stuck"
+                ),
+            },
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn risks_name_the_shapes_that_strand_funds() {
+        let severe = |k, t, n| risks(k, t, n).iter().filter(|r| r.severe).count();
+        assert_eq!(severe(2, 2, 3), 0);
+        // A 2-of-2 vault needs both keepers to read and both keys to spend.
+        assert_eq!(severe(2, 2, 2), 2);
+        assert_eq!(severe(2, 3, 3), 1);
+        assert_eq!(risks(2, 3, 4).len(), 0);
+    }
 
     #[test]
     fn networks_have_names() {

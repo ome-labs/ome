@@ -101,6 +101,24 @@ test("each member sets up a profile", async () => {
 
 let vault = "";
 
+test("a vault that would strand its funds after one lost keeper needs a deliberate yes", async () => {
+  const refused = await ome("alice", [
+    "vault",
+    "create",
+    "--name",
+    "Fragile",
+    "--members",
+    "2",
+    "-k",
+    "2",
+    "-t",
+    "2",
+    "--no-input",
+  ]);
+  assert.equal(refused.code, 2, refused.stderr);
+  assert.match(refused.stderr, /never find its notes again/u);
+});
+
 test("they found a 2-of-3 vault: Alice creates it, Bob and Carol join with her invite", async () => {
   const create = passOn(
     "alice",
@@ -119,6 +137,12 @@ test("they found a 2-of-3 vault: Alice creates it, Bob and Carol join with her i
     const [listed] = await json<{ address: string }[]>(profile, ["vault", "list"]);
     assert.equal(listed?.address, vault);
   }
+  // Every keeper answers; reading needs two, so one can be lost.
+  const health = await json<{ canRead: boolean; answering: number; spare: number }>("bob", [
+    "vault",
+    "health",
+  ]);
+  assert.deepEqual([health.canRead, health.answering, health.spare], [true, 3, 1]);
 });
 
 test("they pay from it: proposed, reviewed and approved by two, executed", async () => {
@@ -205,4 +229,11 @@ test("they remove Carol: a reshare and rotate_membership, approved by the two wh
   );
   const counterparties = await json<unknown[]>("alice", ["counterparties"]);
   assert.ok(Array.isArray(counterparties));
+  // Two members, both needed to read: no keeper to spare.
+  const health = await json<{ canRead: boolean; spare: number; risks: { severe: boolean }[] }>(
+    "alice",
+    ["vault", "health"],
+  );
+  assert.deepEqual([health.canRead, health.spare], [true, 0]);
+  assert.ok(health.risks.some((r) => r.severe));
 });

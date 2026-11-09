@@ -30,7 +30,7 @@ const COMMANDS: &str = "\
   \x1b[36msigner\x1b[0m          status, Touch ID
 
 \x1b[1;32mVaults:\x1b[0m
-  \x1b[36mvault\x1b[0m           create, join, list, show, use, alias, members, peers, audit, receive, retire
+  \x1b[36mvault\x1b[0m           create, join, list, show, use, alias, members, peers, health, audit, receive, retire
   \x1b[36mbalance\x1b[0m         what the vault holds
   \x1b[36mactivity\x1b[0m        proposals and received transfers
   \x1b[36mcounterparties\x1b[0m  who paid the vault, and who should handshake again
@@ -404,6 +404,8 @@ pub(crate) enum VaultCommand {
     Members,
     /// Whether each member's keeper is reachable.
     Peers,
+    /// Whether the vault can still read, how many keepers it can lose, and how to recover one.
+    Health,
     /// Who asked your keeper for threshold reads, and what it answered.
     Audit {
         /// Most recent entries.

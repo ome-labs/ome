@@ -14,7 +14,8 @@ their command line (`ome`).
 - founding a k-of-n vault through a lobby and a DKG, with every member deriving the same address;
 - paying with `k` approvals, rejecting, cancelling; a removed member's open approval going stale;
 - reading the vault's notes through threshold ECDH, the viewing key never in one place;
-- adding and removing members with a reshare, the vault keeping its address; a removed member's keeper, even
+- adding and removing members with a reshare, the vault keeping its address, and the contract refusing a committee that
+  does not hold the vault's viewing key; a removed member's keeper, even
   restarted from before the removal, cannot read anything sent afterwards (`pnpm test:removal`);
 - keepers on separate networks reaching each other only through a relay, and catching up through its mailboxes
   (`pnpm test:network`);
@@ -25,9 +26,13 @@ their command line (`ome`).
 **Measured:** see `pnpm bench:proving` and the architecture pages; the numbers from the latest run are in
 [architecture/README.md](architecture/README.md#measurements).
 
-**Not built yet:** the desktop and mobile apps (the command line is the way in today); recovery of a lost viewing share; the contract-side check that a
-rotation's shares hold the vault's key (approvers check it today); push notifications; P-256 signer keys held by the
-Secure Enclave or StrongBox; an external audit.
+**Lost keys and shares:** a vault needs `k` signing keys to spend and `t_v` keepers to read, and cannot spend what it
+cannot read. A lost key or keeper is replaced by a signer swap or a membership change while enough remain;
+`ome vault health` shows the margin. Shares are never backed up. See [architecture/recovery.md](architecture/recovery.md).
+
+**Not built yet:** the desktop and mobile apps (the command line is the way in today); a recovery keeper (a viewer
+without a signing key); push notifications; P-256 signer keys held by the Secure Enclave or StrongBox; an external
+audit.
 
 ## Layout
 

@@ -11,7 +11,7 @@ pub(crate) mod propose;
 mod setup;
 mod signer;
 mod token;
-mod vault;
+pub(crate) mod vault;
 
 use crate::{
     args::{Command, ProposalCommand, VaultCommand},

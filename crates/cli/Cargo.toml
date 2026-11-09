@@ -20,6 +20,7 @@ comfy-table = "8.0.1"
 console = "0.16.6"
 ome-api = { workspace = true }
 ome-client = { workspace = true }
+ome-protocol = { workspace = true }
 qrcode = { version = "0.14.1", default-features = false }
 ratatui = "0.30.2"
 serde = { workspace = true }

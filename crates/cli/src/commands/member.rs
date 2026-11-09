@@ -161,6 +161,12 @@ async fn change(ctx: &Ctx, args: ChangeArgs) -> Result<()> {
     if let Some(failure) = &plan.failure {
         return Err(Error::usage(format!("This change cannot run: {failure}")));
     }
+    crate::commands::vault::accept_risks(
+        ctx,
+        plan.next.threshold,
+        plan.next.viewing_threshold,
+        u32::try_from(plan.next.members.len()).unwrap_or(u32::MAX),
+    )?;
     if remove.is_empty() {
         prompt::proceed(ctx, "Start this change?")?;
     } else {

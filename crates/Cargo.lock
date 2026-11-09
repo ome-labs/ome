@@ -3345,6 +3345,7 @@ dependencies = [
  "objc2-local-authentication",
  "ome-api",
  "ome-client",
+ "ome-protocol",
  "qrcode",
  "ratatui",
  "security-framework",

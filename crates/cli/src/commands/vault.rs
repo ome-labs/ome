@@ -41,6 +41,7 @@ pub(crate) async fn run(ctx: &Ctx, command: VaultCommand) -> Result<()> {
         VaultCommand::Alias { alias } => set_alias(ctx, alias).await,
         VaultCommand::Members => members(ctx).await,
         VaultCommand::Peers => peers(ctx).await,
+        VaultCommand::Health => health(ctx).await,
         VaultCommand::Audit { limit } => audit(ctx, limit).await,
         VaultCommand::Receive => receive(ctx).await,
         VaultCommand::Retire { confirm } => retire(ctx, confirm.as_deref()).await,
@@ -109,11 +110,17 @@ async fn create(ctx: &Ctx, args: CreateArgs) -> Result<()> {
             total.min(2),
             2..=total,
         )?;
-        ctx.warn(&format!(
+        ctx.info(&format!(
             "Any {readers} members together can read everything the vault holds; fewer cannot read anything. \
              A change of members can remove at most {} at a time.",
             readers - 1
         ));
+        accept_risks(
+            ctx,
+            u32::from(approvals),
+            u32::from(readers),
+            u32::from(total),
+        )?;
         let lobby = client
             .call::<LobbyCreate>(&LobbyCreateParams {
                 name: name.trim().to_owned(),
@@ -162,6 +169,34 @@ async fn create(ctx: &Ctx, args: CreateArgs) -> Result<()> {
         })
         .await?;
     found(ctx, client, &lobby).await
+}
+
+/// Shows the thresholds' risks; the ones that can strand the funds for good need a deliberate yes (`--yes` in scripts).
+pub(crate) fn accept_risks(
+    ctx: &Ctx,
+    threshold: u32,
+    viewing_threshold: u32,
+    members: u32,
+) -> Result<()> {
+    let risks = describe::risks(threshold, viewing_threshold, members);
+    for risk in &risks {
+        ctx.warn(&format!(
+            "{}{}",
+            if risk.severe { "No spare: " } else { "" },
+            risk.text
+        ));
+    }
+    if risks.iter().any(|r| r.severe) {
+        let accepted = prompt::confirm(ctx, "Accept this risk?", false).map_err(|e| {
+            e.hint("Choose more members or lower thresholds, or pass --yes to accept the risk.")
+        })?;
+        if !accepted {
+            return Err(Error::declined().hint(
+                "More members, or lower thresholds, leave a spare: see `architecture/recovery.md`.",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn names(lobby: &LobbyView) -> String {
@@ -652,6 +687,155 @@ async fn peers(ctx: &Ctx) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// How far the vault is from unreadable: reading needs `t_v` keepers, and a vault that cannot read cannot find its
+/// notes to spend them either. Exits 4 when it cannot read now.
+async fn health(ctx: &Ctx) -> Result<()> {
+    let vault = refs::vault(ctx).await?;
+    let client = ctx.client().await?;
+    let step = Step::start(ctx, "Reaching the members' keepers");
+    let params = VaultParams {
+        vault: vault.address,
+    };
+    let (details, peers) = tokio::join!(
+        client.call::<VaultDetailsGet>(&params),
+        client.call::<VaultPeers>(&params)
+    );
+    let (details, peers) = (details?, peers?);
+    step.clear();
+    let needed = details.committee.viewing_threshold;
+    let answering = u32::try_from(
+        peers
+            .iter()
+            .filter(|p| p.connected || (p.you && details.committee.serving))
+            .count(),
+    )
+    .unwrap_or(0);
+    let spare = answering.saturating_sub(needed);
+    let config_matches = details.config.as_ref().is_some_and(|c| c.matches_committee);
+    let risks = describe::risks(vault.threshold, needed, vault.members);
+    let can_read = answering >= needed;
+    if ctx.mode == Mode::Json {
+        ctx.json(&serde_json::json!({
+            "vault": vault.address,
+            "viewingThreshold": needed,
+            "members": vault.members,
+            "answering": answering,
+            "spare": spare,
+            "canRead": can_read,
+            "serving": details.committee.serving,
+            "keeperStatus": details.committee.keeper_status,
+            "configMatches": config_matches,
+            "risks": risks.iter().map(|r| serde_json::json!({ "severe": r.severe, "text": r.text })).collect::<Vec<_>>(),
+        }))?;
+    } else {
+        show_health(ctx, &vault, &details, (answering, needed, spare), &risks);
+    }
+    if can_read {
+        Ok(())
+    } else {
+        Err(Error::new(
+            crate::error::Exit::NotReady,
+            format!(
+                "{} cannot read now: {answering} of {needed} keepers answer.",
+                vault.name
+            ),
+        ))
+    }
+}
+
+/// The health report on the rail.
+fn show_health(
+    ctx: &Ctx,
+    vault: &ome_api::daemon::VaultSummary,
+    details: &ome_api::daemon::VaultDetails,
+    (answering, needed, spare): (u32, u32, u32),
+    risks: &[describe::Risk],
+) {
+    let can_read = answering >= needed;
+    ctx.intro(&format!("Health of {}", vault.name));
+    let reading = if can_read {
+        format!(
+            "{} {answering} of {} keepers answer; reading needs {needed}, so {} more can be lost",
+            theme::check(spare > 0),
+            vault.members,
+            format::plural(spare, "keeper", "keepers")
+        )
+    } else {
+        format!(
+            "{} only {answering} of {} keepers answer; reading needs {needed}: nobody can read or spend until \
+             another is back",
+            theme::check(false),
+            vault.members
+        )
+    };
+    ctx.section("Reading", &[reading]);
+    let keeper = if details.committee.serving {
+        format!(
+            "{} holds its share (epoch {})",
+            theme::check(true),
+            details.committee.epoch
+        )
+    } else {
+        format!(
+            "{} does not hold a share ({}): ask a member to re-add you (below)",
+            theme::check(false),
+            details.committee.keeper_status
+        )
+    };
+    let config = match &details.config {
+        Some(c) if c.matches_committee => format!(
+            "{} the on-chain config (version {}) names this committee",
+            theme::check(true),
+            c.version
+        ),
+        Some(_) => format!(
+            "{} the on-chain config names another committee: see `{}`",
+            theme::check(false),
+            ctx.ome("member status")
+        ),
+        None => format!(
+            "{} the on-chain config has not been read yet",
+            theme::caution()
+        ),
+    };
+    ctx.section("Your keeper", &[keeper, config]);
+    if !risks.is_empty() {
+        ctx.section(
+            "Thresholds",
+            &risks
+                .iter()
+                .map(|r| {
+                    format!(
+                        "{} {}",
+                        if r.severe {
+                            theme::bad("✗")
+                        } else {
+                            theme::caution()
+                        },
+                        r.text
+                    )
+                })
+                .collect::<Vec<_>>(),
+        );
+    }
+    ctx.section(
+        "If a keeper is lost for good",
+        &[
+            format!(
+                "While {needed} keepers still answer, the others reshare to a replacement: the member runs {} on \
+                 the new device,",
+                theme::name("ome member request")
+            ),
+            format!(
+                "and anyone runs {}.",
+                theme::name("ome member change --remove <member> --add <request>")
+            ),
+            theme::dim("Viewing shares are never backed up: a reshare is the only way back. See architecture/recovery.md.")
+                .to_string(),
+        ],
+    );
 }
 
 async fn audit(ctx: &Ctx, limit: u32) -> Result<()> {
