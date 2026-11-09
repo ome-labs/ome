@@ -4,12 +4,15 @@
   "description": "Ome's Rust core as WebAssembly for Node and browsers: threshold viewing, proposals, the signer and membership checks",
   "keywords": [
     "aztec",
+    "grumpkin",
     "multisig",
+    "noir",
     "ome",
     "privacy",
     "threshold-cryptography",
     "wasm",
-    "webassembly"
+    "webassembly",
+    "zero-knowledge"
   ],
   "homepage": "https://ome.network",
   "bugs": "https://github.com/ome-labs/ome/issues",

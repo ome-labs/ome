@@ -5,11 +5,13 @@
   "keywords": [
     "api",
     "aztec",
+    "json-rpc",
     "multisig",
     "ome",
     "privacy",
     "threshold-cryptography",
-    "typescript"
+    "typescript",
+    "zero-knowledge"
   ],
   "homepage": "https://ome.network",
   "bugs": "https://github.com/ome-labs/ome/issues",

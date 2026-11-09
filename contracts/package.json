@@ -3,12 +3,15 @@
   "version": "0.0.0",
   "description": "Compiled Aztec contracts of Ome: the OmeVault k-of-n account contract and its review-simulation stand-in",
   "keywords": [
+    "account-abstraction",
     "account-contract",
     "aztec",
     "contracts",
     "multisig",
     "noir",
-    "ome"
+    "ome",
+    "privacy",
+    "zero-knowledge"
   ],
   "homepage": "https://ome.network",
   "bugs": "https://github.com/ome-labs/ome/issues",

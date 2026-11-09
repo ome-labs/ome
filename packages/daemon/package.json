@@ -8,7 +8,9 @@
     "multisig",
     "ome",
     "privacy",
-    "wallet"
+    "threshold-cryptography",
+    "wallet",
+    "zero-knowledge"
   ],
   "homepage": "https://ome.network",
   "bugs": "https://github.com/ome-labs/ome/issues",

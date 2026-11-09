@@ -9,7 +9,8 @@
     "ome",
     "privacy",
     "threshold-cryptography",
-    "wallet"
+    "wallet",
+    "zero-knowledge"
   ],
   "homepage": "https://ome.network",
   "bugs": "https://github.com/ome-labs/ome/issues",

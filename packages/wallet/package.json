@@ -3,13 +3,15 @@
   "version": "0.0.0",
   "description": "Aztec wallet for Ome vaults: the PXE with a threshold key store, vault deployment, and k-of-n proposals and execution",
   "keywords": [
+    "account-abstraction",
     "aztec",
     "multisig",
     "ome",
     "privacy",
     "pxe",
     "threshold-cryptography",
-    "wallet"
+    "wallet",
+    "zero-knowledge"
   ],
   "homepage": "https://ome.network",
   "bugs": "https://github.com/ome-labs/ome/issues",
