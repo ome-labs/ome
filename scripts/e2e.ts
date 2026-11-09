@@ -3,8 +3,9 @@
 //
 //   node scripts/e2e.ts e2e        the wallet and the daemons end to end (founding, paying, rotating, phone, server keeper)
 //   node scripts/e2e.ts removal    the member removal drill
+//   node scripts/e2e.ts cli        three members through `ome` only (founding, paying, removing a member)
 //
-// It builds what the suites run (the contract artifact, @ome-labs/wasm, ome-keeper, ome-relay, the test phone), checks
+// It builds what the suites run (the contract artifact, @ome-labs/wasm, ome, ome-keeper, ome-relay, the test phone), checks
 // the local network at AZTEC_NODE_URL (default http://localhost:8080), and with `--start` starts it when it is not
 // running (Docker must be up) and stops it afterwards.
 
@@ -17,12 +18,16 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const node = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 
-const SUITES: Record<string, { name: string; filter: string; script: string }[]> = {
+/** Each suite's parts, as the command that runs each. */
+const SUITES: Record<string, { name: string; command: string[] }[]> = {
   e2e: [
-    { name: "wallet", filter: "@ome-labs/wallet", script: "test:e2e" },
-    { name: "daemons", filter: "@ome-labs/daemon", script: "test:e2e" },
+    { name: "wallet", command: ["pnpm", "--filter", "@ome-labs/wallet", "test:e2e"] },
+    { name: "daemons", command: ["pnpm", "--filter", "@ome-labs/daemon", "test:e2e"] },
   ],
-  removal: [{ name: "removal drill", filter: "@ome-labs/daemon", script: "test:removal" }],
+  removal: [
+    { name: "removal drill", command: ["pnpm", "--filter", "@ome-labs/daemon", "test:removal"] },
+  ],
+  cli: [{ name: "ome cli", command: ["node", "--test", join(root, "scripts", "test-cli.ts")] }],
 };
 
 const args = process.argv.slice(2);
@@ -90,6 +95,8 @@ try {
     "--manifest-path",
     join(root, "crates", "Cargo.toml"),
     "-p",
+    "ome-cli",
+    "-p",
     "ome-keeper",
     "-p",
     "ome-relay",
@@ -99,11 +106,12 @@ try {
     "ome-ffi/cli",
     "--bins",
   ]);
-  for (const { name, filter, script } of suite) {
+  for (const { name, command } of suite) {
     const start = Date.now();
     let ok = true;
     try {
-      run("pnpm", ["--filter", filter, script]);
+      const [program = "", ...rest] = command;
+      run(program, rest);
     } catch {
       ok = false;
     }

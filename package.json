@@ -17,6 +17,7 @@
     "test": "turbo run test",
     "test:e2e": "node scripts/e2e.ts e2e",
     "test:removal": "node scripts/e2e.ts removal",
+    "test:cli": "node scripts/e2e.ts cli",
     "cli:install": "node scripts/cli-install.ts",
     "bench:proving": "pnpm --filter @ome-labs/daemon bench:proving",
     "drill:testnet": "pnpm --filter @ome-labs/daemon drill:testnet",

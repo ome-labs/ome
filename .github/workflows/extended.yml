@@ -96,6 +96,44 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:removal --start
 
+  cli:
+    name: Three members through the ome CLI
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      # The CLI must match the wasm-bindgen crate in crates/Cargo.lock.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.108
+      - name: Cache Aztec toolchain and Nargo dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.aztec
+            ~/nargo
+          key: aztec-${{ hashFiles('.aztecrc') }}-${{ hashFiles('contracts/**/Nargo.toml') }}
+          restore-keys: aztec-${{ hashFiles('.aztecrc') }}-
+      - name: Install Aztec
+        run: |
+          VERSION="$(cat .aztecrc)"
+          if [ ! -x "$HOME/.aztec/versions/$VERSION/bin/aztec" ]; then
+            curl -fsSL "https://install.aztec-labs.com/$VERSION/install" | VERSION="$VERSION" bash
+          fi
+          ln -sfn "$HOME/.aztec/versions/$VERSION" "$HOME/.aztec/current"
+          echo "$HOME/.aztec/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.aztec/current/bin" >> "$GITHUB_PATH"
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:cli --start
+
   network:
     name: Keepers on separate networks
     runs-on: ubuntu-latest
