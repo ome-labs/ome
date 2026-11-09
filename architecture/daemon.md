@@ -48,7 +48,8 @@ directory under a hash of the path.
 
 ## Signer and keys
 
-- `profile.create` does three things:
+- `profile.create` first checks the node (the account lives on it) and refuses with `not-ready` when it doesn't
+  answer, so a profile is never left half made. Then it does three things:
   1. seals a new signing key under the passphrase;
   2. creates the keeper's master key;
   3. creates the member's own Aztec account (an initializerless Schnorr account), sealed with the master key.
@@ -59,7 +60,9 @@ directory under a hash of the path.
   - it lives in the OS keychain: macOS Keychain, or Linux Secret Service through `secret-tool`. The keeper then starts
     with the daemon, without the member;
   - without a keychain, or with `OME_KEYCHAIN=off`, it is a file sealed with the signer's sealing key. The keeper then
-    starts at the first unlock, by passphrase or by sealing key.
+    starts at the first unlock, by passphrase or by sealing key. A start that fails (the node down) is not kept: the
+    next unlock tries again.
+- The node URL is read as the daemon starts: after `config.set` changes it, the daemon must restart (`ome` does).
 
 ## Keeper supervision
 
@@ -100,14 +103,14 @@ payer the signer trusts in rotations and the one paired devices are told about.
    member.
 3. Each member runs `founding.begin`. It goes through these steps, reported as `founding` events:
 
-| Step     | What happens                                                                                                                      |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| agree    | wait for the host's plan                                                                                                          |
-| dkg      | `ceremony.dkg` with the roster in member order; every keeper must reach the same transcript                                       |
-| derive   | `deriveVault` from the roster's signer keys, the DKG's group key and verification shares, the plan's thresholds, salt and secrets |
-| register | `vault.register` with the manifest; the vault's record and sealed secrets are stored; the wallet registers the vault              |
-| deploy   | the host deploys from its own account; the others wait until the config note reads                                                |
-| verify   | the config note goes to the keeper (`vault.observeConfig`), which must answer `current`                                           |
+| Step     | What happens                                                                                                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| agree    | wait for the host's plan                                                                                                                                                                                                 |
+| dkg      | `ceremony.dkg` with the roster in member order; every keeper must reach the same transcript                                                                                                                              |
+| derive   | `deriveVault` from the roster's signer keys, the DKG's group key and verification shares, the plan's thresholds, salt and secrets                                                                                        |
+| register | `vault.register` with the manifest; the vault's record and sealed secrets are stored; the wallet registers the vault                                                                                                     |
+| deploy   | the host deploys from its own account, retrying for up to 2 minutes while a co-founder's keeper has not registered yet (deploying reads the vault's keys by threshold ECDH); the others wait until the config note reads |
+| verify   | the config note goes to the keeper (`vault.observeConfig`), which must answer `current`                                                                                                                                  |
 
 ## Proposals
 
@@ -175,7 +178,8 @@ pay the vault by name; `aztec.alias` writes one alias. Sync is off by default.
    - Each dealer's keeper seals the hand-off to the joiners, so a member removed earlier never receives it.
    - The new epoch's transcript is stored.
 5. **Propose.** The planner proposes `rotate_membership` under the plan's nonce, built from its own reshare result.
-6. **Approve.** Members approve with `proposals.approve`, which routes a rotation to `approveRotation`. The proposal
+6. **Approve.** Members approve with `proposals.approve`, which routes a rotation to `approveRotation`, signing with
+   the unlocked signer or the secret passed with the call, as for any proposal. The proposal
    must perform exactly the rotation this member's keeper reshared. That compares the signers and committee shares,
    which closes the gaps doc's unchecked-approval item. The member's trusted fee payer is the only other call
    allowed.

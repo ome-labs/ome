@@ -10,6 +10,7 @@ import type {
   ProposeParams,
   RejectParams,
   Review,
+  Secret,
 } from "@ome-labs/api";
 import type { VaultTx } from "@ome-labs/wallet";
 import { decodeProposal, rejectionMessage, signerSwapSlot } from "@ome-labs/wasm";
@@ -28,6 +29,7 @@ export type RotationApprover = (
   vault: Hex32,
   stored: Stored,
   tx: VaultTx,
+  secret: Secret | undefined,
 ) => Promise<string | null>;
 
 /**
@@ -239,7 +241,7 @@ export class ProposalService {
       );
     } else if (rotation) {
       if (!this.#approveRotation) throw new DaemonError("not-ready", "rotations are not available");
-      approval = await this.#approveRotation(params.vault, stored, tx);
+      approval = await this.#approveRotation(params.vault, stored, tx, params.secret);
     } else {
       const chain = await wallet.chain();
       const now = await wallet.chainTime();

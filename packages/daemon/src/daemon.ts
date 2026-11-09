@@ -102,8 +102,8 @@ export class Daemon implements Context {
     this.proposals = new ProposalService(this);
     this.membership = new MembershipService(this);
     this.devices = new DeviceService(this, this.proposals, this.membership);
-    this.proposals.rotationApprover = (vault, stored, tx) =>
-      this.membership.approve(vault, stored, tx);
+    this.proposals.rotationApprover = (vault, stored, tx, secret) =>
+      this.membership.approve(vault, stored, tx, secret);
   }
 
   // Context.
@@ -249,6 +249,13 @@ export class Daemon implements Context {
     require(params.name.trim().length >= 1 &&
       params.name.length <= 48, "a name is 1 to 48 characters");
     require(params.passphrase.length >= 8, "use a passphrase of at least 8 characters");
+    // The account is derived on the node: refuse before sealing anything rather than leave a half-made profile.
+    const node = await this.node.check();
+    if (!node.reachable)
+      throw new DaemonError(
+        "not-ready",
+        `no Aztec node answers at ${node.url}: ${node.error ?? "no answer"}`,
+      );
     const sealing = Buffer.from((await this.signer.create(params.passphrase)).slice(2), "hex");
     const key = await (this.#keys as MasterKeyStore).create(sealing);
     const account: Account = {
@@ -265,7 +272,8 @@ export class Daemon implements Context {
       file.profile = {
         name: params.name.trim(),
         signerKey: this.signer.publicKey(),
-        account: "0x00",
+        // Zero until the wallet derives the account as it starts.
+        account: `0x${"00".repeat(32)}`,
         createdAt: Math.floor(Date.now() / 1000),
       };
     });
@@ -286,7 +294,11 @@ export class Daemon implements Context {
   }
 
   async #startCore(key: Buffer): Promise<void> {
-    this.#core ??= this.#bootCore(key);
+    // A failed start is not kept: the next unlock or profile command tries again.
+    this.#core ??= this.#bootCore(key).catch((error: unknown) => {
+      this.#core = undefined;
+      throw error;
+    });
     await this.#core;
   }
 

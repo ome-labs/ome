@@ -17,6 +17,7 @@ import type {
   NewMember,
   ReshareResult,
   RotationState,
+  Secret,
   RotationStep,
   RotationStepId,
   SwapSignerParams,
@@ -265,7 +266,12 @@ export class MembershipService {
    * proposal performs exactly the rotation this member's keeper reshared (`approveRotation` compares the signers and
    * the committee shares the reshare produced).
    */
-  async approve(vault: Hex32, stored: Stored, tx: VaultTx): Promise<string> {
+  async approve(
+    vault: Hex32,
+    stored: Stored,
+    tx: VaultTx,
+    secret: Secret | undefined,
+  ): Promise<string> {
     const rotating = [...this.#rotations.values()].find(
       (r) => r.plan.vault === vault && r.plan.txNonce === stored.info.txNonce && r.result,
     );
@@ -279,7 +285,7 @@ export class MembershipService {
     const chain = await wallet.chain();
     const now = await wallet.chainTime();
     const feePayers = [this.#context.feePayer().toString()];
-    const approval = this.#context.signer.with(undefined, (signer) =>
+    const approval = this.#context.signer.with(secret, (signer) =>
       signer.approveRotation(
         input,
         chain,

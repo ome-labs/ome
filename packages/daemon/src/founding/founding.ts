@@ -272,10 +272,22 @@ export class FoundingService {
         async () => {
           const vault = this.#context.vaults.address(address);
           if (lobby.role === "host") {
-            const receipt = await this.#context.wallet().deployVault(vault, {
-              from: this.#context.account(),
-              fee: this.#context.fee(),
-            });
+            // Deploying reads the vault's keys by threshold ECDH, which needs co-founders whose keepers have
+            // registered the committee too; one that starts a moment later is waited for, not failed.
+            const receipt = await until(
+              () =>
+                this.#context
+                  .wallet()
+                  .deployVault(vault, { from: this.#context.account(), fee: this.#context.fee() })
+                  .catch((error: unknown) => {
+                    if (error instanceof Error && /members answered/u.test(error.message))
+                      return undefined;
+                    throw error;
+                  }),
+              "the co-founders' keepers to answer",
+              120_000,
+              2000,
+            );
             const record = this.#context.vaults.record(address);
             record.founding.deployTx = receipt.txHash.toString();
             await this.#context.vaults.save(record);
