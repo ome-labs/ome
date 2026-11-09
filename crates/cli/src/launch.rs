@@ -98,6 +98,16 @@ pub(crate) fn keeper_path(home: &Home) -> Option<PathBuf> {
     })
 }
 
+/// The install script's layout, `…/versions/<version>/bin/ome`, wherever its home is (`OME_HOME` may name another
+/// directory for profiles).
+fn in_versions_layout(exe: &Path) -> bool {
+    exe.parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .and_then(Path::file_name)
+        .is_some_and(|name| name == "versions")
+}
+
 /// How this `ome` was installed, judged from where it runs, and the command that updates it.
 pub(crate) fn install_method(home: &Home) -> (&'static str, &'static str) {
     let exe = std::env::current_exe()
@@ -108,7 +118,7 @@ pub(crate) fn install_method(home: &Home) -> (&'static str, &'static str) {
         ("npm", "npm update -g @ome-labs/ome")
     } else if path.contains("/Cellar/ome/") {
         ("Homebrew", "brew upgrade ome")
-    } else if exe.starts_with(home.root().join("versions")) {
+    } else if exe.starts_with(home.root().join("versions")) || in_versions_layout(&exe) {
         (
             "install script",
             "curl -fsSL https://ome.network/install.sh | sh",
