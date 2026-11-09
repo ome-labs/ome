@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0](https://github.com/ome-labs/ome/compare/v0.1.0...v0.1.0) (2026-11-09)
+
+
+### Bug fixes
+
+* **repo:** put the signing keychain on the search list before signing ([9eb074d](https://github.com/ome-labs/ome/commit/9eb074d61b133b73e57032bb20f683e852c0ffd4))
+
 ## 0.1.0 (2026-11-09)
 
 
