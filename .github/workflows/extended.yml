@@ -1,0 +1,207 @@
+# The slow suites, run by hand (Actions → Extended → Run workflow): each takes from several minutes to most of an
+# hour. The fast checks are in ci.yml.
+name: Extended
+
+on:
+  workflow_dispatch:
+    inputs:
+      testnet:
+        description: Also run the Testnet drill (real proofs against Aztec Testnet; takes the longest)
+        type: boolean
+        default: false
+
+concurrency:
+  group: extended-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Local network end to end
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      # The CLI must match the wasm-bindgen crate in crates/Cargo.lock.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.108
+      - name: Cache Aztec toolchain and Nargo dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.aztec
+            ~/nargo
+          key: aztec-${{ hashFiles('.aztecrc') }}-${{ hashFiles('contracts/**/Nargo.toml') }}
+          restore-keys: aztec-${{ hashFiles('.aztecrc') }}-
+      - name: Install Aztec
+        run: |
+          VERSION="$(cat .aztecrc)"
+          if [ ! -x "$HOME/.aztec/versions/$VERSION/bin/aztec" ]; then
+            curl -fsSL "https://install.aztec-labs.com/$VERSION/install" | VERSION="$VERSION" bash
+          fi
+          ln -sfn "$HOME/.aztec/versions/$VERSION" "$HOME/.aztec/current"
+          echo "$HOME/.aztec/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.aztec/current/bin" >> "$GITHUB_PATH"
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Starts `aztec start --local-network`, then the wallet and daemon suites (founding, paying, rotating, a paired
+      # phone, a keeper on a server).
+      - run: pnpm test:e2e --start
+
+  removal:
+    name: Member removal drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      # The CLI must match the wasm-bindgen crate in crates/Cargo.lock.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.108
+      - name: Cache Aztec toolchain and Nargo dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.aztec
+            ~/nargo
+          key: aztec-${{ hashFiles('.aztecrc') }}-${{ hashFiles('contracts/**/Nargo.toml') }}
+          restore-keys: aztec-${{ hashFiles('.aztecrc') }}-
+      - name: Install Aztec
+        run: |
+          VERSION="$(cat .aztecrc)"
+          if [ ! -x "$HOME/.aztec/versions/$VERSION/bin/aztec" ]; then
+            curl -fsSL "https://install.aztec-labs.com/$VERSION/install" | VERSION="$VERSION" bash
+          fi
+          ln -sfn "$HOME/.aztec/versions/$VERSION" "$HOME/.aztec/current"
+          echo "$HOME/.aztec/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.aztec/current/bin" >> "$GITHUB_PATH"
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:removal --start
+
+  network:
+    name: Keepers on separate networks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      # The CLI must match the wasm-bindgen crate in crates/Cargo.lock.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.108
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Builds the ome-node image and runs a relay and three keepers on separate Docker networks.
+      - run: pnpm test:network
+
+  apple:
+    name: Mobile bindings (Apple)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The generated Swift on the macOS host, then the XCFramework for iOS, the iOS Simulator and macOS.
+      - run: pnpm --filter @ome-labs/ffi mobile:swift
+      - run: pnpm --filter @ome-labs/ffi mobile:apple
+
+  android:
+    name: Mobile bindings (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.8.2"
+      - run: cargo install cargo-ndk --locked
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The generated Kotlin on the JVM, then the AAR for arm64-v8a and x86_64.
+      - run: pnpm --filter @ome-labs/ffi mobile:kotlin
+      # The runner image ships Android NDKs; build with the newest.
+      - run: pnpm --filter @ome-labs/ffi mobile:android
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+
+  testnet:
+    name: Testnet drill
+    if: ${{ inputs.testnet }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache-workspaces: crates
+      # The CLI must match the wasm-bindgen crate in crates/Cargo.lock.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.108
+      - name: Cache Aztec toolchain and Nargo dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.aztec
+            ~/nargo
+          key: aztec-${{ hashFiles('.aztecrc') }}-${{ hashFiles('contracts/**/Nargo.toml') }}
+          restore-keys: aztec-${{ hashFiles('.aztecrc') }}-
+      - name: Install Aztec
+        run: |
+          VERSION="$(cat .aztecrc)"
+          if [ ! -x "$HOME/.aztec/versions/$VERSION/bin/aztec" ]; then
+            curl -fsSL "https://install.aztec-labs.com/$VERSION/install" | VERSION="$VERSION" bash
+          fi
+          ln -sfn "$HOME/.aztec/versions/$VERSION" "$HOME/.aztec/current"
+          echo "$HOME/.aztec/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.aztec/current/bin" >> "$GITHUB_PATH"
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run build --filter=@ome-labs/contracts --filter=@ome-labs/wasm
+      - run: cargo build --manifest-path crates/Cargo.toml -p ome-keeper
+      - run: pnpm drill:testnet
