@@ -1,20 +1,54 @@
 {
   "name": "@ome-labs/api",
-  "version": "0.1.0",
-  "private": true,
-  "description": "TypeScript types of the Ome keeper and daemon APIs, generated from crates/api",
+  "version": "0.0.0",
+  "description": "Typed API of an Ome member's keeper and daemon: every method, event and error, generated from the Rust definitions",
+  "keywords": [
+    "api",
+    "aztec",
+    "multisig",
+    "ome",
+    "privacy",
+    "threshold-cryptography",
+    "typescript"
+  ],
+  "homepage": "https://ome.network",
+  "bugs": "https://github.com/ome-labs/ome/issues",
   "license": "Apache-2.0",
+  "author": "Ome Labs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ome-labs/ome.git",
+    "directory": "packages/api"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "access": "public"
+  },
   "scripts": {
     "generate": "cargo run --quiet --manifest-path ../../crates/Cargo.toml -p ome-api --example typescript > src/generated/api.ts && oxfmt src/generated",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json"
   },
   "devDependencies": {
     "klarity": "catalog:",
     "oxfmt": "catalog:",
     "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

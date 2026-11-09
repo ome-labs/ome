@@ -1,18 +1,53 @@
 {
   "name": "@ome-labs/wallet",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Hosts Aztec's PXE for Ome vaults: the threshold key store, vault deployment and the k-of-n entrypoint",
+  "version": "0.0.0",
+  "description": "Aztec wallet for Ome vaults: the PXE with a threshold key store, vault deployment, and k-of-n proposals and execution",
+  "keywords": [
+    "aztec",
+    "multisig",
+    "ome",
+    "privacy",
+    "pxe",
+    "threshold-cryptography",
+    "wallet"
+  ],
+  "homepage": "https://ome.network",
+  "bugs": "https://github.com/ome-labs/ome/issues",
   "license": "Apache-2.0",
+  "author": "Ome Labs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ome-labs/ome.git",
+    "directory": "packages/wallet"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing/index.ts"
   },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./testing": {
+        "types": "./dist/testing/index.d.ts",
+        "default": "./dist/testing/index.js"
+      }
+    },
+    "access": "public"
+  },
   "scripts": {
     "test": "vitest run",
     "test:e2e": "vitest run -c vitest.e2e.config.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@aztec-foundation/bb.js": "catalog:",
@@ -36,5 +71,8 @@
     "klarity": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

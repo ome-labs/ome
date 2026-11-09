@@ -1,15 +1,47 @@
 {
   "name": "@ome-labs/daemon",
-  "version": "0.1.0",
-  "private": true,
-  "description": "omed: an Ome member's background service, hosting the PXE, the sealed signer and the keeper behind the daemon API",
+  "version": "0.0.0",
+  "description": "omed, an Ome member's background service: the wallet, the sealed signer, keeper supervision and the daemon API",
+  "keywords": [
+    "aztec",
+    "daemon",
+    "multisig",
+    "ome",
+    "privacy",
+    "wallet"
+  ],
+  "homepage": "https://ome.network",
+  "bugs": "https://github.com/ome-labs/ome/issues",
   "license": "Apache-2.0",
+  "author": "Ome Labs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ome-labs/ome.git",
+    "directory": "packages/daemon"
+  },
   "bin": {
     "omed": "./src/omed.ts"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "bin": {
+      "omed": "./dist/omed.js"
+    },
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "access": "public"
   },
   "scripts": {
     "bench:proving": "node scripts/bench-proving.ts",
@@ -17,7 +49,8 @@
     "test": "vitest run",
     "test:e2e": "vitest run -c vitest.e2e.config.ts",
     "test:removal": "vitest run -c vitest.removal.config.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@aztec-labs/aztec.js": "catalog:",
@@ -34,5 +67,8 @@
     "klarity": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

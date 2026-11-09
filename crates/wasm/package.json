@@ -1,11 +1,29 @@
 {
   "name": "@ome-labs/wasm",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Ome's Rust core for TypeScript as WebAssembly: threshold reading, contract mirror, proposals, signer and membership checks",
+  "version": "0.0.0",
+  "description": "Ome's Rust core as WebAssembly for Node and browsers: threshold viewing, proposals, the signer and membership checks",
+  "keywords": [
+    "aztec",
+    "multisig",
+    "ome",
+    "privacy",
+    "threshold-cryptography",
+    "wasm",
+    "webassembly"
+  ],
+  "homepage": "https://ome.network",
+  "bugs": "https://github.com/ome-labs/ome/issues",
   "license": "Apache-2.0",
+  "author": "Ome Labs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ome-labs/ome.git",
+    "directory": "crates/wasm"
+  },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "type": "module",
   "exports": {
@@ -38,6 +56,9 @@
       }
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "bench": "node scripts/bench.ts",
     "build": "node scripts/build.ts",
@@ -54,5 +75,8 @@
     "oxfmt": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

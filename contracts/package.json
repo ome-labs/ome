@@ -1,13 +1,37 @@
 {
   "name": "@ome-labs/contracts",
   "version": "0.0.0",
-  "private": true,
-  "description": "Ome contracts (Aztec.nr 6.0.0, Noir)",
+  "description": "Compiled Aztec contracts of Ome: the OmeVault k-of-n account contract and its review-simulation stand-in",
+  "keywords": [
+    "account-contract",
+    "aztec",
+    "contracts",
+    "multisig",
+    "noir",
+    "ome"
+  ],
+  "homepage": "https://ome.network",
+  "bugs": "https://github.com/ome-labs/ome/issues",
   "license": "Apache-2.0",
+  "author": "Ome Labs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ome-labs/ome.git",
+    "directory": "contracts"
+  },
+  "files": [
+    "target/ome_vault-OmeVault.json",
+    "target/ome_vault_preview-OmeVaultPreview.json",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "exports": {
     "./OmeVault.json": "./target/ome_vault-OmeVault.json",
     "./OmeVaultPreview.json": "./target/ome_vault_preview-OmeVaultPreview.json"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "aztec compile",
@@ -19,5 +43,8 @@
     "profile": "aztec profile gates target",
     "profile:flamegraphs": "node ../scripts/noir-flamegraphs.ts target ome_vault-OmeVault",
     "test": "aztec test"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
