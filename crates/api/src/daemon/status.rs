@@ -41,6 +41,8 @@ pub struct Settings {
     /// Salt of the `SponsoredFPC` instance that pays this member's transactions: zero for the canonical one (local
     /// network, Testnet), another for a member's own deployment where none is sponsored (Alpha).
     pub fee_payer_salt: Hex32,
+    /// The keeper on another machine this daemon uses instead of running its own.
+    pub remote_keeper: Option<RemoteKeeper>,
 }
 
 /// Params of `config.set`: the settings to change.
@@ -130,6 +132,35 @@ pub struct KeeperState {
     pub version: Option<String>,
     /// Last failure.
     pub error: Option<String>,
+    /// The remote keeper's `host:port`, when the keeper runs on another machine; `None` for the daemon's own.
+    pub remote: Option<String>,
+}
+
+/// A keeper on another machine (`ome-keeper run --rpc-listen`), reached over TLS.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct RemoteKeeper {
+    /// `host:port`.
+    pub address: String,
+    /// SHA-256 fingerprint of its certificate (hex), as the keeper prints it.
+    pub fingerprint: String,
+}
+
+/// A remote keeper with its RPC token (`<data>/rpc.token` on the keeper's machine).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct RemoteKeeperParams {
+    /// `host:port`.
+    pub address: String,
+    /// SHA-256 fingerprint of its certificate (hex).
+    pub fingerprint: String,
+    /// The keeper's RPC token; the daemon keeps it sealed.
+    pub token: String,
+}
+
+/// Params of `keeper.connect`: a remote keeper, or `null` for the daemon's own.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct KeeperConnectParams {
+    /// The keeper to use from now on.
+    pub remote: Option<RemoteKeeperParams>,
 }
 
 /// The Aztec node the daemon talks to.

@@ -49,8 +49,6 @@ export class DeviceService {
   async pair(): Promise<DeviceOffer> {
     const profile = this.#context.state.file.profile;
     if (!profile) throw new DaemonError("not-ready", "create a profile first");
-    require(this.#context.state.file.settings.relays.length >
-      0, "pairing a device needs a relay; set one with relays.set");
     const offer = await this.#context.keeper.client.call("devices.offer", {
       member: profile.name,
       network: this.#context.node.network(),

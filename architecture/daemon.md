@@ -70,8 +70,14 @@ command line or in the environment.
 - It restarts the keeper with backoff when it exits, and reports the state (`keeper` events).
 - Keeper events are forwarded (`keeperEvent`).
 - The binary is found at `OME_KEEPER_BIN`, then `<home>/bin/ome-keeper`, then the repository's debug build.
-- In this phase the keeper is local. A keeper on the member's own server needs a network transport for the RPC,
-  which comes later.
+- **Remote keeper**: `keeper.connect { remote: { address, fingerprint, token } }` makes the daemon use a keeper on
+  the member's own server instead of running one (`ome-keeper run --rpc-listen`, `architecture/keeper.md`). The
+  daemon connects over TLS, uses the connection only if the certificate's SHA-256 fingerprint is the pinned one,
+  then presents the token. The address and fingerprint are in `settings.remoteKeeper`; the token is sealed in
+  `secrets/`. It reconnects with backoff when the connection drops; `keeper.connect { remote: null }` returns to the
+  daemon's own keeper. Vaults stay with the keeper holding their shares, so a member switches before founding or
+  joining them. A remote keeper's relays are its own configuration.
+- Event listeners are subscribed again on every new keeper connection, local restart or remote reconnection.
 
 ## Fees
 
@@ -221,13 +227,14 @@ Every 15 seconds, for each vault, the daemon reads the config note and hands it 
 
 ## Tests
 
-| Test                           | What it checks                                                                                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `src/server/server.test.ts`    | the socket: authentication, refused tokens, error kinds and codes, events, `0600`                      |
-| `src/proposals/review.test.ts` | a payload that rebuilds to another outer hash is reported, and approval refuses it                     |
-| `src/membership/plan.test.ts`  | plans the rules refuse report why, dealers are members who stay, and a member with no part can't begin |
-| `test/e2e/daemons.test.ts`     | the local-network suite, below                                                                         |
-| `test/e2e/device.test.ts`      | a member's phone on the local network with a real relay, below                                         |
+| Test                             | What it checks                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `src/server/server.test.ts`      | the socket: authentication, refused tokens, error kinds and codes, events, `0600`                      |
+| `src/proposals/review.test.ts`   | a payload that rebuilds to another outer hash is reported, and approval refuses it                     |
+| `src/membership/plan.test.ts`    | plans the rules refuse report why, dealers are members who stay, and a member with no part can't begin |
+| `test/e2e/daemons.test.ts`       | the local-network suite, below                                                                         |
+| `test/e2e/device.test.ts`        | a member's phone on the local network with a real relay, below                                         |
+| `test/e2e/remote-keeper.test.ts` | a member's keeper on their own server, reached over TLS, below                                         |
 
 `test/e2e/daemons.test.ts` runs against `aztec start --local-network`. Three, then four, daemons run in one process,
 each with its own keeper process and PXE, all driven through their sockets:
@@ -249,3 +256,9 @@ Measured: 4 tests in 79 s with fake proofs, setup included.
 - revoking the phone ends its pairing.
 
 Measured: 5 tests in 43 s; the whole suite, 9 tests in 113 s.
+
+`test/e2e/remote-keeper.test.ts` runs a keeper as on a server (passphrase, `--rpc-listen` on loopback):
+
+- Bob's daemon refuses it under a wrong fingerprint, then uses it;
+- Alice (her own keeper) and Bob (the remote one) found a vault, pay from it, and Bob reads its balance through
+  the remote keeper.

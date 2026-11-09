@@ -1,5 +1,6 @@
 import { type Socket, createConnection } from "node:net";
 import { createInterface } from "node:readline";
+import { connect as connectTls } from "node:tls";
 
 import type {
   ErrorKind,
@@ -44,6 +45,7 @@ export class KeeperClient {
   readonly #socket: Socket;
   readonly #pending = new Map<number, Pending>();
   readonly #listeners = new Set<(event: KeeperEvent) => void>();
+  readonly #onClose = new Set<(error: Error) => void>();
   #next = 0;
   #closed: Error | undefined;
 
@@ -67,6 +69,44 @@ export class KeeperClient {
     return client;
   }
 
+  /**
+   * Connects to a keeper on another machine over TLS (`ome-keeper run --rpc-listen`) and authenticates with `token`.
+   * The keeper's certificate is self-signed: the connection is used only if its SHA-256 fingerprint is `fingerprint`
+   * (hex, as the keeper prints it), checked before the token is sent.
+   */
+  static async connectRemote(
+    address: string,
+    fingerprint: string,
+    token: string,
+  ): Promise<KeeperClient> {
+    const at = address.lastIndexOf(":");
+    const host = address.slice(0, at).replace(/^\[|\]$/gu, "");
+    const port = Number(address.slice(at + 1));
+    if (at < 1 || !Number.isInteger(port)) throw new Error(`${address} is not host:port`);
+    const expected = fingerprint.toLowerCase().replaceAll(":", "");
+    const socket = await new Promise<Socket>((resolve, reject) => {
+      const s = connectTls(
+        { host, port, rejectUnauthorized: false, minVersion: "TLSv1.3", servername: "ome-keeper" },
+        () => {
+          const seen = s.getPeerX509Certificate()?.fingerprint256.toLowerCase().replaceAll(":", "");
+          if (seen === expected) resolve(s);
+          else {
+            s.destroy();
+            reject(
+              new Error(
+                `the keeper at ${address} presented another certificate (fingerprint ${seen})`,
+              ),
+            );
+          }
+        },
+      );
+      s.once("error", reject);
+    });
+    const client = new KeeperClient(socket);
+    await client.call("session.auth", { token });
+    return client;
+  }
+
   /** Calls keeper method `method`; rejects with {@link KeeperError} on a keeper error. */
   call<M extends KeeperMethod>(method: M, params: KeeperParams<M>): Promise<KeeperResult<M>> {
     if (this.#closed) return Promise.reject(this.#closed);
@@ -83,6 +123,12 @@ export class KeeperClient {
     if (this.#listeners.size === 0) await this.call("events.subscribe", {});
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  /** Calls `listener` once when the connection is lost. */
+  onClose(listener: (error: Error) => void): void {
+    if (this.#closed) listener(this.#closed);
+    else this.#onClose.add(listener);
   }
 
   close(): void {
@@ -109,8 +155,11 @@ export class KeeperClient {
   }
 
   #fail(error: Error): void {
-    this.#closed ??= error;
+    if (this.#closed) return;
+    this.#closed = error;
     for (const { reject } of this.#pending.values()) reject(error);
     this.#pending.clear();
+    for (const listener of this.#onClose) listener(error);
+    this.#onClose.clear();
   }
 }

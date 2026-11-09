@@ -14,11 +14,12 @@ import {
   type Hex32,
   type KeeperState,
   type ProfileCreateParams,
+  type RemoteKeeperParams,
   type Secret,
   type Settings,
   type Status,
 } from "@ome-labs/api";
-import { OmeWallet } from "@ome-labs/wallet";
+import { KeeperClient, OmeWallet } from "@ome-labs/wallet";
 
 import type { Context } from "./context.ts";
 import { DeviceService } from "./devices/service.ts";
@@ -43,6 +44,7 @@ export const DAEMON_VERSION = "0.1.0";
 
 const SYNC_INTERVAL_MS = 15_000;
 const ACCOUNT_SECRET = "account";
+const REMOTE_KEEPER_TOKEN = "remote-keeper-token";
 
 export interface DaemonOptions {
   readonly profile: string;
@@ -85,13 +87,15 @@ export class Daemon implements Context {
   #server: DaemonServer | undefined;
   #sync: NodeJS.Timeout | undefined;
   #core: Promise<void> | undefined;
+  #masterKey: Buffer | undefined;
 
   constructor(options: DaemonOptions) {
     this.#options = options;
     this.paths = profilePaths(options.profile, options.home ?? omeHome());
     this.signer = new SignerService(this.paths.signer);
-    this.keeper = new KeeperSupervisor(keeperBinary(options.home ?? omeHome()), (state) =>
-      this.#keeperChanged(state),
+    this.keeper = new KeeperSupervisor(
+      () => keeperBinary(options.home ?? omeHome()),
+      (state) => this.#keeperChanged(state),
     );
     this.vaults = new VaultService(this);
     this.founding = new FoundingService(this);
@@ -288,17 +292,14 @@ export class Daemon implements Context {
 
   async #bootCore(key: Buffer): Promise<void> {
     this.#secrets = new SecretsStore(this.paths.secrets, key);
+    this.#masterKey = key;
     const { settings } = this.state.file;
-    await this.keeper.start(
-      {
-        dataDir: this.paths.keeperDir,
-        socket: this.paths.keeperSocket,
-        relays: settings.relays,
-        log: this.paths.keeperLog,
-        ...(this.#options.keeperListen ? { listen: this.#options.keeperListen } : {}),
-      },
-      key,
-    );
+    await this.keeper.subscribe((event) => {
+      this.emit({ type: "keeperEvent", event });
+      if ("vault" in event) this.emit({ type: "vaultActivity", vault: event.vault });
+      this.devices.onKeeperEvent(event);
+    });
+    await this.#startKeeper();
     const wallet = await OmeWallet.create(this.node.node, {
       pxe: { dataDirectory: this.paths.pxe, proverEnabled: settings.proverEnabled },
     });
@@ -318,11 +319,6 @@ export class Daemon implements Context {
         if (file.profile) file.profile.account = address;
       });
     }
-    await this.keeper.client.subscribe((event) => {
-      this.emit({ type: "keeperEvent", event });
-      if ("vault" in event) this.emit({ type: "vaultActivity", vault: event.vault });
-      this.devices.onKeeperEvent(event);
-    });
     for (const contact of this.state.file.contacts)
       // oxlint-disable-next-line no-await-in-loop
       await wallet.registerSender(AztecAddress.fromStringUnsafe(contact.address));
@@ -330,6 +326,54 @@ export class Daemon implements Context {
     await this.membership.load();
     this.#sync = setInterval(() => void this.vaults.sync(), SYNC_INTERVAL_MS);
     this.#sync.unref();
+  }
+
+  /** Starts the keeper the settings name: a remote one, or the daemon's own. */
+  async #startKeeper(): Promise<void> {
+    const { settings } = this.state.file;
+    const remote = settings.remoteKeeper;
+    if (remote) {
+      const token = await this.secrets().get(REMOTE_KEEPER_TOKEN);
+      if (!token) throw new DaemonError("failed", "the remote keeper's token is missing");
+      await this.keeper.startRemote({ ...remote, token: token.toString("utf8") });
+      return;
+    }
+    if (!this.#masterKey) throw new DaemonError("not-ready", "unlock the signer first");
+    await this.keeper.start(
+      {
+        dataDir: this.paths.keeperDir,
+        socket: this.paths.keeperSocket,
+        relays: settings.relays,
+        log: this.paths.keeperLog,
+        ...(this.#options.keeperListen ? { listen: this.#options.keeperListen } : {}),
+      },
+      this.#masterKey,
+    );
+  }
+
+  /**
+   * Uses a keeper on another machine, after checking that it answers with that fingerprint and token, or the daemon's
+   * own again. Vaults stay with the keeper that holds their shares: switch before founding or joining them.
+   */
+  async connectKeeper(remote: RemoteKeeperParams | null): Promise<KeeperState> {
+    if (remote) {
+      const probe = await KeeperClient.connectRemote(
+        remote.address,
+        remote.fingerprint,
+        remote.token,
+      );
+      probe.close();
+      await this.secrets().put(REMOTE_KEEPER_TOKEN, Buffer.from(remote.token, "utf8"));
+    }
+    await this.state.update((file) => {
+      file.settings.remoteKeeper = remote
+        ? { address: remote.address, fingerprint: remote.fingerprint.toLowerCase() }
+        : null;
+    });
+    if (!remote) await this.secrets().delete(REMOTE_KEEPER_TOKEN);
+    await this.#startKeeper();
+    if (this.keeper.state.status === "running") await this.vaults.load();
+    return this.keeper.state;
   }
 
   #keeperChanged(state: KeeperState): void {

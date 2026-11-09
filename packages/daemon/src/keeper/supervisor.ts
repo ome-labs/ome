@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
-import { API_VERSION, type KeeperState } from "@ome-labs/api";
+import { API_VERSION, type KeeperEvent, type KeeperState } from "@ome-labs/api";
 import { KeeperClient } from "@ome-labs/wallet";
 
 import { DaemonError } from "../errors.ts";
@@ -44,16 +44,33 @@ interface Ready {
   rpcSocket: string;
 }
 
+/** A keeper on another machine and its RPC token. */
+export interface RemoteTarget {
+  readonly address: string;
+  readonly fingerprint: string;
+  readonly token: string;
+}
+
+type Mode =
+  | { readonly kind: "local"; readonly options: KeeperOptions; readonly masterKey: Buffer }
+  | { readonly kind: "remote"; readonly target: RemoteTarget };
+
 /**
- * Runs the member's keeper as a child process: hands it the master key and a fresh session token on stdin (never on
- * the command line or in the environment), connects, checks its API version, and restarts it with backoff when it
- * exits. The keeper holds the viewing share; this process never does.
+ * The member's keeper, in one of two modes:
+ *
+ * - **local**: runs it as a child process, hands it the master key and a fresh session token on stdin (never on the
+ *   command line or in the environment), connects to its socket, and restarts it with backoff when it exits;
+ * - **remote**: connects over TLS to a keeper on the member's own server (`ome-keeper run --rpc-listen`), pinning its
+ *   certificate's fingerprint, and reconnects with backoff when the connection drops.
+ *
+ * Either way it checks the keeper's API version, and every event listener is subscribed again on each new
+ * connection. The keeper holds the viewing share; this process never does.
  */
 export class KeeperSupervisor {
-  readonly #binary: string;
+  readonly #binary: () => string;
   readonly #onChange: (state: KeeperState) => void;
-  #options: KeeperOptions | undefined;
-  #masterKey: Buffer | undefined;
+  readonly #listeners = new Set<(event: KeeperEvent) => void>();
+  #mode: Mode | undefined;
   #child: ChildProcess | undefined;
   #client: KeeperClient | undefined;
   #state: KeeperState = {
@@ -63,12 +80,13 @@ export class KeeperSupervisor {
     addresses: [],
     version: null,
     error: null,
+    remote: null,
   };
   #failures = 0;
   #stopping = false;
   #timer: NodeJS.Timeout | undefined;
 
-  constructor(binary: string, onChange: (state: KeeperState) => void) {
+  constructor(binary: () => string, onChange: (state: KeeperState) => void) {
     this.#binary = binary;
     this.#onChange = onChange;
   }
@@ -83,11 +101,20 @@ export class KeeperSupervisor {
     return this.#client;
   }
 
+  /** Streams the keeper's events to `listener`, across restarts and reconnections. */
+  async subscribe(listener: (event: KeeperEvent) => void): Promise<void> {
+    this.#listeners.add(listener);
+    await this.#client?.subscribe(listener);
+  }
+
+  /** Runs the daemon's own keeper. */
   async start(options: KeeperOptions, masterKey: Buffer): Promise<void> {
-    this.#options = options;
-    this.#masterKey = masterKey;
-    this.#stopping = false;
-    await this.#launch();
+    await this.#switch({ kind: "local", options, masterKey });
+  }
+
+  /** Uses a keeper on another machine. */
+  async startRemote(target: RemoteTarget): Promise<void> {
+    await this.#switch({ kind: "remote", target });
   }
 
   async stop(): Promise<void> {
@@ -105,74 +132,110 @@ export class KeeperSupervisor {
     this.#set({ ...this.#state, status: "stopped" });
   }
 
+  async #switch(mode: Mode): Promise<void> {
+    if (this.#mode) await this.stop();
+    this.#mode = mode;
+    this.#stopping = false;
+    this.#failures = 0;
+    await this.#launch();
+  }
+
   async #launch(): Promise<void> {
-    const options = this.#options;
-    const masterKey = this.#masterKey;
-    if (!options || !masterKey) return;
+    const mode = this.#mode;
+    if (!mode) return;
     this.#set({ ...this.#state, status: this.#failures ? "restarting" : "starting", error: null });
     try {
-      await privateDir(options.dataDir);
-      const log = await open(options.log, "a", 0o600);
-      const token = randomBytes(32).toString("hex");
-      const args = [
-        "run",
-        "--data-dir",
-        options.dataDir,
-        "--secrets-stdin",
-        "--rpc-socket",
-        options.socket,
-      ];
-      for (const address of options.listen ?? LISTEN) args.push("--listen", address);
-      for (const relay of options.relays) args.push("--relay", relay);
-      const child = spawn(this.#binary, args, {
-        stdio: ["pipe", "pipe", log.fd],
-        env: { ...process.env, RUST_LOG: process.env.RUST_LOG ?? "info", NO_COLOR: "1" },
-      });
-      await log.close();
-      const { stdin, stdout } = child;
-      if (!stdin || !stdout) throw new Error("the keeper started without pipes");
-      stdin.end(`${JSON.stringify({ masterKey: masterKey.toString("hex"), rpcToken: token })}\n`);
-      const ready = await new Promise<Ready>((resolve, reject) => {
-        createInterface({ input: stdout }).once("line", (line) => {
-          try {
-            resolve((JSON.parse(line) as { ready: Ready }).ready);
-          } catch (error) {
-            reject(error);
-          }
-        });
-        child.once("exit", (code) =>
-          reject(new Error(`ome-keeper exited with ${code} before it was ready`)),
-        );
-      });
-      const client = await KeeperClient.connect(ready.rpcSocket, token);
+      const { client, child, remote } =
+        mode.kind === "local"
+          ? { ...(await this.#spawn(mode.options, mode.masterKey)), remote: null }
+          : {
+              client: await KeeperClient.connectRemote(
+                mode.target.address,
+                mode.target.fingerprint,
+                mode.target.token,
+              ),
+              child: undefined,
+              remote: mode.target.address,
+            };
       const info = await client.call("keeper.info", {});
       if (info.apiVersion !== API_VERSION) {
+        client.close();
         throw new Error(
           `the keeper speaks API version ${info.apiVersion}, this daemon ${API_VERSION}`,
         );
       }
+      for (const listener of this.#listeners)
+        // oxlint-disable-next-line no-await-in-loop
+        await client.subscribe(listener);
       this.#child = child;
       this.#client = client;
       this.#failures = 0;
-      child.once("exit", (code) => this.#exited(child, code));
+      if (child)
+        child.once("exit", (code) =>
+          this.#lost(client, `the keeper stopped unexpectedly (exit code ${code ?? "unknown"})`),
+        );
+      else
+        client.onClose((error) => this.#lost(client, `lost the remote keeper: ${error.message}`));
       this.#set({
         status: "running",
-        identity: ready.identity,
-        peerId: ready.peerId,
-        addresses: ready.addresses,
+        identity: info.identity,
+        peerId: info.peerId,
+        addresses: info.addresses,
         version: info.version,
         error: null,
+        remote,
       });
     } catch (error) {
       this.#scheduleRestart(error instanceof Error ? error.message : String(error));
     }
   }
 
-  #exited(child: ChildProcess, code: number | null): void {
-    if (this.#child !== child || this.#stopping) return;
+  /** Spawns `ome-keeper run` and connects to its socket. */
+  async #spawn(
+    options: KeeperOptions,
+    masterKey: Buffer,
+  ): Promise<{ client: KeeperClient; child: ChildProcess }> {
+    await privateDir(options.dataDir);
+    const log = await open(options.log, "a", 0o600);
+    const token = randomBytes(32).toString("hex");
+    const args = [
+      "run",
+      "--data-dir",
+      options.dataDir,
+      "--secrets-stdin",
+      "--rpc-socket",
+      options.socket,
+    ];
+    for (const address of options.listen ?? LISTEN) args.push("--listen", address);
+    for (const relay of options.relays) args.push("--relay", relay);
+    const child = spawn(this.#binary(), args, {
+      stdio: ["pipe", "pipe", log.fd],
+      env: { ...process.env, RUST_LOG: process.env.RUST_LOG ?? "info", NO_COLOR: "1" },
+    });
+    await log.close();
+    const { stdin, stdout } = child;
+    if (!stdin || !stdout) throw new Error("the keeper started without pipes");
+    stdin.end(`${JSON.stringify({ masterKey: masterKey.toString("hex"), rpcToken: token })}\n`);
+    const ready = await new Promise<Ready>((resolve, reject) => {
+      createInterface({ input: stdout }).once("line", (line) => {
+        try {
+          resolve((JSON.parse(line) as { ready: Ready }).ready);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      child.once("exit", (code) =>
+        reject(new Error(`ome-keeper exited with ${code} before it was ready`)),
+      );
+    });
+    return { client: await KeeperClient.connect(ready.rpcSocket, token), child };
+  }
+
+  #lost(client: KeeperClient, error: string): void {
+    if (this.#client !== client || this.#stopping) return;
     this.#child = undefined;
     this.#client = undefined;
-    this.#scheduleRestart(`the keeper stopped unexpectedly (exit code ${code ?? "unknown"})`);
+    this.#scheduleRestart(error);
   }
 
   #scheduleRestart(error: string): void {

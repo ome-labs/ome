@@ -26,9 +26,9 @@ pub use proposals::{
 };
 use serde::{Deserialize, Serialize};
 pub use status::{
-    DaemonInfo, KeeperState, NodeStatus, PassphraseParams, Profile, ProfileCreateParams,
-    RelaysParams, SealingKey, Secret, ServiceStatus, Settings, SettingsPatch, SignerStatus, Status,
-    UnlockParams,
+    DaemonInfo, KeeperConnectParams, KeeperState, NodeStatus, PassphraseParams, Profile,
+    ProfileCreateParams, RelaysParams, RemoteKeeper, RemoteKeeperParams, SealingKey, Secret,
+    ServiceStatus, Settings, SettingsPatch, SignerStatus, Status, UnlockParams,
 };
 use ts_rs::TS;
 pub use vaults::{
@@ -139,6 +139,8 @@ methods! {
     ConfigSet = "config.set" (SettingsPatch) -> Settings;
     /// Replaces the relays.
     RelaysSet = "relays.set" (RelaysParams) -> Settings;
+    /// Uses a keeper on another machine, or the daemon's own again.
+    KeeperConnect = "keeper.connect" (KeeperConnectParams) -> KeeperState;
     /// Whether the signer is locked.
     SignerStatusGet = "signer.status" (Empty) -> SignerStatus;
     /// Unlocks the signer for a window.

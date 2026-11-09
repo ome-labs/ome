@@ -1572,6 +1572,10 @@ export type Settings = {
    * network, Testnet), another for a member's own deployment where none is sponsored (Alpha).
    */
   feePayerSalt: Hex32;
+  /**
+   * The keeper on another machine this daemon uses instead of running its own.
+   */
+  remoteKeeper: RemoteKeeper | null;
 };
 
 /**
@@ -1679,6 +1683,10 @@ export type KeeperState = {
    * Last failure.
    */
   error: string | null;
+  /**
+   * The remote keeper's `host:port`, when the keeper runs on another machine; `None` for the daemon's own.
+   */
+  remote: string | null;
 };
 
 /**
@@ -3514,6 +3522,48 @@ export type Counterparty = {
   exposed: boolean;
 };
 
+/**
+ * A keeper on another machine (`ome-keeper run --rpc-listen`), reached over TLS.
+ */
+export type RemoteKeeper = {
+  /**
+   * `host:port`.
+   */
+  address: string;
+  /**
+   * SHA-256 fingerprint of its certificate (hex), as the keeper prints it.
+   */
+  fingerprint: string;
+};
+
+/**
+ * A remote keeper with its RPC token (`<data>/rpc.token` on the keeper's machine).
+ */
+export type RemoteKeeperParams = {
+  /**
+   * `host:port`.
+   */
+  address: string;
+  /**
+   * SHA-256 fingerprint of its certificate (hex).
+   */
+  fingerprint: string;
+  /**
+   * The keeper's RPC token; the daemon keeps it sealed.
+   */
+  token: string;
+};
+
+/**
+ * Params of `keeper.connect`: a remote keeper, or `null` for the daemon's own.
+ */
+export type KeeperConnectParams = {
+  /**
+   * The keeper to use from now on.
+   */
+  remote: RemoteKeeperParams | null;
+};
+
 /** Every keeper method: what it takes and returns. */
 export interface KeeperMethods {
   "session.auth": { params: AuthParams; result: null };
@@ -3571,6 +3621,7 @@ export interface DaemonMethods {
   "config.get": { params: Empty; result: Settings };
   "config.set": { params: SettingsPatch; result: Settings };
   "relays.set": { params: RelaysParams; result: Settings };
+  "keeper.connect": { params: KeeperConnectParams; result: KeeperState };
   "signer.status": { params: Empty; result: SignerStatus };
   "signer.unlock": { params: UnlockParams; result: SignerStatus };
   "signer.lock": { params: Empty; result: SignerStatus };

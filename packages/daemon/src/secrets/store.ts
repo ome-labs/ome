@@ -1,12 +1,12 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { writePrivate } from "../profile/files.ts";
 import { open, seal } from "./sealing.ts";
 
 /**
- * The daemon's secrets at rest, each file sealed with the keeper's master key: the member's own Aztec account and each
- * vault's shared protocol secrets. Viewing shares are never here; they live only in the keeper.
+ * The daemon's secrets at rest, each file sealed with the keeper's master key: the member's own Aztec account, each
+ * vault's shared protocol secrets, and a remote keeper's RPC token. Viewing shares are never here; they live only in the keeper.
  */
 export class SecretsStore {
   readonly #dir: string;
@@ -28,5 +28,9 @@ export class SecretsStore {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
     }
+  }
+
+  async delete(name: string): Promise<void> {
+    await rm(join(this.#dir, `${name}.sealed`), { force: true });
   }
 }

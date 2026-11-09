@@ -65,6 +65,21 @@ export const handlers: Handlers = {
     });
     return d.state.file.settings;
   },
+  "keeper.connect": async (d, p) => {
+    if (p.remote) {
+      require(/^[^\s:]+:[0-9]{1,5}$|^\[[0-9a-f:]+\]:[0-9]{1,5}$/iu.test(
+        p.remote.address,
+      ), "the keeper's address is host:port");
+      require(/^[0-9a-f]{64}$/u.test(
+        p.remote.fingerprint.toLowerCase().replaceAll(":", ""),
+      ), "the fingerprint is 32 bytes of hex");
+    }
+    return d.connectKeeper(
+      p.remote
+        ? { ...p.remote, fingerprint: p.remote.fingerprint.toLowerCase().replaceAll(":", "") }
+        : null,
+    );
+  },
   "signer.status": async (d) => d.signer.status(),
   "signer.unlock": async (d, p) => {
     await d.unlock(p.secret, p.ttlSecs);
