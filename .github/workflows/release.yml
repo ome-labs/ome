@@ -493,8 +493,9 @@ jobs:
             if npm view "@ome-labs/$name@$version" version > /dev/null 2>&1; then
               echo "@ome-labs/$name@$version is already published"
             else
-              # A path without ./ would be read as a GitHub repository (npm/<name>).
-              npm publish "$file" --access public
+              # A path without ./ would be read as a GitHub repository (npm/<name>). The PXE fork's version
+              # (6.0.0-ome.N) is a prerelease, which npm publishes only with an explicit tag.
+              npm publish "$file" --access public --tag latest
             fi
           done
 
@@ -534,6 +535,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Formula/ome.rb
+          # A re-run with the same archives changes nothing.
+          if git diff --cached --quiet; then
+            echo "Formula/ome.rb is already up to date"
+            exit 0
+          fi
           git commit -m "ome $VERSION"
           # The tap may still be empty, with no branch to track yet.
           git push origin HEAD:main
