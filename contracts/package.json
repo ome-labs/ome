@@ -1,6 +1,6 @@
 {
   "name": "@ome-labs/contracts",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Compiled Aztec contracts of Ome: the OmeVault k-of-n account contract and its review-simulation stand-in",
   "keywords": [
     "account-abstraction",
