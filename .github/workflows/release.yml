@@ -488,11 +488,12 @@ jobs:
       - name: Publish
         run: |
           for name in ome-darwin-arm64 ome-linux-x64 ome-linux-arm64 api wasm contracts pxe wallet daemon ome; do
-            file=$(ls npm/ome-labs-$name-[0-9]*.tgz)
+            file=$(ls ./npm/ome-labs-$name-[0-9]*.tgz)
             version=$(tar -xOzf "$file" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).version')
             if npm view "@ome-labs/$name@$version" version > /dev/null 2>&1; then
               echo "@ome-labs/$name@$version is already published"
             else
+              # A path without ./ would be read as a GitHub repository (npm/<name>).
               npm publish "$file" --access public
             fi
           done
