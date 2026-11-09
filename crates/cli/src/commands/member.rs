@@ -22,7 +22,7 @@ use crate::{
     error::{Error, Result},
     refs,
     ui::{
-        format, prompt, qr,
+        format, prompt,
         steps::{Step, Tracked, Tracker},
         table::{self, Tone},
         theme,
@@ -54,17 +54,12 @@ async fn request(ctx: &Ctx) -> Result<()> {
         ctx.out(&request.request);
         return Ok(());
     }
-    let mut lines = vec![theme::name(&request.request).to_string()];
-    if let Some(code) = qr::render(&request.request) {
-        lines.extend(code.lines().map(String::from));
-    }
-    lines.push(format!(
-        "A member of the vault runs {}",
-        theme::name("ome member change --add <request>")
-    ));
     ctx.section(
-        "Your join request: hand it to a member of the vault",
-        &lines,
+        "Your join request: send this line to a member of the vault",
+        &[format!(
+            "They run {}",
+            theme::name("ome member change --add <request>")
+        )],
     );
     ctx.out(&request.request);
     Ok(())
@@ -246,12 +241,14 @@ fn share_plan(ctx: &Ctx, share: &str) {
         return;
     }
     ctx.section(
-        "Hand this plan to every member who stays and every newcomer",
-        &[
-            theme::name(share).to_string(),
-            format!("Each runs {}", theme::name("ome member join <plan>")),
-        ],
+        "Send this plan to every member who stays and every newcomer",
+        &[format!(
+            "Each runs {}",
+            theme::name("ome member join <plan>")
+        )],
     );
+    // On its own line, unindented, so it copies whole however the terminal wraps it.
+    eprintln!("{}\n", theme::name(share));
 }
 
 async fn join(ctx: &Ctx, plan: Option<String>) -> Result<()> {

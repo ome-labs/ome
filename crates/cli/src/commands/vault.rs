@@ -184,15 +184,15 @@ fn show_invite(ctx: &Ctx, invite: &str) {
         eprintln!("invite: {invite}");
         return;
     }
-    let mut lines = vec![theme::name(invite).to_string()];
-    if let Some(code) = qr::render(invite) {
-        lines.extend(code.lines().map(String::from));
-    }
-    lines.push(format!(
-        "Each co-founder runs {}",
-        theme::name("ome vault join <invite>")
-    ));
-    ctx.section("Invite ready: share it with each co-founder", &lines);
+    ctx.section(
+        "Invite ready: send this line to each co-founder",
+        &[format!(
+            "They run {}",
+            theme::name("ome vault join <invite>")
+        )],
+    );
+    // On its own line, unindented, so it copies whole however the terminal wraps it.
+    eprintln!("{}\n", theme::name(invite));
 }
 
 async fn join(ctx: &Ctx, invite: Option<String>) -> Result<()> {
