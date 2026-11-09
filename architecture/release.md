@@ -12,6 +12,8 @@ How Ome is versioned, built, published and installed, and how to check that what
   published `package.json`, and three annotated constants (`// x-release-please-version`): `ome_api::RELEASE_VERSION`,
   the relay's `VERSION` and the daemon's `DAEMON_VERSION`. The Cargo workspace stays at `0.0.0`: no crate is
   published, and a moving Cargo version would rewrite `Cargo.lock` on every release.
+- The first release is pinned to `0.1.0` with `release-as` in `release-please-config.json` (release-please starts a
+  new project at `1.0.0`). Remove that line once `0.1.0` is out, or every later release PR proposes `0.1.0` again.
 - `@ome-labs/pxe` has its own version, `6.0.0-ome.N` ([pxe-integration.md](pxe-integration.md)), and is published only
   when that version is new.
 - Protocol `v0` is frozen from the first release: wire formats, the contract and sealed files change only with a

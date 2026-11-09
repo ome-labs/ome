@@ -15,9 +15,13 @@ runs:
       shell: bash
       run: |
         VERSION="$(cat "$GITHUB_WORKSPACE/.aztecrc")"
-        if [ ! -x "$HOME/.aztec/versions/$VERSION/bin/aztec" ]; then
-          curl -fsSL "https://install.aztec-labs.com/$VERSION/install" | VERSION="$VERSION" bash
-        fi
+        # The installer fetches Foundry and Aztec's tools from GitHub, which sometimes answers 5xx: retry it.
+        for attempt in 1 2 3; do
+          [ -x "$HOME/.aztec/versions/$VERSION/bin/aztec" ] && break
+          curl -fsSL "https://install.aztec-labs.com/$VERSION/install" | VERSION="$VERSION" bash && break
+          [ "$attempt" = 3 ] && exit 1
+          sleep 30
+        done
         ln -sfn "$HOME/.aztec/versions/$VERSION" "$HOME/.aztec/current"
         echo "$HOME/.aztec/bin" >> "$GITHUB_PATH"
         echo "$HOME/.aztec/current/bin" >> "$GITHUB_PATH"

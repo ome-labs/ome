@@ -7,9 +7,11 @@ mod touch_id;
 
 use std::path::PathBuf;
 
+#[cfg(target_os = "macos")]
+use ome_api::daemon::{PassphraseParams, SignerSealingKey};
 use ome_api::{
     ErrorKind, Hex32,
-    daemon::{PassphraseParams, Secret, SignerSealingKey, SignerStatus},
+    daemon::{Secret, SignerStatus},
 };
 use ome_client::{DaemonClient, Profile};
 use zeroize::Zeroizing;
@@ -90,6 +92,7 @@ fn read_file(path: &PathBuf) -> Result<Zeroizing<String>> {
 }
 
 /// The passphrase: from the file, else asked for.
+#[cfg(target_os = "macos")]
 pub(crate) fn passphrase(ctx: &Ctx) -> Result<Zeroizing<String>> {
     match passphrase_file() {
         Some(file) => read_file(&file),
@@ -225,6 +228,10 @@ pub(crate) async fn enable_touch_id(
 }
 
 #[cfg(not(target_os = "macos"))]
+#[expect(
+    clippy::unused_async,
+    reason = "the same signature as the macOS version"
+)]
 pub(crate) async fn enable_touch_id(_: &Ctx, _: &DaemonClient, _: Option<&str>) -> Result<()> {
     Err(Error::failed("Touch ID needs macOS."))
 }
@@ -240,6 +247,7 @@ pub(crate) fn disable_touch_id(profile: &Profile) -> Result<()> {
 }
 
 /// Writes a file only its owner can read.
+#[cfg(target_os = "macos")]
 pub(crate) fn write_private(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
     let mut options = std::fs::OpenOptions::new();
     options.create(true).write(true).truncate(true);

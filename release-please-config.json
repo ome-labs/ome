@@ -7,30 +7,96 @@
   "draft": true,
   "force-tag-creation": true,
   "changelog-sections": [
-    { "type": "feat", "section": "Features" },
-    { "type": "fix", "section": "Bug fixes" },
-    { "type": "perf", "section": "Performance" },
-    { "type": "docs", "section": "Documentation" },
-    { "type": "refactor", "section": "Refactoring", "hidden": true },
-    { "type": "test", "section": "Tests", "hidden": true },
-    { "type": "build", "section": "Build", "hidden": true },
-    { "type": "ci", "section": "CI", "hidden": true },
-    { "type": "chore", "section": "Chores", "hidden": true }
+    {
+      "type": "feat",
+      "section": "Features"
+    },
+    {
+      "type": "fix",
+      "section": "Bug fixes"
+    },
+    {
+      "type": "perf",
+      "section": "Performance"
+    },
+    {
+      "type": "docs",
+      "section": "Documentation"
+    },
+    {
+      "type": "refactor",
+      "section": "Refactoring",
+      "hidden": true
+    },
+    {
+      "type": "test",
+      "section": "Tests",
+      "hidden": true
+    },
+    {
+      "type": "build",
+      "section": "Build",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "CI",
+      "hidden": true
+    },
+    {
+      "type": "chore",
+      "section": "Chores",
+      "hidden": true
+    }
   ],
   "packages": {
     ".": {
+      "release-as": "0.1.0",
       "package-name": "ome",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
-        { "type": "json", "path": "packages/ome/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/daemon/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/wallet/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/api/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "crates/wasm/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "contracts/package.json", "jsonpath": "$.version" },
-        { "type": "generic", "path": "crates/api/src/lib.rs" },
-        { "type": "generic", "path": "crates/relay/src/main.rs" },
-        { "type": "generic", "path": "packages/daemon/src/daemon.ts" }
+        {
+          "type": "json",
+          "path": "packages/ome/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/daemon/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/wallet/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/api/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "crates/wasm/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "contracts/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "generic",
+          "path": "crates/api/src/lib.rs"
+        },
+        {
+          "type": "generic",
+          "path": "crates/relay/src/main.rs"
+        },
+        {
+          "type": "generic",
+          "path": "packages/daemon/src/daemon.ts"
+        }
       ]
     }
   }

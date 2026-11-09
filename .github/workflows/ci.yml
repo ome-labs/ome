@@ -31,8 +31,9 @@ jobs:
       - run: pnpm exec oxfmt --check .
       - run: pnpm exec oxlint --deny-warnings .
       - run: shellcheck scripts/*.sh scripts/packaging/*.sh
-      # The wallet and the daemon need the contract artifact and the WebAssembly build; they have their own job.
-      - run: pnpm exec turbo run lint typecheck build test '--filter=./packages/*' '--filter=!@ome-labs/wallet' '--filter=!@ome-labs/daemon'
+      # The wallet, the daemon and the launcher that depends on it need the contract artifact and the WebAssembly
+      # build; they have their own job.
+      - run: pnpm exec turbo run lint typecheck build test '--filter=./packages/*' '--filter=!@ome-labs/wallet' '--filter=!@ome-labs/daemon' '--filter=!@ome-labs/ome'
 
   vectors:
     name: Golden vectors
@@ -132,7 +133,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Builds the contract artifact and @ome-labs/wasm first. The end-to-end suite needs a local network and runs
       # outside CI (pnpm --filter @ome-labs/wallet test:e2e).
-      - run: pnpm exec turbo run typecheck test --filter=@ome-labs/wallet --filter=@ome-labs/daemon
+      - run: pnpm exec turbo run typecheck test --filter=@ome-labs/wallet --filter=@ome-labs/daemon --filter=@ome-labs/ome
 
   noir:
     name: Noir
@@ -160,8 +161,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # The runner's Docker uses BuildKit, which the Dockerfile's cache mounts need.
-      - run: docker build -f relay/deploy/Dockerfile --target relay -t ome-relay:ci crates
-      - run: docker build -f relay/deploy/Dockerfile --target keeper -t ome-keeper:ci crates
+      - run: docker build -f crates/relay/deploy/Dockerfile --target relay -t ome-relay:ci crates
+      - run: docker build -f crates/relay/deploy/Dockerfile --target keeper -t ome-keeper:ci crates
       - run: docker run --rm ome-keeper:ci ome-keeper --version
       - name: The relay starts and reports healthy
         run: |
