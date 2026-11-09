@@ -268,8 +268,9 @@ and the API shapes. Points are checked to be on the curve on the way in. Events 
 `ome-keeper` has four commands: `init`, `identity`, `run` and `rpc`.
 
 - **Master key**: the supervising app runs `ome-keeper run --secrets-stdin` and writes one JSON line holding the
-  master key (kept in the OS keychain) and a fresh RPC token. A keeper on a member's own server uses
-  `OME_KEEPER_PASSPHRASE` (Argon2id with a per-keeper salt) and writes its RPC token to `rpc.token`.
+  master key (kept in the OS keychain) and a fresh RPC token. A keeper on a member's own server derives it from a
+  passphrase (Argon2id with a per-keeper salt), read from the file `OME_KEEPER_PASSPHRASE_FILE` names (a Docker or
+  systemd secret) or from `OME_KEEPER_PASSPHRASE`, and writes its RPC token to `rpc.token`.
 - **Config**: an optional `<data>/keeper.toml`, overridden by flags, sets:
   - listen, external and relay addresses;
   - the RPC socket;

@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
-# ome-node: ome-relay and ome-keeper in one image. Relay operators and members running their keeper on a server use
-# the same image. Build from `crates/`:
+# The relay and keeper images, ghcr.io/ome-labs/ome-relay and ghcr.io/ome-labs/ome-keeper. Build from `crates/`:
 #
-#   docker build -f relay/deploy/Dockerfile -t ome-node .
+#   docker build -f relay/deploy/Dockerfile --target relay -t ome-relay .
+#   docker build -f relay/deploy/Dockerfile --target keeper -t ome-keeper .
 
 FROM rust:1.99.1-slim-trixie AS build
 WORKDIR /src
@@ -18,14 +18,26 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
  && mkdir -p /out \
  && cp target/release/ome-keeper target/release/ome-relay /out/
 
-FROM debian:trixie-slim AS runtime
+FROM debian:trixie-slim AS base
 RUN useradd --system --uid 10001 --home-dir /data --shell /usr/sbin/nologin ome \
  && mkdir -p /data && chown ome:ome /data && chmod 0700 /data
-COPY --from=build /out/ome-keeper /out/ome-relay /usr/local/bin/
 USER ome
 WORKDIR /data
 VOLUME /data
-# libp2p (QUIC and TCP) and the relay's health and metrics endpoint.
+
+# A member's keeper on their own server. The passphrase that seals its secrets comes from a file, e.g. a Docker
+# secret: OME_KEEPER_PASSPHRASE_FILE=/run/secrets/keeper-passphrase. Port 7445 serves the RPC over TLS for the
+# member's daemon; the certificate fingerprint is in the logs and /data/keeper.json.
+FROM base AS keeper
+COPY --from=build /out/ome-keeper /usr/local/bin/
+ENV OME_KEEPER_DATA=/data
+EXPOSE 4001/udp 4001/tcp 7445/tcp
+CMD ["ome-keeper", "run", "--listen", "/ip4/0.0.0.0/udp/4001/quic-v1", "--listen", "/ip4/0.0.0.0/tcp/4001", "--rpc-listen", "0.0.0.0:7445", "--log-format", "json"]
+
+# The relay (the default target): circuits and mailboxes for members' keepers, ciphertext only.
+FROM base AS relay
+COPY --from=build /out/ome-relay /usr/local/bin/
+# libp2p (QUIC and TCP) and the health and metrics endpoint.
 EXPOSE 4001/udp 4001/tcp 9090/tcp
 # Debian's /bin/sh is dash, which has no /dev/tcp; bash does.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD ["/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9090 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"ok\"' <&3"]

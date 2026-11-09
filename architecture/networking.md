@@ -149,7 +149,7 @@ generation, so `cargo deny` reports those crates as duplicates. Duplicates are w
 
 Relay circuits and `RelayMailbox` are tested against the real relay, in `ome-relay`'s tests (`architecture/relay.md`).
 
-**Across networks** (`pnpm test:network`, `tools/network`): the `ome-node` image runs a relay on three Docker networks
+**Across networks** (`pnpm test:network`, `tools/network`): the `ome-relay` image runs a relay on three Docker networks
 (`internal`, so nothing else routes) and one keeper alone on each. Keepers can reach each other only through the
 relay. The suite checks that each keeper advertises a relay circuit, that a DKG completes through the circuits, that
 threshold ECDH gathers and combines partials through them, and that a keeper stopped while a proposal was made

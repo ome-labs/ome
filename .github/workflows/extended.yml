@@ -153,7 +153,7 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Builds the ome-node image and runs a relay and three keepers on separate Docker networks.
+      # Builds the ome-relay and ome-keeper images and runs a relay and three keepers on separate Docker networks.
       - run: pnpm test:network
 
   apple:

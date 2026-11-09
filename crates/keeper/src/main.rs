@@ -2,7 +2,7 @@
 //!
 //! The supervising app launches `ome-keeper run --secrets-stdin` and writes one JSON line with the
 //! master key (kept in the OS keychain) and a fresh RPC token. A keeper on a member's own server uses a passphrase
-//! (`OME_KEEPER_PASSPHRASE`) instead. When ready, `run` prints one JSON line on stdout with its identity, transport
+//! (`OME_KEEPER_PASSPHRASE_FILE` or `OME_KEEPER_PASSPHRASE`) instead. When ready, `run` prints one JSON line on stdout with its identity, transport
 //! key, addresses and RPC socket; logs go to stderr.
 
 use std::{
@@ -129,11 +129,12 @@ fn unlock(common: &Common) -> Result<Unlocked> {
             launch.rpc_token.map(Zeroizing::new),
         )
     } else {
-        let passphrase = Zeroizing::new(std::env::var("OME_KEEPER_PASSPHRASE").map_err(|_| {
-            Error::Invalid("set OME_KEEPER_PASSPHRASE or use --secrets-stdin".into())
-        })?);
+        let passphrase = passphrase()?;
         (
-            MasterKey::from_passphrase(passphrase.as_bytes(), &salt(data)?)?,
+            MasterKey::from_passphrase(
+                passphrase.trim_end_matches(['\r', '\n']).as_bytes(),
+                &salt(data)?,
+            )?,
             None,
         )
     };
@@ -141,6 +142,24 @@ fn unlock(common: &Common) -> Result<Unlocked> {
         secrets: SecretStore::open(data.join("secrets"), &key)?,
         token,
     })
+}
+
+/// The server passphrase: from the file named by `OME_KEEPER_PASSPHRASE_FILE` (a Docker or systemd secret), else from
+/// `OME_KEEPER_PASSPHRASE`. A file's trailing newline is not part of it.
+fn passphrase() -> Result<Zeroizing<String>> {
+    if let Some(file) = std::env::var_os("OME_KEEPER_PASSPHRASE_FILE") {
+        return std::fs::read_to_string(&file)
+            .map(Zeroizing::new)
+            .map_err(|e| Error::Invalid(format!("OME_KEEPER_PASSPHRASE_FILE: {e}")));
+    }
+    std::env::var("OME_KEEPER_PASSPHRASE")
+        .map(Zeroizing::new)
+        .map_err(|_| {
+            Error::Invalid(
+                "set OME_KEEPER_PASSPHRASE_FILE (or OME_KEEPER_PASSPHRASE), or use --secrets-stdin"
+                    .into(),
+            )
+        })
 }
 
 fn salt(data: &Path) -> Result<[u8; 16]> {

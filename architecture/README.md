@@ -21,7 +21,7 @@ the verified design of each component: one page per component.
 | `crates/wasm`           | `ome-wasm` / `@ome-labs/wasm`: the core for TypeScript as WebAssembly, for Node and the browser ([bindings.md](bindings.md))                                               |
 | `crates/ffi`            | `ome-ffi`: the phone core of a member's signing device, with Swift and Kotlin bindings ([bindings.md](bindings.md), [mobile.md](mobile.md))                                |
 | `crates/cli`            | `ome-cli`: `ome`, a member's command line, a client of their daemon ([cli.md](cli.md))                                                                                     |
-| `crates/relay`          | `ome-relay`: the untrusted circuit relay and sealed mailbox store, its binary and the `ome-node` image ([relay.md](relay.md))                                              |
+| `crates/relay`          | `ome-relay`: the untrusted circuit relay and sealed mailbox store, its binary and the relay and keeper images ([relay.md](relay.md))                                       |
 | `packages/daemon`       | `@ome-labs/daemon`: `omed`, a member's service: the API server, the sealed signer, keeper supervision, founding, proposals and membership changes ([daemon.md](daemon.md)) |
 | `packages/wallet`       | `@ome-labs/wallet`: Aztec's PXE for Ome vaults, with the threshold key store, deployment and proposals ([pxe-integration.md](pxe-integration.md))                          |
 | `patches/`              | The guarded `@aztec-labs/pxe` 6.0.0 patch the wallet needs ([pxe-integration.md](pxe-integration.md))                                                                      |

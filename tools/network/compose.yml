@@ -17,7 +17,7 @@ volumes:
   keeper-c:
 
 x-keeper: &keeper
-  image: ome-node
+  image: ome-keeper
   environment:
     OME_KEEPER_PASSPHRASE: network suite passphrase
   command:
@@ -32,7 +32,7 @@ x-keeper: &keeper
 
 services:
   relay:
-    image: ome-node
+    image: ome-relay
     command:
       [ome-relay, run, --data-dir, /data, --listen, /ip4/0.0.0.0/tcp/4001, --health, "0.0.0.0:9090"]
     volumes: [relay:/data]

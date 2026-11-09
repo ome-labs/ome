@@ -15,7 +15,8 @@ StateDirectory=ome-keeper
 StateDirectoryMode=0700
 LoadCredential=passphrase:/etc/ome/keeper-passphrase
 Environment=OME_KEEPER_DATA=/var/lib/ome-keeper
-ExecStart=/bin/sh -c 'OME_KEEPER_PASSPHRASE="$(cat "$CREDENTIALS_DIRECTORY/passphrase")" exec /usr/local/bin/ome-keeper run --listen /ip4/0.0.0.0/udp/4001/quic-v1 --listen /ip4/0.0.0.0/tcp/4001 --rpc-listen 0.0.0.0:7445 --log-format json'
+Environment=OME_KEEPER_PASSPHRASE_FILE=%d/passphrase
+ExecStart=/usr/local/bin/ome-keeper run --listen /ip4/0.0.0.0/udp/4001/quic-v1 --listen /ip4/0.0.0.0/tcp/4001 --rpc-listen 0.0.0.0:7445 --log-format json
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes

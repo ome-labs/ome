@@ -1,6 +1,6 @@
 import defineNodeVitestConfig from "klarity/vitest/node";
 
-// Builds the ome-node image and runs a relay and three keepers on separate Docker networks (Docker must be up).
+// Builds the ome-relay and ome-keeper images and runs a relay and three keepers on separate Docker networks (Docker must be up).
 export default defineNodeVitestConfig({
   test: {
     include: ["test/**/*.test.ts"],

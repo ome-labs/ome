@@ -1,6 +1,6 @@
 // Keepers that cannot reach each other except through a relay: a relay on three Docker networks and one keeper alone
 // on each. The keepers run a DKG through the relay's circuits, answer threshold ECDH through them, and a keeper that
-// was stopped catches up on a proposal through its relay mailbox and sync. Needs Docker; builds the ome-node image.
+// was stopped catches up on a proposal through its relay mailbox and sync. Needs Docker; builds the ome-relay and ome-keeper images.
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -85,14 +85,18 @@ describe.skipIf(!available)("keepers on separate networks, joined by a relay", (
   let session: Hex32;
 
   beforeAll(async () => {
-    docker([
-      "build",
-      "-f",
-      join(crates, "relay", "deploy", "Dockerfile"),
-      "-t",
-      "ome-node",
-      crates,
-    ]);
+    for (const target of ["relay", "keeper"]) {
+      docker([
+        "build",
+        "-f",
+        join(crates, "relay", "deploy", "Dockerfile"),
+        "--target",
+        target,
+        "-t",
+        `ome-${target}`,
+        crates,
+      ]);
+    }
     composeArgs(["down", "-v", "--remove-orphans"]);
     const peer = composeArgs([
       "run",

@@ -84,12 +84,14 @@ monitoring, not to the internet.
 
   `ome-relay peer-id --data-dir <dir>` prints the peer id, creating the identity if needed.
 
-- **Image** (`relay/deploy/Dockerfile`, built from `crates/`): `ome-node` carries both `ome-relay` and
-  `ome-keeper`, so relay operators and members running a server keeper use the same image.
-  - It runs as a non-root user with an `0700` `/data` volume and exposes 4001/udp, 4001/tcp and 9090.
-  - Its health check probes `/health` with bash (Debian's `sh` has no `/dev/tcp`).
-  - It runs the relay by default.
-  - CI builds it and checks that the relay reports healthy.
+- **Images** (`relay/deploy/Dockerfile`, built from `crates/`, published as `ghcr.io/ome-labs/ome-relay` and
+  `ghcr.io/ome-labs/ome-keeper` for `linux/amd64` and `linux/arm64`): one Dockerfile with a `relay` target (the
+  default) and a `keeper` target.
+  - Both run as a non-root user (uid 10001) with an `0700` `/data` volume.
+  - The relay exposes 4001/udp, 4001/tcp and 9090; its health check probes `/health` with bash (Debian's `sh` has no
+    `/dev/tcp`). CI builds it and checks that it reports healthy.
+  - The keeper exposes 4001/udp, 4001/tcp and 7445 (the RPC over TLS) and reads its passphrase from
+    `OME_KEEPER_PASSPHRASE_FILE`, e.g. a Docker secret, so it never appears in the container's environment.
 - **systemd**: `relay/deploy/ome-relay.service` and `ome-keeper.service` run with `DynamicUser`, an `0700`
   `StateDirectory`, `NoNewPrivileges`, `ProtectSystem=strict`, no capabilities and restricted address families. The
   keeper's passphrase comes from a root-only systemd credential.

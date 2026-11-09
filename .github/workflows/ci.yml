@@ -190,10 +190,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # The runner's Docker uses BuildKit, which the Dockerfile's cache mounts need.
-      - run: docker build -f relay/deploy/Dockerfile -t ome-node:ci crates
+      - run: docker build -f relay/deploy/Dockerfile --target relay -t ome-relay:ci crates
       - name: The relay starts and reports healthy
         run: |
-          docker run -d --name relay -p 127.0.0.1:9090:9090 ome-node:ci
+          docker run -d --name relay -p 127.0.0.1:9090:9090 ome-relay:ci
           for _ in $(seq 1 30); do
             curl -fsS 127.0.0.1:9090/health && exit 0
             sleep 1
