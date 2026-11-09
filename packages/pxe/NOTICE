@@ -1,0 +1,9 @@
+@ome-labs/pxe
+Copyright 2026 Vedant Chainani
+
+This package is a modified copy of @aztec-labs/pxe 6.0.0, the Private eXecution Environment of the Aztec network,
+published by Aztec Labs under the Apache License, Version 2.0 (https://github.com/AztecProtocol/aztec-packages).
+
+Modifications: the files under dest/ named in patches/@aztec-labs__pxe@6.0.0.patch of https://github.com/ome-labs/ome,
+each change marked with an `// ome:` comment. They let the PXE use a key store that never holds an account's whole
+incoming viewing secret, answering decryption and tagging through threshold ECDH instead.

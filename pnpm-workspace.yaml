@@ -40,6 +40,3 @@ allowBuilds:
   lmdb: false
   msgpackr-extract: false
   protobufjs: false
-
-patchedDependencies:
-  "@aztec-labs/pxe@6.0.0": patches/@aztec-labs__pxe@6.0.0.patch

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": ["package.json", "scripts/**", "$TURBO_ROOT$/patches/@aztec-labs__pxe@6.0.0.patch"],
+      "outputs": ["dest/**"]
+    }
+  }
+}

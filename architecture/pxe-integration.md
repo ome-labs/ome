@@ -6,16 +6,25 @@ nowhere. Every one of those uses is one multiplication `address_secret · P`, wh
 the wallet adds two things:
 
 - a key store that sends those multiplications to the vault's keepers;
-- a minimal patch that makes the PXE ask the key store instead of reading `ivsk`.
+- a minimal patch that makes the PXE ask the key store instead of reading `ivsk`, published as `@ome-labs/pxe`.
 
 Protocol logic is in `@ome-labs/wasm`: combining partials, proposals, the witness and the checks. The wallet keeps
 only the Aztec integration: the PXE, keys, the artifact, deployment and the account entrypoint.
 
 ## The patch
 
-`patches/@aztec-labs__pxe@6.0.0.patch`, applied by pnpm (`patchedDependencies` in `pnpm-workspace.yaml`) to the
-compiled `dest/` files. Each site is marked `// ome:` and guarded by `await this.keyStore.isThresholdAccount?.(…)`.
-With the stock `KeyStore` that method is absent, so stock accounts run the stock code unchanged.
+`patches/@aztec-labs__pxe@6.0.0.patch`, against the compiled `dest/` files of Aztec's published `@aztec-labs/pxe`.
+Each site is marked `// ome:` and guarded by `await this.keyStore.isThresholdAccount?.(…)`. With the stock `KeyStore`
+that method is absent, so stock accounts run the stock code unchanged.
+
+**`@ome-labs/pxe`** (`packages/pxe`) is the patched package. Its build (`scripts/fork.ts`) copies upstream's `dest/`,
+applies the patch, and fails if the patch no longer applies or if the package's dependencies or exports drift from
+upstream's. It is versioned after Aztec's release, `6.0.0-ome.N` (a prerelease of `6.0.0`, so no `^6` range picks it
+by accident), and published only when the patch changes. The wallet creates its PXE from it. Aztec's other packages
+keep importing `@aztec-labs/pxe` (`wallet-sdk` uses two helpers the patch does not touch), so an install has both
+copies. `BaseWallet` is typed against Aztec's `PXE` class, so the wallet casts the patched instance to that type once:
+two copies of a class with private fields are distinct types to TypeScript, the same class at runtime. The fork ships
+Aztec's Apache-2.0 license and a NOTICE naming the changes.
 
 | Site                                                           | Stock                                                | For a vault                                                            |
 | -------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
@@ -33,15 +42,18 @@ fails if a marker is missing, or if any `getMasterIncomingViewingSecretKey(` cal
 
 On every Aztec release:
 
-1. Run `pnpm patch @aztec-labs/pxe@<new> --edit-dir <dir>`.
-2. Reapply each row above. `git apply --recount` of the previous patch, run in that directory, handles moved lines.
-   To find sites that moved or were added, search the new `dest/` for:
+1. Bump the catalog's `@aztec-labs/*` versions and install.
+2. Copy the new `@aztec-labs/pxe`'s `dest/` to a scratch directory, `git init` it, and reapply each row above:
+   `git apply --recount` of the previous patch handles moved lines. To find sites that moved or were added, search the
+   new `dest/` for:
    - `getMasterIncomingViewingSecretKey` and `getMasterSecretKey`;
    - `computeAddressSecret`, `computeSharedTaggingSecret` and `computeViaEcdh`;
    - `isUnconstrainedSelfSend`.
-3. Run `pnpm patch-commit <dir>`.
-4. Run the wallet's unit suite, `pnpm --filter @ome-labs/wallet test:e2e` against a local network, and the golden
-   vectors (`@ome-labs/vectors`).
+3. Save `git diff` as `patches/@aztec-labs__pxe@<new>.patch` (paths `a/dest/…`), point `scripts/fork.ts` at it, and set
+   `packages/pxe/package.json` to `<new>-ome.1` with upstream's dependencies and exports (the build names what
+   differs).
+4. Run `pnpm --filter @ome-labs/pxe build`, the wallet's unit suite, `pnpm --filter @ome-labs/wallet test:e2e` against
+   a local network, and the golden vectors (`@ome-labs/vectors`).
 
 ## `ThresholdKeyStore`
 

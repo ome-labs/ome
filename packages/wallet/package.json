@@ -27,6 +27,7 @@
     "@aztec-labs/wallet-sdk": "catalog:",
     "@ome-labs/api": "workspace:*",
     "@ome-labs/contracts": "workspace:*",
+    "@ome-labs/pxe": "workspace:*",
     "@ome-labs/wasm": "workspace:*"
   },
   "devDependencies": {

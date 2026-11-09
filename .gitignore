@@ -11,6 +11,9 @@ release/
 *.tsbuildinfo
 coverage/
 
+# @ome-labs/pxe: Aztec's dest/ with our patch, built by packages/pxe/scripts/fork.ts
+packages/pxe/dest/
+
 # Rust (Cargo) and Noir (Nargo) build output
 target/
 codegenCache.json

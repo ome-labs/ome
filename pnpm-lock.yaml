@@ -231,9 +231,6 @@ catalogs:
       specifier: 5.1.0
       version: 5.1.0
 
-patchedDependencies:
-  '@aztec-labs/pxe@6.0.0': e585fbf8f343b57ec200d141d119abde6e881f91409ad86cd52e44fbdbf7daa8
-
 importers:
 
   .:
@@ -356,6 +353,88 @@ importers:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0))
 
+  packages/pxe:
+    dependencies:
+      '@aztec-foundation/bb.js':
+        specifier: 6.0.0
+        version: 6.0.0
+      '@aztec-foundation/noir-acvm_js':
+        specifier: 6.0.0
+        version: 6.0.0
+      '@aztec-foundation/noir-noirc_abi':
+        specifier: 6.0.0
+        version: 6.0.0
+      '@aztec-foundation/noir-types':
+        specifier: 6.0.0
+        version: 6.0.0
+      '@aztec-labs/bb-prover':
+        specifier: 6.0.0
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)(zod@4.4.3)
+      '@aztec-labs/constants':
+        specifier: 6.0.0
+        version: 6.0.0(supports-color@7.2.0)
+      '@aztec-labs/ethereum':
+        specifier: 6.0.0
+        version: 6.0.0(supports-color@7.2.0)(typescript@7.0.2)
+      '@aztec-labs/foundation':
+        specifier: 6.0.0
+        version: 6.0.0(supports-color@7.2.0)
+      '@aztec-labs/key-store':
+        specifier: 6.0.0
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
+      '@aztec-labs/kv-store':
+        specifier: 6.0.0
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
+      '@aztec-labs/noir-protocol-circuits-types':
+        specifier: 6.0.0
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
+      '@aztec-labs/protocol-contracts':
+        specifier: 6.0.0
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
+      '@aztec-labs/simulator':
+        specifier: 6.0.0
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)(zod@4.4.3)
+      '@aztec-labs/standard-contracts':
+        specifier: 6.0.0
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
+      '@aztec-labs/stdlib':
+        specifier: 6.0.0
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
+      buffer:
+        specifier: ^6.0.3
+        version: 6.0.3
+      koa:
+        specifier: ^2.16.1
+        version: 2.16.4(supports-color@7.2.0)
+      koa-router:
+        specifier: ^13.1.1
+        version: 13.1.1(supports-color@7.2.0)
+      lodash.omit:
+        specifier: ^4.5.0
+        version: 4.18.0
+      sha3:
+        specifier: ^2.1.4
+        version: 2.1.4
+      tslib:
+        specifier: ^2.4.0
+        version: 2.9.1
+      viem:
+        specifier: 2.57.1
+        version: 2.57.1(typescript@7.0.2)(zod@4.4.3)
+    devDependencies:
+      '@aztec-labs/pxe':
+        specifier: 'catalog:'
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)(zod@4.4.3)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      klarity:
+        specifier: 'catalog:'
+        version: 0.3.0(@commitlint/cli@21.2.4(conventional-commits-parser@7.1.4)(typescript@7.0.2))(@commitlint/config-conventional@21.2.4)(lefthook@2.2.2)(oxfmt@0.77.0)(oxlint@1.92.0)(turbo@2.11.10)(typescript@7.0.2)(vitest@5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0)))
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/wallet:
     dependencies:
       '@aztec-foundation/bb.js':
@@ -381,7 +460,7 @@ importers:
         version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
       '@aztec-labs/pxe':
         specifier: 'catalog:'
-        version: 6.0.0(patch_hash=e585fbf8f343b57ec200d141d119abde6e881f91409ad86cd52e44fbdbf7daa8)(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)(zod@4.4.3)
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)(zod@4.4.3)
       '@aztec-labs/stdlib':
         specifier: 'catalog:'
         version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
@@ -394,6 +473,9 @@ importers:
       '@ome-labs/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@ome-labs/pxe':
+        specifier: workspace:*
+        version: link:../pxe
       '@ome-labs/wasm':
         specifier: workspace:*
         version: link:../../crates/wasm
@@ -3780,7 +3862,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@aztec-labs/pxe@6.0.0(patch_hash=e585fbf8f343b57ec200d141d119abde6e881f91409ad86cd52e44fbdbf7daa8)(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)(zod@4.4.3)':
+  '@aztec-labs/pxe@6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)(zod@4.4.3)':
     dependencies:
       '@aztec-foundation/bb.js': 6.0.0
       '@aztec-foundation/noir-acvm_js': 6.0.0
@@ -3923,7 +4005,7 @@ snapshots:
       '@aztec-labs/constants': 6.0.0(supports-color@7.2.0)
       '@aztec-labs/entrypoints': 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
       '@aztec-labs/foundation': 6.0.0(supports-color@7.2.0)
-      '@aztec-labs/pxe': 6.0.0(patch_hash=e585fbf8f343b57ec200d141d119abde6e881f91409ad86cd52e44fbdbf7daa8)(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)(zod@4.4.3)
+      '@aztec-labs/pxe': 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)(zod@4.4.3)
       '@aztec-labs/stdlib': 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
       buffer: 6.0.3
     transitivePeerDependencies:

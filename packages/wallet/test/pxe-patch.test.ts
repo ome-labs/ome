@@ -1,12 +1,12 @@
-// The PXE patch must be applied wherever the wallet's PXE comes from: every site that used the incoming viewing secret
-// asks the key store first. Fails loudly after an Aztec upgrade until the patch is ported.
+// The wallet's PXE comes from @ome-labs/pxe, Aztec's PXE with Ome's patch: every site that used the incoming viewing
+// secret asks the key store first. Fails loudly after an Aztec upgrade until the patch is ported.
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-// `@aztec-labs/pxe/server` resolves to `dest/entrypoints/server/index.js`.
-const dest = fileURLToPath(new URL("../../", import.meta.resolve("@aztec-labs/pxe/server")));
+// `@ome-labs/pxe/server` resolves to `dest/entrypoints/server/index.js`.
+const dest = fileURLToPath(new URL("../../", import.meta.resolve("@ome-labs/pxe/server")));
 const read = (path: string) => readFile(`${dest}${path}`, "utf8");
 
 const sites: [string, number][] = [
@@ -17,7 +17,7 @@ const sites: [string, number][] = [
   ["logs/log_service.js", 1],
 ];
 
-describe("@aztec-labs/pxe patch", () => {
+describe("@ome-labs/pxe", () => {
   it.each(sites)("patches %s", async (path, markers) => {
     const source = await read(path);
     expect(source.match(/\/\/ ome:/g)?.length).toBe(markers);

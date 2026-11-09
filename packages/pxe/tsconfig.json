@@ -1,0 +1,9 @@
+{
+  "extends": "klarity/tsconfig/library/node",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "noEmit": true
+  },
+  "include": ["scripts"]
+}

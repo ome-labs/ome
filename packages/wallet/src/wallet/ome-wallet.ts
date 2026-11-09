@@ -26,16 +26,8 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254";
 import type { GrumpkinScalar } from "@aztec-labs/foundation/curves/grumpkin";
 import { type Logger, createLogger } from "@aztec-labs/foundation/log";
 import type { AccountPrivacyKeys } from "@aztec-labs/key-store";
-import {
-  DEFAULT_TAGGING_SECRET_STRATEGY,
-  type PXE,
-  type PXEConfig,
-  type ResolveTaggingSecretStrategy,
-  type TaggingSecretStrategy,
-  type TaggingSecretStrategyRequest,
-  createPXE,
-  getPXEConfig,
-} from "@aztec-labs/pxe/server";
+// `BaseWallet` is typed against Aztec's own PXE class; the patched copy is the same class, built from the same source.
+import type { PXE } from "@aztec-labs/pxe/server";
 import type { FunctionCall } from "@aztec-labs/stdlib/abi";
 import { AuthWitness } from "@aztec-labs/stdlib/auth-witness";
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
@@ -53,6 +45,15 @@ import {
 } from "@aztec-labs/stdlib/tx";
 import { BaseWallet, type FeeOptions } from "@aztec-labs/wallet-sdk/base-wallet";
 import type { Hex64, HexBytes, Manifest, VaultConfig } from "@ome-labs/api";
+import {
+  DEFAULT_TAGGING_SECRET_STRATEGY,
+  type PXEConfig,
+  type ResolveTaggingSecretStrategy,
+  type TaggingSecretStrategy,
+  type TaggingSecretStrategyRequest,
+  createPXE,
+  getPXEConfig,
+} from "@ome-labs/pxe/server";
 import {
   type Chain,
   type TallyResult,
@@ -180,7 +181,7 @@ export class OmeWallet extends BaseWallet {
     const log = options.logger ?? createLogger("ome:wallet");
     const holder: { wallet?: OmeWallet } = {};
     let keyStore: ThresholdKeyStore | undefined;
-    const pxe = await createPXE(
+    const patched = await createPXE(
       node,
       { ...getPXEConfig(), autoSync: false, ...options.pxe },
       {
@@ -201,9 +202,12 @@ export class OmeWallet extends BaseWallet {
         },
       },
     );
+    // Two copies of a class with private fields are distinct types to TypeScript; at runtime this is Aztec's PXE,
+    // patched.
+    const pxe = patched as unknown as PXE;
     if (!keyStore)
       throw new Error(
-        "The PXE did not use the injected key store; is the @aztec-labs/pxe patch applied?",
+        "The PXE did not use the injected key store; is @ome-labs/pxe installed in place of @aztec-labs/pxe?",
       );
     const wallet = new OmeWallet(pxe, node, keyStore, options.taggingStrategy, log);
     holder.wallet = wallet;
