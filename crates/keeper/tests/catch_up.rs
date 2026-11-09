@@ -24,6 +24,7 @@ async fn records_while_member_3_is_away(v: &support::Vault) -> [u8; 32] {
         .set_filter(move |from, to, _| from != &away && to != &away);
     let (proposal, payload) = v.proposal(25);
     let mut first = v.keepers[0].keeper.subscribe();
+    let mut second = v.keepers[1].keeper.subscribe();
     v.keepers[0]
         .keeper
         .put_payload(v.address, &body(&Message::Payload(payload)))
@@ -34,6 +35,11 @@ async fn records_while_member_3_is_away(v: &support::Vault) -> [u8; 32] {
         .put_proposal(v.address, &body(&Message::Proposal(proposal.clone())))
         .await
         .unwrap();
+    // A member votes on a proposal its keeper holds.
+    wait_for(&mut second, |e| {
+        matches!(e, KeeperEvent::Proposal { .. }).then_some(())
+    })
+    .await;
     v.keepers[1]
         .keeper
         .put_approval(

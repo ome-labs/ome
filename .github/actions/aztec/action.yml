@@ -8,7 +8,7 @@ runs:
       with:
         path: |
           ~/.aztec
-          ~/nargo
+          ~/nargo 
         key: aztec-${{ hashFiles('.aztecrc') }}-${{ hashFiles('contracts/**/Nargo.toml') }}
         restore-keys: aztec-${{ hashFiles('.aztecrc') }}-
     - name: Install Aztec

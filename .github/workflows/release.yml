@@ -231,11 +231,17 @@ jobs:
           path: release/assets
           merge-multiple: true
       - run: cd release/assets && sha256sum -- *.tar.gz > SHA256SUMS && cat SHA256SUMS
-      - uses: anchore/sbom-action/download-syft@v0
-        id: syft
+      # syft's installer checks the download against the release's checksums; GitHub sometimes answers 5xx, so retry.
+      - name: Install syft
+        run: |
+          for attempt in 1 2 3 4; do
+            curl -fsSL https://get.anchore.io/syft | sh -s -- -b "$RUNNER_TEMP/bin" && break
+            [ "$attempt" = 4 ] && exit 1
+            sleep 30
+          done
       - name: SBOMs
         env:
-          SYFT: ${{ steps.syft.outputs.cmd }}
+          SYFT: ${{ runner.temp }}/bin/syft
         run: |
           for archive in release/assets/*.tar.gz; do
             name=$(basename "$archive" .tar.gz)
