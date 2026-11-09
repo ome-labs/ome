@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.0](https://github.com/ome-labs/ome/compare/v0.1.0...v0.1.0) (2026-11-09)
+
+
+### Bug fixes
+
+* **repo:** publish the PXE fork with an explicit tag, and let the tap update re-run ([35e2657](https://github.com/ome-labs/ome/commit/35e265748504d0a05d2a7e06fd24723f67a9f1b6))
+* **repo:** publish to npm without waiting on the registry ([edc7ab8](https://github.com/ome-labs/ome/commit/edc7ab8506ca9eab87a4c90da3c1d51a4633a874))
+
 ## 0.1.0 (2026-11-09)
 
 
