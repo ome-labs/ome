@@ -14,6 +14,7 @@
   "scripts": {
     "test": "vitest run",
     "test:e2e": "vitest run -c vitest.e2e.config.ts",
+    "test:removal": "vitest run -c vitest.removal.config.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

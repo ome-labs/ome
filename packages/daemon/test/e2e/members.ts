@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
-import type { DaemonEvent, Settings } from "@ome-labs/api";
+import type { DaemonEvent, Hex32, Settings } from "@ome-labs/api";
 
 import { Daemon, DaemonClient } from "../../src/index.ts";
 
@@ -74,4 +74,36 @@ export async function until<T>(
     // oxlint-disable-next-line no-await-in-loop
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
+}
+
+/** The members found a vault through a lobby the first one hosts; returns its address. */
+export async function found(
+  members: readonly Member[],
+  name: string,
+  threshold: number,
+  viewingThreshold: number,
+): Promise<Hex32> {
+  const [host, ...guests] = members;
+  if (!host) throw new Error("a vault needs members");
+  const lobby = await host.client.call("lobby.create", { name, threshold, viewingThreshold });
+  for (const guest of guests)
+    // oxlint-disable-next-line no-await-in-loop
+    await guest.client.call("lobby.join", { invite: lobby.invite ?? "" });
+  await until(async () => {
+    const view = await host.client.call("lobby.get", { lobby: lobby.lobby });
+    return view.members.length === members.length ? view : undefined;
+  }, "every guest to join");
+  await host.client.call("lobby.start", { lobby: lobby.lobby, threshold, viewingThreshold });
+  const states = await Promise.all(
+    members.map(async (m) => {
+      await m.client.call("founding.begin", { lobby: lobby.lobby });
+      return until(async () => {
+        const state = await m.client.call("founding.get", { lobby: lobby.lobby });
+        return state?.done ? state : undefined;
+      }, `${m.name}'s founding`);
+    }),
+  );
+  const failed = states.find((s) => s.error);
+  if (failed) throw new Error(`founding failed: ${JSON.stringify(failed.error)}`);
+  return states[0]?.vault as Hex32;
 }
