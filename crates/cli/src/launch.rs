@@ -52,7 +52,16 @@ fn repo_root() -> PathBuf {
     root.canonicalize().unwrap_or(root)
 }
 
-/// Where `omed` is: `OME_DAEMON`, then `<home>/bin/omed`, then the repository's `omed.ts`.
+/// A program installed next to this `ome` (a release tarball, the Homebrew keg, a curl install), following symlinks
+/// such as Homebrew's `bin/ome` → `Cellar/ome/<version>/bin/ome`.
+fn beside_me(name: &str) -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
+    let path = exe.parent()?.join(name);
+    path.is_file().then_some(path)
+}
+
+/// Where `omed` is: `OME_DAEMON` (the npm launcher sets it), next to `ome`, `<home>/bin/omed`, then the checkout's
+/// `omed.ts`.
 pub(crate) fn omed_path(home: &Home) -> Result<PathBuf> {
     let configured = std::env::var_os("OME_DAEMON")
         .filter(|v| !v.is_empty())
@@ -60,45 +69,74 @@ pub(crate) fn omed_path(home: &Home) -> Result<PathBuf> {
     let installed = home.root().join("bin").join("omed");
     let repo = repo_root().join("packages/daemon/src/omed.ts");
     configured
+        .or_else(|| beside_me("omed"))
         .or_else(|| installed.is_file().then_some(installed.clone()))
         .or_else(|| repo.is_file().then_some(repo))
         .ok_or_else(|| {
-            Error::new(Exit::Daemon, "The daemon (omed) is not installed.").hint(format!(
-                "Install it with `pnpm cli:install` (into {}), or set OME_DAEMON.",
-                installed.display()
-            ))
+            Error::new(Exit::Daemon, "The daemon (omed) was not found.").hint(
+                "Reinstall Ome (`npm i -g @ome-labs/ome`, `brew install ome-labs/tap/ome`, or the install script \
+                 at https://ome.network), or set OME_DAEMON.",
+            )
         })
 }
 
-/// Where `ome-keeper` is, as the daemon looks for it: `OME_KEEPER_BIN`, `<home>/bin/ome-keeper`, the repository's
-/// build.
+/// Where `ome-keeper` is, as the daemon is told: `OME_KEEPER_BIN`, next to `ome`, `<home>/bin/ome-keeper`, then the
+/// checkout's build.
 pub(crate) fn keeper_path(home: &Home) -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("OME_KEEPER_BIN").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(path));
     }
     let target = repo_root().join("crates/target");
-    [
-        home.root().join("bin/ome-keeper"),
-        target.join("debug/ome-keeper"),
-        target.join("release/ome-keeper"),
-    ]
-    .into_iter()
-    .find(|p| p.is_file())
+    beside_me("ome-keeper").or_else(|| {
+        [
+            home.root().join("bin/ome-keeper"),
+            target.join("debug/ome-keeper"),
+            target.join("release/ome-keeper"),
+        ]
+        .into_iter()
+        .find(|p| p.is_file())
+    })
 }
 
-/// The command that runs `omed`; a `.ts` or `.js` path runs with Node.
+/// How this `ome` was installed, judged from where it runs, and the command that updates it.
+pub(crate) fn install_method(home: &Home) -> (&'static str, &'static str) {
+    let exe = std::env::current_exe()
+        .and_then(std::fs::canonicalize)
+        .unwrap_or_default();
+    let path = exe.to_string_lossy();
+    if path.contains("/node_modules/@ome-labs/") {
+        ("npm", "npm update -g @ome-labs/ome")
+    } else if path.contains("/Cellar/ome/") {
+        ("Homebrew", "brew upgrade ome")
+    } else if exe.starts_with(home.root().join("versions")) {
+        (
+            "install script",
+            "curl -fsSL https://ome.network/install.sh | sh",
+        )
+    } else if exe.starts_with(repo_root()) {
+        ("this checkout", "git pull, then build")
+    } else {
+        ("unknown", "reinstall from https://ome.network")
+    }
+}
+
+/// The command that runs `omed`; a `.ts` or `.js` path runs with Node. The daemon is told where the keeper is.
 pub(crate) fn omed(home: &Home) -> Result<Command> {
     let path = omed_path(home)?;
     let script = path
         .extension()
         .is_some_and(|ext| ext == "ts" || ext == "js");
-    Ok(if script {
+    let mut command = if script {
         let mut command = Command::new("node");
         command.arg(path);
         command
     } else {
         Command::new(path)
-    })
+    };
+    if let Some(keeper) = keeper_path(home) {
+        command.env("OME_KEEPER_BIN", keeper);
+    }
+    Ok(command)
 }
 
 /// `daemon.info` from the profile's running daemon, if one answers.

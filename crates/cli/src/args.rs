@@ -62,7 +62,7 @@ Run `ome <command> --help` for a command's flags. Docs: architecture/cli.md";
 #[derive(Debug, Parser)]
 #[command(
     name = "ome",
-    version,
+    version = ome_api::RELEASE_VERSION,
     about = "Ome: a private k-of-n multisig on Aztec, from the terminal",
     styles = STYLES,
     help_template = "{about}\n\n{usage-heading} {usage}\n\n{before-help}\x1b[1;32mOptions:\x1b[0m\n{options}{after-help}",
@@ -312,6 +312,10 @@ pub(crate) enum DaemonCommand {
     Restart,
     /// The daemon's log.
     Logs(LogArgs),
+    /// Run the daemon as a login service (launchd or systemd), so your keeper keeps answering.
+    InstallService,
+    /// Stop the service and remove it.
+    UninstallService,
 }
 
 #[derive(Debug, Args)]

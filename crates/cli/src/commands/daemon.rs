@@ -11,7 +11,7 @@ use crate::{
     args::{DaemonCommand, LogArgs},
     context::{Ctx, Mode},
     error::{Error, Result},
-    launch,
+    launch, service,
     ui::{steps::Step, theme},
 };
 
@@ -45,7 +45,57 @@ pub(crate) async fn run(ctx: &mut Ctx, command: DaemonCommand) -> Result<()> {
             Ok(())
         }
         DaemonCommand::Logs(args) => logs(ctx, &launch::log_path(&ctx.profile), &args).await,
+        DaemonCommand::InstallService => install_service(ctx).await,
+        DaemonCommand::UninstallService => {
+            let removed = service::uninstall(ctx)?;
+            if ctx.mode == Mode::Json {
+                return ctx.json(&serde_json::json!({ "removed": removed }));
+            }
+            if removed {
+                ctx.success("The service is stopped and removed; the daemon now runs only when a command starts it");
+            } else {
+                ctx.info("No service is installed for this profile.");
+            }
+            Ok(())
+        }
     }
+}
+
+/// Hands the daemon to the login service: the one a command started is stopped first, since only one daemon holds a
+/// profile.
+async fn install_service(ctx: &mut Ctx) -> Result<()> {
+    ctx.drop_client();
+    launch::stop(&ctx.profile).await?;
+    let step = Step::start(ctx, "Installing the service");
+    let installed = service::install(ctx)?;
+    for _ in 0..240 {
+        if launch::running(&ctx.profile).await.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    let Some(info) = launch::running(&ctx.profile).await else {
+        step.fail("The service did not start the daemon");
+        return Err(Error::failed(
+            "The service is installed but the daemon did not answer within a minute.",
+        )
+        .hint(format!("Read its log: `{}`.", ctx.ome("daemon logs"))));
+    };
+    step.done(&format!("Daemon running as a service · pid {}", info.pid));
+    if ctx.mode == Mode::Json {
+        return ctx.json(&serde_json::json!({ "service": installed.name, "file": installed.file, "pid": info.pid }));
+    }
+    ctx.info(&format!(
+        "{} · {}",
+        installed.name,
+        installed.file.display()
+    ));
+    if cfg!(target_os = "linux") {
+        ctx.info(
+            "On a server, keep it running after you log out: `sudo loginctl enable-linger $USER`.",
+        );
+    }
+    Ok(())
 }
 
 async fn stop(ctx: &mut Ctx) -> Result<()> {

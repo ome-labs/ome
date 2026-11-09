@@ -10,6 +10,7 @@ mod fixtures;
 mod launch;
 mod refs;
 mod secret;
+mod service;
 mod ui;
 mod watch;
 

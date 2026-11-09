@@ -25,3 +25,8 @@ pub use jsonrpc::{AuthParams, Empty, Method, MethodInfo};
 /// API version served in `keeper.info` and `daemon.info`. Adding a method, an optional param or a result field keeps
 /// it; anything else that changes a shape needs the next version.
 pub const API_VERSION: u32 = 0;
+
+/// The Ome release these crates belong to: `ome`, `ome-keeper` and `omed` of one release report the same version.
+/// release-please sets it, which leaves the crates' own Cargo version (and `Cargo.lock`) alone: the crates are not
+/// published on their own.
+pub const RELEASE_VERSION: &str = "0.0.0"; // x-release-please-version

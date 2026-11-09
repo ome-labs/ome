@@ -492,6 +492,12 @@ fn plain_status(status: &Status) -> String {
 pub(crate) async fn doctor(ctx: &Ctx, args: NodeArgs) -> Result<()> {
     ctx.intro("Ome doctor");
     let mut checks: Vec<(bool, String, Option<String>)> = Vec::new();
+    let (method, update) = launch::install_method(&ctx.home);
+    checks.push((
+        true,
+        format!("ome {} installed by {method}", ome_api::RELEASE_VERSION),
+        Some(format!("Update with `{update}`.")),
+    ));
     let node = Command::new("node").arg("--version").output();
     let version = node
         .ok()
@@ -545,7 +551,61 @@ pub(crate) async fn doctor(ctx: &Ctx, args: NodeArgs) -> Result<()> {
     });
     if let Some(client) = ctx.running_client().await {
         let status = client.call::<StatusGet>(&Empty {}).await?;
-        checks.push((true, "the daemon is running".into(), None));
+        let daemon = client.call::<DaemonInfoGet>(&Empty {}).await?;
+        checks.push(if daemon.version == ome_api::RELEASE_VERSION {
+            (
+                true,
+                format!("the daemon is running, version {}", daemon.version),
+                None,
+            )
+        } else {
+            (
+                false,
+                format!(
+                    "the daemon runs version {}, this ome {}",
+                    daemon.version,
+                    ome_api::RELEASE_VERSION
+                ),
+                Some(format!(
+                    "Restart it on this version: `{}`.",
+                    ctx.ome("daemon restart")
+                )),
+            )
+        });
+        if let Some(keeper) = status
+            .keeper
+            .version
+            .as_ref()
+            .filter(|v| *v != ome_api::RELEASE_VERSION)
+        {
+            checks.push((
+                false,
+                format!(
+                    "the keeper is version {keeper}, this ome {}",
+                    ome_api::RELEASE_VERSION
+                ),
+                Some(format!(
+                    "Restart the daemon so it starts this release's keeper: `{}`.",
+                    ctx.ome("daemon restart")
+                )),
+            ));
+        }
+        if let Ok(service) = crate::service::of(ctx) {
+            checks.push((
+                true,
+                if service.file.exists() {
+                    format!("the daemon runs as a login service ({})", service.name)
+                } else {
+                    "the daemon runs only while a command starts it".into()
+                },
+                (!service.file.exists()).then(|| {
+                    format!(
+                        "To keep your keeper answering, run `{}`.",
+                        ctx.ome("daemon install-service")
+                    )
+                }),
+            ));
+        }
         let node = client.call::<NodeStatusGet>(&Empty {}).await?;
         if let Some(url) = args.node_url.filter(|u| *u != node.url) {
             checks.push((

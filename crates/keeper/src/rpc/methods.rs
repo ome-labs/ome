@@ -67,7 +67,7 @@ fn info(keeper: &Keeper) -> api::KeeperInfo {
     let identity = keeper.identity();
     api::KeeperInfo {
         api_version: API_VERSION,
-        version: env!("CARGO_PKG_VERSION").into(),
+        version: ome_api::RELEASE_VERSION.into(),
         identity: identity.0.into(),
         transport: keeper.transport_key().into(),
         peer_id: convert::identity_peer_id(&identity),
