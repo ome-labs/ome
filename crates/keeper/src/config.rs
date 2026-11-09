@@ -16,6 +16,8 @@ pub struct FileConfig {
     pub external: Option<Vec<String>>,
     /// RPC socket path (named pipe on Windows).
     pub rpc_socket: Option<String>,
+    /// Address to also serve the RPC on over TLS, for a daemon on another machine.
+    pub rpc_listen: Option<String>,
     /// Ceremony round timeout, seconds.
     pub round_timeout_secs: Option<u64>,
     /// ECDH gathering timeout, milliseconds.

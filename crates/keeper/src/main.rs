@@ -80,6 +80,10 @@ struct Run {
     /// RPC socket path (default `<data>/keeper.sock`).
     #[arg(long)]
     rpc_socket: Option<PathBuf>,
+    /// Also serve the RPC over TLS on this address (e.g. `0.0.0.0:7445`), for a daemon on another machine. The
+    /// certificate's fingerprint is printed when the keeper is ready.
+    #[arg(long)]
+    rpc_listen: Option<String>,
     /// libp2p listen address (repeatable; default loopback QUIC and TCP on random ports).
     #[arg(long)]
     listen: Vec<String>,
@@ -207,6 +211,14 @@ async fn run(args: Run) -> Result<()> {
         write_private(&data.join("rpc.token"), token.as_bytes())?;
         token
     };
+    let tls = match args.rpc_listen.clone().or_else(|| file.rpc_listen.clone()) {
+        Some(address) => {
+            let identity = rpc::TlsIdentity::load_or_create(&unlocked.secrets)?;
+            let listener = tokio::net::TcpListener::bind(&address).await?;
+            Some((listener, identity))
+        }
+        None => None,
+    };
     let public = identity_json(&keys);
     let keeper = Keeper::start(KeeperParts {
         keys,
@@ -224,8 +236,20 @@ async fn run(args: Run) -> Result<()> {
     ready["peerId"] = json!(transport.peer_id().to_string());
     ready["addresses"] = json!(addresses);
     ready["rpcSocket"] = json!(socket.display().to_string());
+    if let Some((listener, identity)) = &tls {
+        ready["rpcAddress"] = json!(listener.local_addr()?.to_string());
+        ready["rpcFingerprint"] = json!(identity.fingerprint());
+    }
     write_private(&data.join("keeper.json"), ready.to_string().as_bytes())?;
 
+    let remote = tls.map(|(listener, identity)| {
+        tokio::spawn(rpc::serve_tls(
+            keeper.clone(),
+            listener,
+            RpcToken::new(&token),
+            identity,
+        ))
+    });
     let server = tokio::spawn(rpc::serve(keeper, socket.clone(), RpcToken::new(&token)));
     // `serve` binds before accepting; give it a moment, then announce readiness.
     tokio::task::yield_now().await;
@@ -240,6 +264,9 @@ async fn run(args: Run) -> Result<()> {
     tokio::select! {
         result = server => result.map_err(|e| Error::Invalid(e.to_string()))??,
         () = shutdown() => tracing::info!("shutting down"),
+    }
+    if let Some(remote) = remote {
+        remote.abort();
     }
     transport.stop();
     let _ = std::fs::remove_file(&socket);

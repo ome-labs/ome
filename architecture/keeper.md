@@ -241,6 +241,10 @@ epoch and the share stay.
 The keeper serves the keeper API of `ome-api` (`architecture/api.md`):
 
 - JSON-RPC 2.0, newline-delimited, over a Unix socket (`0600`), or a local-only named pipe on Windows;
+- also over **TLS** with `--rpc-listen <host:port>` (or `rpc_listen` in `keeper.toml`), for a daemon on another
+  machine. TLS 1.3 only, with a self-signed certificate made once and sealed in custody (`rpc-tls`), so its SHA-256
+  fingerprint is stable; there is no certificate authority, the daemon pins the fingerprint. The ready line and
+  `keeper.json` carry `rpcAddress` and `rpcFingerprint`. Sessions still present the token first;
 - `session.auth` with the launch token first, compared in constant time;
 - typed params and results;
 - errors carry a kind (`not-found`, `invalid`, `not-ready`, `failed`) and its code.
@@ -355,3 +359,5 @@ Checkpoint 7b adds:
   - sessions must authenticate, and the socket is owner-only;
   - a daemon drives a live vault: ECDH, config observation, payloads, proposals and the audit log;
   - keeper errors, malformed params and unknown methods come back with their kind and code.
+- `tests/rpc_tls.rs`: a client pinning the certificate's fingerprint authenticates and calls methods over TLS; one
+  pinning another fingerprint never connects; the certificate survives a reopen of custody.

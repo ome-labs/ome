@@ -107,6 +107,12 @@ libp2p = { version = "0.57.1", default-features = false, features = [
 tokio = { version = "1.54.1", default-features = false }
 tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 
+# The keeper's RPC over the network: TLS with a self-signed certificate its daemon pins by fingerprint. `ring`, the
+# provider libp2p's QUIC already uses, not aws-lc.
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
+
 # Keeper storage and randomness (native only).
 os-rng = { package = "getrandom", version = "0.4.3", features = ["sys_rng"] }
 rusqlite = { version = "0.41.1", features = ["bundled"] }

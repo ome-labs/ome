@@ -97,7 +97,7 @@ pub async fn serve(keeper: Keeper, path: PathBuf, token: RpcToken) -> Result<()>
     }
 }
 
-async fn connection<R, W>(keeper: Keeper, token: RpcToken, reader: R, mut writer: W)
+pub(super) async fn connection<R, W>(keeper: Keeper, token: RpcToken, reader: R, mut writer: W)
 where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
