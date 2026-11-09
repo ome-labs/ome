@@ -6,7 +6,8 @@ to read, and nobody ever holds the vault's viewing key.
 ## Status
 
 The core is complete and tested as a system: the vault contract, the Rust core (cryptography, wire, protocol, signer,
-networking, keeper, relay, API), the WebAssembly and mobile bindings, the PXE host and the member's daemon (`omed`).
+networking, keeper, relay, API), the WebAssembly and mobile bindings, the PXE host, the member's daemon (`omed`) and
+their command line (`ome`).
 
 **What works**, end to end on Aztec 6.0.0's local network, and on Testnet with real proofs:
 
@@ -24,7 +25,7 @@ networking, keeper, relay, API), the WebAssembly and mobile bindings, the PXE ho
 **Measured:** see `pnpm bench:proving` and the architecture pages; the numbers from the latest run are in
 [architecture/README.md](architecture/README.md#measurements).
 
-**Not built yet:** the desktop and mobile apps; recovery of a lost viewing share; the contract-side check that a
+**Not built yet:** the desktop and mobile apps (the command line is the way in today); recovery of a lost viewing share; the contract-side check that a
 rotation's shares hold the vault's key (approvers check it today); push notifications; P-256 signer keys held by the
 Secure Enclave or StrongBox; an external audit.
 
@@ -32,7 +33,7 @@ Secure Enclave or StrongBox; an external audit.
 
 ```text
 contracts/   Nargo workspace (Aztec.nr 6.0.0): the vault contract
-crates/      Cargo workspace (Rust): crypto, wire, protocol, signer, net, keeper, relay, api, client, wasm, ffi
+crates/      Cargo workspace (Rust): crypto, wire, protocol, signer, net, keeper, relay, api, client, cli, wasm, ffi
 packages/    TypeScript: the generated API, the wallet (PXE host) and the daemon (omed)
 tools/       golden vectors and the multi-network suite
 scripts/     repository scripts
@@ -58,6 +59,23 @@ The mobile bindings (`crates/ffi`) also need Xcode (iOS), and for Android a JDK 
 command-line tools with an NDK (`sdkmanager "platform-tools" "platforms;android-37.2" "ndk;30.0.16248370"`), and
 `cargo install cargo-ndk`; set `JAVA_HOME`, `ANDROID_HOME` and `ANDROID_NDK_HOME`.
 
+## Using Ome
+
+```sh
+pnpm cli:install                  # ome, ome-keeper and omed into ~/.ome/bin; prints the PATH line
+ome init                          # your profile: name, network, passphrase
+ome vault create                  # found a vault with co-founders: prints the invite
+ome vault join <invite>           # each co-founder
+ome vault receive                 # the vault's address, and the aztec-wallet line to fund it
+ome propose transfer 250 USDC bob # a payment; members review and approve it
+ome approve 4f2a                  # the review on your device, then your signature
+ome execute 4f2a                  # prove and send once enough approved
+ome watch                         # proposals and activity, live
+```
+
+`ome --help` lists every command; [architecture/cli.md](architecture/cli.md) describes them, and how `ome` works
+alongside `aztec-wallet`.
+
 ## Commands
 
 ```sh
@@ -76,11 +94,12 @@ pnpm --filter @ome-labs/contracts profile               # gate counts per functi
 pnpm --filter @ome-labs/contracts profile:flamegraphs   # target/flamegraphs/<artifact>/<function>.svg
 ```
 
-Slow suites (each needs Docker; the first two `aztec start --local-network`, which `--start` starts for you):
+Slow suites (each needs Docker; the first three `aztec start --local-network`, which `--start` starts for you):
 
 ```sh
 pnpm test:e2e         # wallet and daemons end to end: founding, paying, rotating, a phone, a keeper on a server
 pnpm test:removal     # the member removal drill, 2-of-3 and 3-of-4
+pnpm test:cli         # three members through `ome` only: founding, paying, removing a member
 pnpm test:network     # a relay and three keepers on separate Docker networks
 pnpm bench:proving    # timings with real client-side proofs
 pnpm drill:testnet    # found, fund, pay and rotate on Aztec Testnet with real proofs
@@ -88,6 +107,12 @@ pnpm drill:testnet    # found, fund, pay and rotate on Aztec Testnet with real p
 
 CI runs the fast checks on every push to `main` (`.github/workflows/ci.yml`); the slow suites, the mobile bindings
 and, on request, the Testnet drill run by hand (`.github/workflows/extended.yml`).
+
+Command line (`ome-cli`, `crates/cli`):
+
+```sh
+cargo test --manifest-path crates/Cargo.toml -p ome-cli   # parsing, references, renderers, a stand-in daemon
+```
 
 Daemon (`@ome-labs/daemon`):
 
