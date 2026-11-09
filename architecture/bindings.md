@@ -11,8 +11,7 @@ and the logic itself is tested in Rust.
 
 ## WebAssembly
 
-`@ome-labs/wasm` replaces Clave's `clave-napi`, which needed one native build per platform and did not run in a
-browser. It is one module for every platform.
+`@ome-labs/wasm` is one module for every platform: no native build per platform, and it runs in a browser too.
 
 ### Surface
 

@@ -134,9 +134,9 @@ caught at review. The preview class is never deployed; its test pins its selecto
 method throws. A sponsored fee payer is paid by a call in the payload, so rotation approvals take the fee payers the
 member's configuration trusts (`architecture/signer.md`).
 
-**Not supported yet: vault authwits.** Clave's wallet signed authwits for the vault (`transfer_in_private` through
-`verify_private_authwit`). Ome's signer signs only checked proposals, never an arbitrary hash, so an authwit needs its
-own proposal kind first.
+**Not supported yet: vault authwits** (another contract acting for the vault through `verify_private_authwit`, as
+`transfer_in_private` with an authwit does). Ome's signer signs only checked proposals, never an arbitrary hash, so
+an authwit needs its own proposal kind first.
 
 ## Tagging, and what a removed member still sees
 

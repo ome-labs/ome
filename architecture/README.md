@@ -2,7 +2,7 @@
 
 Ome is a private k-of-n multisig on Aztec with threshold viewing: `k` member signatures authorize spending, and the
 vault's incoming viewing secret is split so that `t_v` members' keepers are needed to read it. This folder records
-verified decisions about the components that exist; each component gets its own page when it lands.
+the verified design of each component: one page per component.
 
 ## Components in the tree
 
@@ -28,8 +28,6 @@ verified decisions about the components that exist; each component gets its own 
 | `packages/api`          | `@ome-labs/api`: the API's TypeScript declarations, generated from `crates/api`                                                                                            |
 | `tools/vectors`         | `@ome-labs/vectors`: golden vectors computed with Aztec 6.0.0's own packages                                                                                               |
 | `scripts/`              | Repository scripts: guarded cargo runs, the WebAssembly build check, the contract's failure-message check and gate flamegraphs                                             |
-
-Crates and packages join as they are built.
 
 ## The vault contract
 
@@ -122,7 +120,3 @@ inclusion, not proving.
 | a stopped keeper catches up after restart (relay) |  1.2 s |
 
 Relay timings include a `docker exec` per call.
-
-## Planned components
-
-None: the mobile apps will build on `ome-ffi`.

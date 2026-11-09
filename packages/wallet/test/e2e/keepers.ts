@@ -1,5 +1,5 @@
 // Real `ome-keeper` processes for the end-to-end suite. The wallet only connects to keepers; launching them is the
-// daemon's job (phase 12), so this helper does it for the tests: master key and RPC token on stdin, never on the
+// daemon's job, so this helper does it for the tests: master key and RPC token on stdin, never on the
 // command line or in the environment.
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";

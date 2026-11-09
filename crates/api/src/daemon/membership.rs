@@ -1,6 +1,6 @@
-//! Membership changes (draft). A rotation reshares the viewing secret to the new committee, then one proposal runs
+//! Membership changes. A rotation reshares the viewing secret to the new committee, then one proposal runs
 //! `rotate_membership`, which changes the signers, thresholds and committee together and removes at most `t_v - 1`
-//! members. These shapes are a draft until the rotation flow lands, and may still change within API version 0.
+//! members.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;

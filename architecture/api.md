@@ -1,6 +1,6 @@
 # ome-api and ome-client
 
-A member's device runs two local services. The **keeper** holds the viewing share; the **daemon** (`omed`, phase 12)
+A member's device runs two local services. The **keeper** holds the viewing share; the **daemon** (`omed`)
 hosts the PXE and the sealed signer and drives the keeper. Their APIs are defined once, in `crates/api` (`ome-api`):
 
 - the daemon uses the keeper API;
@@ -97,8 +97,7 @@ The keeper maps its errors to kinds as follows:
 
 ## Daemon methods
 
-The daemon is built in phase 12; these are the methods it will implement. They follow Clave's daemon contract, with
-two changes: times are Unix seconds, and hex values are typed.
+Times are Unix seconds, and hex values are typed.
 
 | Area       | Methods                                                                                                                                           |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -160,8 +159,8 @@ two changes: times are Unix seconds, and hex values are typed.
   - making a param required;
   - changing a field's type.
 
-Clients should check `apiVersion` before relying on a shape. `ome-client` does not check it yet; the daemon will,
-when it connects to its keeper in phase 12.
+Clients should check `apiVersion` before relying on a shape. The daemon refuses a keeper that speaks another version
+when it connects; `ome-client` leaves the check to its caller.
 
 ## TypeScript
 

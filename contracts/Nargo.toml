@@ -1,3 +1,2 @@
 [workspace]
-# Add each contract package here as it lands.
 members = ["ome_vault", "ome_vault_preview", "test_signer"]

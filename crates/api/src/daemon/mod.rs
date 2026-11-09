@@ -228,9 +228,9 @@ methods! {
     MembershipPlanGet = "membership.plan" (MembershipParams) -> MembershipPlan;
     /// Takes part in a planned rotation: reshare through the keeper, then propose or approve `rotate_membership`.
     MembershipBegin = "membership.begin" (RotationPlanText) -> RotationState;
-    /// A rotation's state .
+    /// A rotation's state.
     MembershipGet = "membership.get" (RotationRef) -> Option<RotationState>;
-    /// The vault's rotations .
+    /// The vault's rotations.
     MembershipList = "membership.list" (VaultParams) -> Vec<RotationState>;
     /// Proposes replacing one slot's signing key with a new device's, keeping the committee: no reshare.
     MembershipSwapSigner = "membership.swapSigner" (SwapSignerParams) -> ProposalView;

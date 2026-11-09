@@ -57,7 +57,7 @@ pub enum DaemonEvent {
         /// Progress.
         execution: ExecutionProgress,
     },
-    /// A rotation advanced (draft).
+    /// A rotation advanced.
     Rotation {
         /// Its state.
         rotation: Box<RotationState>,

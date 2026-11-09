@@ -42,7 +42,7 @@ fn an_invite_string_has_exactly_one_form() {
     assert!(Invite::decode(&text).is_ok());
     assert_eq!(Invite::decode(&lenient), Err(Error::Malformed));
     assert_eq!(
-        Invite::decode(&text.replace(INVITE_PREFIX, "clave-invite-v0:")),
+        Invite::decode(&text.replace(INVITE_PREFIX, "other-invite-v0:")),
         Err(Error::Malformed)
     );
     assert!(matches!(

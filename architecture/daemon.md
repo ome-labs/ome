@@ -183,8 +183,8 @@ pay the vault by name; `aztec.alias` writes one alias. Sync is off by default.
 5. **Propose.** The planner proposes `rotate_membership` under the plan's nonce, built from its own reshare result.
 6. **Approve.** Members approve with `proposals.approve`, which routes a rotation to `approveRotation`, signing with
    the unlocked signer or the secret passed with the call, as for any proposal. The proposal
-   must perform exactly the rotation this member's keeper reshared. That compares the signers and committee shares,
-   which closes the gaps doc's unchecked-approval item. The member's trusted fee payer is the only other call
+   must perform exactly the rotation this member's keeper reshared. That compares the signers and committee shares, so
+   an approver never signs a rotation it did not take part in. The member's trusted fee payer is the only other call
    allowed.
 7. **Execute.** Any member executes it.
 8. **Activate.**
