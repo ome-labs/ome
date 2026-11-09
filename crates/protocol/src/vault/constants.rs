@@ -23,12 +23,12 @@ pub const COMMITTEE_TAG: &str = "ome.committee.v0";
 pub const REJECTION_TAG: &str = "ome.rejection.v0";
 
 /// `rotate_membership`'s signature, as Aztec derives it from the contract ABI.
-pub const ROTATE_MEMBERSHIP_SIGNATURE: &str =
-    "rotate_membership([(Field,Field);8],[(Field,Field);8],u32,u32,u32,[(Field,Field);8])";
+pub const ROTATE_MEMBERSHIP_SIGNATURE: &str = "rotate_membership([(Field,Field);8],[(Field,Field);8],u32,u32,u32,[(Field,Field);8],[(Field,Field);8])";
 /// `rotate_membership`'s selector (pinned in the contract's `call_layout` test too).
-pub const ROTATE_MEMBERSHIP_SELECTOR: u32 = 0x4eec_0a41;
-/// Argument fields of `rotate_membership`: current keys, new keys, new count, `k`, `t_v`, committee shares.
-pub const ROTATE_MEMBERSHIP_ARGS: usize = 3 * MAX_SIGNERS * POINT_LEN + 3;
+pub const ROTATE_MEMBERSHIP_SELECTOR: u32 = 0xe107_1b7c;
+/// Argument fields of `rotate_membership`: current keys, new keys, new count, `k`, `t_v`, committee shares, then the
+/// committee polynomial's Feldman commitments.
+pub const ROTATE_MEMBERSHIP_ARGS: usize = 4 * MAX_SIGNERS * POINT_LEN + 3;
 
 /// Calls the account entrypoint executes (`ACCOUNT_MAX_CALLS`).
 pub const APP_MAX_CALLS: usize = 5;

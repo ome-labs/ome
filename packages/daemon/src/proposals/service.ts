@@ -21,7 +21,7 @@ import { payloadOf, summaryOf } from "./intents.ts";
 import { type Stored, proposalView, storedProposals } from "./views.ts";
 
 /** `rotate_membership(...)`'s selector; its proposals are approved through the membership service. */
-const ROTATE_MEMBERSHIP_SELECTOR = 0x4eec0a41;
+const ROTATE_MEMBERSHIP_SELECTOR = 0xe1071b7c;
 const MAX_HOURS = 720;
 
 /** Approves rotation proposals after comparing them with this member's own reshare (the membership service). */

@@ -24,6 +24,7 @@ import {
   verifyAndCombine,
   verifyApproval,
   verifyRejection,
+  committeePolynomial,
   verifyRotationShares,
 } from "@ome-labs/wasm";
 import { dealShares, partials } from "@ome-labs/wasm/testing";
@@ -217,7 +218,11 @@ describe("membership", () => {
     expect(checkRotation(f.vault, rotation).version).toBe(1);
     const call = rotationCall(f.vault, rotation);
     expect(call.to).toBe(f.vault.manifest.vault);
-    expect(call.selector).toBe(0x4eec0a41);
+    expect(call.selector).toBe(0xe1071b7c);
+    // The committee polynomial goes with the call: it starts at the vault's viewing key.
+    const polynomial = committeePolynomial(2, reshared.verificationShares);
+    expect(polynomial).toHaveLength(2);
+    expect(polynomial[0]).toEqual(f.vault.manifest.groupKey);
 
     const stranger = dealShares(randomField(), 2, 3);
     expect(

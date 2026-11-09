@@ -39,15 +39,15 @@ Crates and packages join as they are built.
   keys, the viewing threshold `t_v` and a commitment to the viewing committee's verification shares;
 - one **signer note** per member, so members can rebuild the ordered signer set (authorization never reads them).
 
-| Function                                          | Kind                | What it does                                                                                           |
-| ------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------ |
-| `constructor`                                     | private initializer | validates the signer set, `1 ≤ k ≤ n`, `2 ≤ t_v ≤ n` and the committee; stores the config at version 0 |
-| `entrypoint`                                      | private             | Aztec's account entrypoint; authorizes with `is_authorized` (below), then runs the payload             |
-| `verify_private_authwit`                          | private, view       | authwit check for other contracts acting for the vault, through the same authorization                 |
-| `set_threshold`                                   | private, only self  | new `k`; bumps the version                                                                             |
-| `invalidate_pending`                              | private, only self  | bumps the version only, voiding every collected approval                                               |
-| `rotate_membership`                               | private, only self  | new signer set, thresholds and committee in one step; fewer than the current `t_v` members may leave   |
-| `get_config`, `get_signer_set`, `lookup_validity` | utility             | reads for members' wallets                                                                             |
+| Function                                          | Kind                | What it does                                                                                                                                             |
+| ------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `constructor`                                     | private initializer | validates the signer set, `1 ≤ k ≤ n`, `2 ≤ t_v ≤ n` and the committee; stores the config at version 0                                                   |
+| `entrypoint`                                      | private             | Aztec's account entrypoint; authorizes with `is_authorized` (below), then runs the payload                                                               |
+| `verify_private_authwit`                          | private, view       | authwit check for other contracts acting for the vault, through the same authorization                                                                   |
+| `set_threshold`                                   | private, only self  | new `k`; bumps the version                                                                                                                               |
+| `invalidate_pending`                              | private, only self  | bumps the version only, voiding every collected approval                                                                                                 |
+| `rotate_membership`                               | private, only self  | new signer set, thresholds and committee in one step; fewer than the current `t_v` members may leave; the committee must hold the vault's `Ivpk` (below) |
+| `get_config`, `get_signer_set`, `lookup_validity` | utility             | reads for members' wallets                                                                                                                               |
 
 **Authorization** (`is_authorized`) reads the config note without nullifying it, so it also holds inside static
 calls. It decodes a 49-field auth witness (8 signer keys, 8 Schnorr signatures as 4 limbs each, a deadline), requires
@@ -70,18 +70,23 @@ transaction expiration timestamp is public.
 
 Gate counts (`pnpm --filter @ome-labs/contracts profile`):
 
-| Function                 |  Gates |
-| ------------------------ | -----: |
-| `verify_private_authwit` | 18,665 |
-| `constructor`            | 25,351 |
-| `entrypoint`             | 27,176 |
-| `invalidate_pending`     | 37,385 |
-| `set_threshold`          | 37,443 |
-| `rotate_membership`      | 85,734 |
+| Function                 |   Gates |
+| ------------------------ | ------: |
+| `verify_private_authwit` |  18,665 |
+| `constructor`            |  25,351 |
+| `entrypoint`             |  27,176 |
+| `invalidate_pending`     |  37,385 |
+| `set_threshold`          |  37,443 |
+| `rotate_membership`      | 100,552 |
 
-Known limit: `rotate_membership` checks that new committee shares are well formed but not that they are shares of the
-vault's viewing key. Approvers' software checks it before signing (`ome-protocol`'s `check_rotation`, see
-[protocol.md](protocol.md)); enforcing it in the contract belongs to the contract track.
+**A rotation's committee must hold the vault's key.** `rotate_membership` also takes the committee polynomial's
+Feldman commitments `C_0 … C_{t_v-1}` (zero-padded to 8; `ome-protocol`'s `membership::polynomial` derives them from
+the shares). The contract asserts `C_0` is the vault's own `ivpk_m` (`get_public_keys(self.address)`, constrained by
+the address preimage), that exactly `C_0 … C_{t_v-1}` are present (degree `t_v - 1`, so the threshold cannot silently
+drop), and that every share `Y_j = Σ_k j^k · C_k`. Then any `t_v` members can read for the vault, and no set of
+approvals can install a committee that cannot. Each check is a few native Grumpkin additions (the member index is a
+constant), about 15,000 gates in all. Approvers still check off chain first (`check_rotation`), including that the
+shares were refreshed, which the contract cannot see.
 
 ## Compatibility with Aztec
 

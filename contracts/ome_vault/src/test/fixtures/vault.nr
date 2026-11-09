@@ -12,10 +12,11 @@ use crate::{
 use crate::test::fixtures::{
     approvals::{encode_witness, Signatures},
     members::Members,
-    points::{distinct_points, FOUNDING_SHARES, ROTATED_SHARES},
+    points::{committee_holding, distinct_points, FOUNDING_SHARES, ROTATED_SHARES, TestCommittee},
 };
 use aztec::{
     context::{PrivateCall, PrivateContext, UtilityCall},
+    keys::getters::get_public_keys,
     protocol::{address::AztecAddress, traits::Deserialize},
     test::helpers::{
         test_environment::{CallPrivateOptions, ExecuteUtilityOptions, TestEnvironment},
@@ -39,6 +40,8 @@ pub struct TestVault {
     pub committee_shares: [Point; MAX_SIGNERS],
     pub threshold: u32,
     pub viewing_threshold: u32,
+    /// The vault's `Ivpk`, which every committee a rotation installs must hold.
+    pub viewing_key: Point,
 }
 
 /// Deploys a vault with the given constructor arguments and returns its address.
@@ -112,9 +115,20 @@ impl TestVault {
             committee_shares,
         );
         let signer = env.deploy("@test_signer/TestSigner").without_initializer();
+        // Key getters are oracles the TXE serves only inside a context.
+        let ivpk = env.utility_context_at(address, |_| get_public_keys(address)).ivpk_m.inner;
+        let viewing_key = Point { x: ivpk.x, y: ivpk.y };
 
-        let vault =
-            Self { env, address, signer, members, committee_shares, threshold, viewing_threshold };
+        let vault = Self {
+            env,
+            address,
+            signer,
+            members,
+            committee_shares,
+            threshold,
+            viewing_threshold,
+            viewing_key,
+        };
 
         // A PXE discovers the vault's notes before simulating a transaction. Inline private contexts skip that step,
         // so sync them once with a utility call.
@@ -146,30 +160,53 @@ impl TestVault {
         let _ = self.config();
     }
 
-    /// Rotates to `members` with fresh committee shares and returns the vault under its new policy.
+    /// A fresh committee of `count` members that holds the vault's key, as a reshare produces.
+    pub unconstrained fn fresh_committee(
+        self,
+        count: u32,
+        viewing_threshold: u32,
+    ) -> TestCommittee {
+        committee_holding(
+            self.viewing_key,
+            count,
+            viewing_threshold,
+            ROTATED_SHARES + self.config().version as Field,
+        )
+    }
+
+    /// Rotates to `members` with a fresh committee that holds the vault's key and returns the vault under its new
+    /// policy.
     pub unconstrained fn rotate_to(
         self,
         members: Members,
         threshold: u32,
         viewing_threshold: u32,
     ) -> Self {
-        let committee_shares = distinct_points(
-            members.count,
-            ROTATED_SHARES + self.config().version as Field,
-        );
+        let committee = self.fresh_committee(members.count, viewing_threshold);
+        self.rotate_with(members, threshold, viewing_threshold, committee)
+    }
 
+    /// Rotates to `members` installing `committee` as given.
+    pub unconstrained fn rotate_with(
+        self,
+        members: Members,
+        threshold: u32,
+        viewing_threshold: u32,
+        committee: TestCommittee,
+    ) -> Self {
         self.self_call(OmeVault::at(self.address).rotate_membership(
             self.members.keys,
             members.keys,
             members.count,
             threshold,
             viewing_threshold,
-            committee_shares,
+            committee.shares,
+            committee.polynomial,
         ));
 
         let mut rotated = self;
         rotated.members = members;
-        rotated.committee_shares = committee_shares;
+        rotated.committee_shares = committee.shares;
         rotated.threshold = threshold;
         rotated.viewing_threshold = viewing_threshold;
         rotated

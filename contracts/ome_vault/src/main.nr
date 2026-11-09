@@ -26,6 +26,7 @@ pub contract OmeVault {
         },
         context::PrivateContext,
         hash::compute_siloed_nullifier,
+        keys::getters::get_public_keys,
         macros::{
             functions::{allow_phase_change, external, initializer, noinitcheck, only_self, view},
             storage::storage,
@@ -98,7 +99,9 @@ pub contract OmeVault {
     ///
     /// `current_signer_keys` must equal the stored signer set; at most `t_v - 1` current members may be absent from the
     /// new set. `committee_shares` are the verification shares produced by the reshare that prepares this rotation:
-    /// keepers activate their new shares once this transaction is included.
+    /// keepers activate their new shares once this transaction is included. `committee_polynomial` are the Feldman
+    /// commitments of the reshared polynomial, which must start at the vault's own `ivpk_m`: the contract refuses a
+    /// committee that could not read for the vault.
     #[external("private")]
     #[only_self]
     fn rotate_membership(
@@ -108,7 +111,11 @@ pub contract OmeVault {
         threshold: u32,
         viewing_threshold: u32,
         committee_shares: [Point; MAX_SIGNERS],
+        committee_polynomial: [Point; MAX_SIGNERS],
     ) {
+        // Constrained against the vault's address preimage, so the key is the vault's own.
+        let ivpk = get_public_keys(self.address).ivpk_m.inner;
+        let viewing_key = Point { x: ivpk.x, y: ivpk.y };
         self
             .storage
             .config
@@ -121,6 +128,8 @@ pub contract OmeVault {
                     threshold,
                     viewing_threshold,
                     committee_shares,
+                    committee_polynomial,
+                    viewing_key,
                 ),
                 self.address,
             )

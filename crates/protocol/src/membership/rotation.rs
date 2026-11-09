@@ -45,6 +45,7 @@ impl Rotation {
             .map(Base::from),
         );
         args.extend_from_slice(&padded(self.committee.shares()));
+        args.extend_from_slice(&padded(&polynomial(&self.committee)));
         Call {
             signature: Some(ROTATE_MEMBERSHIP_SIGNATURE.to_owned()),
             to: field(&vault.address()),
@@ -56,8 +57,9 @@ impl Rotation {
         }
     }
 
-    /// Decodes a `rotate_membership` call on `vault`: current keys, new keys, new count, `k`, `t_v`, then the
-    /// committee shares, each key list zero-padded to eight.
+    /// Decodes a `rotate_membership` call on `vault`: current keys, new keys, new count, `k`, `t_v`, the committee
+    /// shares, then the committee polynomial, each point list zero-padded to eight. The polynomial must be the one the
+    /// shares determine ([`polynomial`]), so an approved call is exactly this rotation.
     ///
     /// # Errors
     /// [`Error::InvalidRotationCall`] if the call is not `rotate_membership` on this vault or its arguments are not a
@@ -95,13 +97,36 @@ impl Rotation {
         let threshold = small(args[2 * KEYS + 1])?;
         let viewing_threshold = small(args[2 * KEYS + 2])?;
         let signers = SignerSet::new(points(&args[KEYS..2 * KEYS], count)?)?;
-        let committee = Committee::new(viewing_threshold, points(&args[2 * KEYS + 3..], count)?)?;
+        let committee = Committee::new(
+            viewing_threshold,
+            points(&args[2 * KEYS + 3..3 * KEYS + 3], count)?,
+        )?;
+        let commitments = points(&args[3 * KEYS + 3..], viewing_threshold)?;
+        if commitments != polynomial(&committee) {
+            return Err(Error::InvalidRotationCall(
+                "committee polynomial is not the shares' own",
+            ));
+        }
         Ok(Self {
             signers,
             threshold,
             committee,
         })
     }
+}
+
+/// The Feldman commitments `C_0 … C_{t_v - 1}` of the polynomial the committee's first `t_v` shares determine
+/// (Lagrange interpolation in the exponent). The contract checks every share against them and `C_0` against the
+/// vault's `Ivpk`. They derive from public verification shares and reveal nothing secret. Empty when the shares are
+/// degenerate, which the contract refuses.
+#[must_use]
+pub fn polynomial(committee: &Committee) -> Vec<Point> {
+    let threshold = usize::try_from(committee.viewing_threshold()).unwrap_or(usize::MAX);
+    let evaluations = committee.evaluations();
+    let basis = &evaluations[..threshold.min(evaluations.len())];
+    Commitments::interpolate(threshold, basis)
+        .map(|c| c.points().to_vec())
+        .unwrap_or_default()
 }
 
 /// Whether `call` is a `rotate_membership` call on `vault`.

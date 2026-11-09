@@ -8,7 +8,9 @@ mod support;
 use ome_crypto::{Base, Point, SecretScalar};
 use ome_protocol::{
     Error,
-    membership::{Rotation, check_rotation, epoch_tagging_secret, is_rotation_call, verify_shares},
+    membership::{
+        self, Rotation, check_rotation, epoch_tagging_secret, is_rotation_call, verify_shares,
+    },
     payload::selector,
     vault::{
         Committee, SignerSet,
@@ -144,8 +146,13 @@ fn a_rotation_round_trips_through_its_rotate_membership_call() {
         selector(ROTATE_MEMBERSHIP_SIGNATURE),
         Ok(ROTATE_MEMBERSHIP_SELECTOR)
     );
-    assert_eq!(call.args.len(), 51);
+    assert_eq!(call.args.len(), 67);
     assert!(is_rotation_call(&call, &f.vault));
+    // The call carries the committee polynomial, which starts at the vault's viewing key: what the contract checks.
+    let polynomial = membership::polynomial(&rotation.committee);
+    assert_eq!(polynomial.len(), 2);
+    assert_eq!(&polynomial[0], f.vault.group_key());
+    assert_eq!(call.args[51], field(&polynomial[0].x()));
     assert_eq!(Rotation::from_call(&call, &f.vault), Ok(rotation));
 }
 
@@ -173,7 +180,7 @@ fn a_rotate_membership_call_that_is_not_a_rotation_of_this_vault_is_refused() {
         |c| c.to = field(&Base::from(1u64)),
         "not rotate_membership on this vault",
     );
-    refused(|c| c.args.truncate(50), "wrong argument count");
+    refused(|c| c.args.truncate(66), "wrong argument count");
     refused(
         |c| c.args[0] = field(&Base::from(5u64)),
         "current keys are not the vault's signer set",
@@ -185,6 +192,18 @@ fn a_rotate_membership_call_that_is_not_a_rotation_of_this_vault_is_refused() {
     refused(
         |c| c.args[32] = field(&Base::from(1u64 << 32)),
         "count or threshold above u32",
+    );
+    // A polynomial other than the shares' own is refused, here its two coefficients swapped.
+    refused(
+        |c| {
+            c.args.swap(51, 53);
+            c.args.swap(52, 54);
+        },
+        "committee polynomial is not the shares' own",
+    );
+    refused(
+        |c| c.args[55] = field(&Base::from(5u64)),
+        "non-empty slot past the member count",
     );
 }
 

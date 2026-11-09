@@ -1,12 +1,23 @@
 //! `rotate`: replaces the signer set, both thresholds and the viewing committee in one step.
 
+use crate::committee::Committee;
 use crate::{
     constants::MAX_SIGNERS, governance::rotate, notes::config_note::ConfigNote, point::Point,
 };
 use crate::test::fixtures::{
-    points::{distinct_points, off_curve_point, point_from_scalar, ROTATED_SHARES},
-    policy::{committee, CONFIG_VERSION, FOUNDING_KEYS, signer_set, vault_config},
+    points::{committee_holding, off_curve_point, point_from_scalar, ROTATED_SHARES, TestCommittee},
+    policy::{CONFIG_VERSION, FOUNDING_KEYS, signer_set, vault_config},
 };
+
+/// The vault's viewing key in these tests.
+fn vault_key() -> Point {
+    point_from_scalar(4242)
+}
+
+/// The fresh committee of `count` members a reshare produces, holding the vault's key.
+fn reshared(count: u32, viewing_threshold: u32) -> TestCommittee {
+    committee_holding(vault_key(), count, viewing_threshold, ROTATED_SHARES)
+}
 
 /// Rotates the founding `member_count`-member vault (viewing threshold `current_t_v`) to `new_keys`.
 fn rotate_from(
@@ -24,7 +35,9 @@ fn rotate_from(
         new_count,
         threshold,
         viewing_threshold,
-        distinct_points(new_count, ROTATED_SHARES),
+        reshared(new_count, viewing_threshold).shares,
+        reshared(new_count, viewing_threshold).polynomial,
+        vault_key(),
     )
 }
 
@@ -42,7 +55,9 @@ fn adding_a_member_installs_the_whole_new_policy() {
     assert_eq(next.viewing_threshold, 3);
     assert_eq(next.version, CONFIG_VERSION + 1);
     assert_eq(next.signer_set_commitment, signer_set(4, FOUNDING_KEYS).commitment());
-    assert_eq(next.committee_commitment, committee(3, 4, ROTATED_SHARES).commitment());
+    let installed =
+        Committee { viewing_threshold: 3, shares: reshared(4, 3).shares, member_count: 4 };
+    assert_eq(next.committee_commitment, installed.commitment());
 }
 
 #[test]
@@ -84,7 +99,9 @@ fn may_keep_the_same_members_to_rotate_the_committee_only() {
     let next = rotate_from(3, 2, founding_keys(3), 3, 2, 2);
 
     assert_eq(next.signer_set_commitment, signer_set(3, FOUNDING_KEYS).commitment());
-    assert_eq(next.committee_commitment, committee(2, 3, ROTATED_SHARES).commitment());
+    let installed =
+        Committee { viewing_threshold: 2, shares: reshared(3, 2).shares, member_count: 3 };
+    assert_eq(next.committee_commitment, installed.commitment());
     assert_eq(next.version, CONFIG_VERSION + 1);
 }
 
@@ -141,7 +158,9 @@ fn rejects_a_stale_current_signer_set() {
         3,
         2,
         2,
-        distinct_points(3, ROTATED_SHARES),
+        reshared(3, 2).shares,
+        reshared(3, 2).polynomial,
+        vault_key(),
     );
 }
 
@@ -158,7 +177,9 @@ fn rejects_the_current_signers_in_another_order() {
         3,
         2,
         2,
-        distinct_points(3, ROTATED_SHARES),
+        reshared(3, 2).shares,
+        reshared(3, 2).polynomial,
+        vault_key(),
     );
 }
 
@@ -212,7 +233,9 @@ fn rejects_fewer_committee_shares_than_members() {
         4,
         2,
         2,
-        distinct_points(3, ROTATED_SHARES),
+        reshared(3, 2).shares,
+        reshared(3, 2).polynomial,
+        vault_key(),
     );
 }
 
@@ -225,13 +248,15 @@ fn rejects_more_committee_shares_than_members() {
         3,
         2,
         2,
-        distinct_points(4, ROTATED_SHARES),
+        reshared(4, 2).shares,
+        reshared(4, 2).polynomial,
+        vault_key(),
     );
 }
 
 #[test(should_fail_with = "committee key not on curve")]
 fn rejects_an_off_curve_committee_share() {
-    let mut shares = distinct_points(3, ROTATED_SHARES);
+    let mut shares = reshared(3, 2).shares;
     shares[1] = off_curve_point();
 
     let _ = rotate(
@@ -242,12 +267,14 @@ fn rejects_an_off_curve_committee_share() {
         2,
         2,
         shares,
+        reshared(3, 2).polynomial,
+        vault_key(),
     );
 }
 
 #[test(should_fail_with = "duplicate committee")]
 fn rejects_a_duplicate_committee_share() {
-    let mut shares = distinct_points(3, ROTATED_SHARES);
+    let mut shares = reshared(3, 2).shares;
     shares[2] = shares[0];
 
     let _ = rotate(
@@ -258,5 +285,7 @@ fn rejects_a_duplicate_committee_share() {
         2,
         2,
         shares,
+        reshared(3, 2).polynomial,
+        vault_key(),
     );
 }

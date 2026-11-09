@@ -11,6 +11,7 @@ import type { DkgResult, HexBytes, Manifest, Point } from "@ome-labs/api";
 import {
   type Rotation,
   UnlockedSigner,
+  committeePolynomial,
   decodeProposal,
   generateSigner,
   rotationCall,
@@ -287,6 +288,7 @@ describe.skipIf(!available)("a vault on a local network with real keepers", () =
       2,
       2,
       pad(rotation.verificationShares),
+      pad(committeePolynomial(2, rotation.verificationShares)),
     );
     if (!rotate) throw new Error("rotate_membership missing from the artifact");
     const payload = await rotate.request({ fee: alice.fee });

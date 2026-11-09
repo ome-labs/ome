@@ -24,7 +24,13 @@ import type {
   VaultConfig,
 } from "@ome-labs/api";
 import { fromApiPoint, vaultArtifact, type VaultTx } from "@ome-labs/wallet";
-import { type Rotation, checkRotation, decodeJoinRequest, decodeProposal } from "@ome-labs/wasm";
+import {
+  type Rotation,
+  checkRotation,
+  committeePolynomial,
+  decodeJoinRequest,
+  decodeProposal,
+} from "@ome-labs/wasm";
 
 import { type Context, until } from "../context.ts";
 import { DaemonError, require } from "../errors.ts";
@@ -530,6 +536,8 @@ export class MembershipService {
       rotation.threshold,
       rotation.viewingThreshold,
       pad(rotation.verificationShares),
+      // The contract checks every share against this polynomial and its constant term against the vault's key.
+      pad(committeePolynomial(rotation.viewingThreshold, rotation.verificationShares)),
     ).request();
     const payload = mergeExecutionPayloads([
       rotate,

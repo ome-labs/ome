@@ -33,6 +33,7 @@ unconstrained fn a_member_cannot_rotate_membership_directly() {
             2,
             2,
             vault.committee_shares,
+            vault.fresh_committee(3, 2).polynomial,
         ),
     );
 }

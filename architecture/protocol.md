@@ -125,6 +125,11 @@ It requires every share to lie on one polynomial of degree `t_v − 1` and that 
 - `ShareOffPolynomial(i)` names the first share off the polynomial;
 - `GroupKeyMismatch` when the polynomial belongs to another key.
 
+`polynomial(committee)` returns that polynomial's Feldman commitments `C_0 … C_{t_v-1}`, interpolated from the first
+`t_v` shares. `Rotation::to_call` passes them as `rotate_membership`'s last argument, and the contract checks every
+share against them and `C_0` against the vault's `ivpk_m`, so the property `verify_shares` checks off chain also holds
+on chain. `Rotation::from_call` refuses a call whose polynomial is not the shares' own.
+
 `check_rotation(vault, rotation)` runs before an approver signs a `rotate_membership`, and refuses rather than warns:
 
 1. the contract's own transition (`Config::rotate`);

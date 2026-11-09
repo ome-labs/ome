@@ -4,7 +4,9 @@
 use crate::OmeVault;
 use crate::test::fixtures::{
     members::new_member,
-    points::{distinct_points, off_curve_point, ROTATED_SHARES},
+    points::{
+        committee_holding, committee_of_degree, off_curve_point, point_from_scalar, ROTATED_SHARES,
+    },
     vault::TestVault,
 };
 
@@ -40,13 +42,16 @@ unconstrained fn a_rotation_based_on_a_stale_member_list() {
     let vault = TestVault::found(3, 2, 2);
     let stale = vault.members.swapped(0, 1);
 
+    let committee = vault.fresh_committee(3, 2);
+
     vault.self_call(OmeVault::at(vault.address).rotate_membership(
         stale.keys,
         vault.members.keys,
         3,
         2,
         2,
-        distinct_points(3, ROTATED_SHARES),
+        committee.shares,
+        committee.polynomial,
     ));
 }
 
@@ -98,15 +103,56 @@ unconstrained fn listing_one_member_twice() {
 #[test(should_fail_with = "committee key not on curve")]
 unconstrained fn a_committee_share_off_the_curve() {
     let vault = TestVault::found(3, 2, 2);
-    let mut shares = distinct_points(3, ROTATED_SHARES);
-    shares[1] = off_curve_point();
+    let mut committee = vault.fresh_committee(3, 2);
+    committee.shares[1] = off_curve_point();
 
-    vault.self_call(OmeVault::at(vault.address).rotate_membership(
-        vault.members.keys,
-        vault.members.keys,
-        3,
-        2,
-        2,
-        shares,
-    ));
+    let _ = vault.rotate_with(vault.members, 2, 2, committee);
+}
+
+// The committee must hold the vault's viewing key: approvers check it, and so does the contract, so no set of
+// approvals can install a committee that cannot read for the vault.
+
+#[test(should_fail_with = "committee does not hold the vault's key")]
+unconstrained fn a_committee_of_another_key() {
+    let vault = TestVault::found(3, 2, 2);
+    let other_key = point_from_scalar(77);
+    let committee = committee_holding(other_key, 3, 2, ROTATED_SHARES);
+
+    let _ = vault.rotate_with(vault.members, 2, 2, committee);
+}
+
+#[test(should_fail_with = "share off the committee polynomial")]
+unconstrained fn a_share_off_the_polynomial() {
+    let vault = TestVault::found(3, 2, 2);
+    let mut committee = vault.fresh_committee(3, 2);
+    committee.shares[2] = point_from_scalar(77);
+
+    let _ = vault.rotate_with(vault.members, 2, 2, committee);
+}
+
+#[test(should_fail_with = "committee polynomial degree above t_v - 1")]
+unconstrained fn a_polynomial_of_higher_degree_than_the_threshold() {
+    // Degree 2 would need 3 members to read, while the config says 2 can.
+    let vault = TestVault::found(3, 2, 2);
+    let committee = committee_of_degree(vault.viewing_key, 3, 2, ROTATED_SHARES);
+
+    let _ = vault.rotate_with(vault.members, 2, 2, committee);
+}
+
+#[test(should_fail_with = "committee polynomial coefficient missing or off curve")]
+unconstrained fn a_polynomial_of_lower_degree_than_the_threshold() {
+    // Degree 1 lets any 2 members read, while the config says 3 are needed.
+    let vault = TestVault::found(4, 2, 3);
+    let committee = committee_of_degree(vault.viewing_key, 4, 1, ROTATED_SHARES);
+
+    let _ = vault.rotate_with(vault.members, 2, 3, committee);
+}
+
+#[test(should_fail_with = "committee polynomial coefficient missing or off curve")]
+unconstrained fn a_polynomial_coefficient_off_the_curve() {
+    let vault = TestVault::found(3, 2, 3);
+    let mut committee = vault.fresh_committee(3, 3);
+    committee.polynomial[2] = off_curve_point();
+
+    let _ = vault.rotate_with(vault.members, 2, 3, committee);
 }

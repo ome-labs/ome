@@ -86,8 +86,9 @@ A compromised proposer or front end therefore can't get a member's signature on:
 proposal carries one. `approve_rotation` therefore takes `fee_payers`, the fee payer contracts the member's own
 configuration trusts, never a list the proposer supplies. Every call besides the rotation must target one of them.
 
-The `rotate_membership` selector (`0x4eec0a41`) and its 51-field argument layout are decoded by `ome-protocol`
-(`Rotation::from_call`) and pinned by the contract's `call_layout` test.
+The `rotate_membership` selector (`0xe1071b7c`) and its 67-field argument layout (current keys, new keys, count, `k`,
+`t_v`, shares, committee polynomial) are decoded by `ome-protocol` (`Rotation::from_call`, which also requires the
+polynomial to be the shares' own) and pinned by the contract's `call_layout` test.
 
 ## Hardware keys
 

@@ -1,5 +1,6 @@
 //! Config transitions. Each returns the next `ConfigNote` and asserts the invariants: `1 <= k <= n`,
-//! `2 <= t_v <= n`, the version increases by one, and a rotation removes fewer than the current `t_v` members.
+//! `2 <= t_v <= n`, the version increases by one, and a rotation removes fewer than the current `t_v` members and
+//! installs a committee that holds the vault's viewing key.
 
 use crate::{
     committee::Committee, constants::MAX_SIGNERS, notes::config_note::ConfigNote, point::Point,
@@ -35,6 +36,8 @@ pub fn with_threshold(config: ConfigNote, threshold: u32) -> ConfigNote {
 ///
 /// `current_keys` must be the stored signer set (checked against its commitment). At most `t_v - 1` current members
 /// may be absent from the new set, so the viewing reshare that accompanies the rotation keeps the viewing secret safe.
+/// The new committee must hold `viewing_key`, the vault's `Ivpk`, as `committee_polynomial` shows
+/// ([`Committee::assert_holds_key`]).
 pub fn rotate(
     config: ConfigNote,
     current_keys: [Point; MAX_SIGNERS],
@@ -43,6 +46,8 @@ pub fn rotate(
     threshold: u32,
     viewing_threshold: u32,
     committee_shares: [Point; MAX_SIGNERS],
+    committee_polynomial: [Point; MAX_SIGNERS],
+    viewing_key: Point,
 ) -> ConfigNote {
     let current = SignerSet { keys: current_keys, count: config.signer_count };
     assert(current.commitment() == config.signer_set_commitment, "current signer set mismatch");
@@ -50,6 +55,7 @@ pub fn rotate(
     let next = SignerSet::new(new_keys, new_count);
     assert_threshold(threshold, new_count);
     let committee = Committee::new(viewing_threshold, committee_shares, new_count);
+    committee.assert_holds_key(committee_polynomial, viewing_key);
     assert(removed_members(current, next) < config.viewing_threshold, "too many members removed");
 
     ConfigNote {

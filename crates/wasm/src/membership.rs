@@ -63,6 +63,26 @@ pub fn check_rotation(
     })
 }
 
+/// The Feldman commitments of a committee's polynomial, `C_0 … C_{t_v - 1}`: the `committee_polynomial` argument of
+/// `rotate_membership`, which the contract checks every share against and `C_0` against the vault's `Ivpk`.
+#[wasm_bindgen(js_name = committeePolynomial, unchecked_return_type = "Point[]")]
+pub fn committee_polynomial(
+    #[wasm_bindgen(js_name = viewingThreshold)] viewing_threshold: u32,
+    #[wasm_bindgen(js_name = verificationShares, unchecked_param_type = "Point[]")]
+    verification_shares: JsValue,
+) -> Result<JsValue, JsValue> {
+    export(|| {
+        let committee = Committee::new(
+            viewing_threshold,
+            convert::points(from_js(verification_shares)?)?,
+        )?;
+        Ok(membership::polynomial(&committee)
+            .iter()
+            .map(ome_api::Point::from_core)
+            .collect::<Vec<_>>())
+    })
+}
+
 /// The `rotate_membership` call that performs a rotation, to propose.
 #[wasm_bindgen(js_name = rotationCall, unchecked_return_type = "Call")]
 pub fn rotation_call(
