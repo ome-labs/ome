@@ -17,6 +17,9 @@
     "test": "turbo run test",
     "test:e2e": "node scripts/e2e.ts e2e",
     "test:removal": "node scripts/e2e.ts removal",
+    "bench:proving": "pnpm --filter @ome-labs/daemon bench:proving",
+    "drill:testnet": "pnpm --filter @ome-labs/daemon drill:testnet",
+    "test:network": "pnpm --filter @ome-labs/wasm build && pnpm --filter @ome-labs/network test:network",
     "typecheck": "tsc -p tsconfig.json && turbo run typecheck"
   },
   "devDependencies": {

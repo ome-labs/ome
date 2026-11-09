@@ -1,0 +1,22 @@
+{
+  "name": "@ome-labs/network",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The multi-network keeper suite: a relay and three keepers on separate Docker networks",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "test:network": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ome-labs/api": "workspace:*",
+    "@ome-labs/wasm": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "klarity": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

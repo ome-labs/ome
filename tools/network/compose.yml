@@ -1,0 +1,51 @@
+# A relay and three keepers, each keeper alone on its own network: keepers reach each other only through the relay's
+# circuits, and leave mailbox envelopes there. Run by test/network.test.ts; RELAY is the relay's multiaddr.
+name: ome-network
+
+networks:
+  net-a:
+    internal: true
+  net-b:
+    internal: true
+  net-c:
+    internal: true
+
+volumes:
+  relay:
+  keeper-a:
+  keeper-b:
+  keeper-c:
+
+x-keeper: &keeper
+  image: ome-node
+  environment:
+    OME_KEEPER_PASSPHRASE: network suite passphrase
+  command:
+    - ome-keeper
+    - run
+    - --data-dir
+    - /data
+    - --listen
+    - /ip4/0.0.0.0/tcp/4001
+    - --relay
+    - ${RELAY:-}
+
+services:
+  relay:
+    image: ome-node
+    command:
+      [ome-relay, run, --data-dir, /data, --listen, /ip4/0.0.0.0/tcp/4001, --health, "0.0.0.0:9090"]
+    volumes: [relay:/data]
+    networks: [net-a, net-b, net-c]
+  keeper-a:
+    <<: *keeper
+    volumes: [keeper-a:/data]
+    networks: [net-a]
+  keeper-b:
+    <<: *keeper
+    volumes: [keeper-b:/data]
+    networks: [net-b]
+  keeper-c:
+    <<: *keeper
+    volumes: [keeper-c:/data]
+    networks: [net-c]

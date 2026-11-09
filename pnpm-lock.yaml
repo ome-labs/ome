@@ -411,6 +411,28 @@ importers:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0))
 
+  tools/network:
+    dependencies:
+      '@ome-labs/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@ome-labs/wasm':
+        specifier: workspace:*
+        version: link:../../crates/wasm
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      klarity:
+        specifier: 'catalog:'
+        version: 0.3.0(@commitlint/cli@21.2.4(conventional-commits-parser@7.1.4)(typescript@7.0.2))(@commitlint/config-conventional@21.2.4)(lefthook@2.2.2)(oxfmt@0.77.0)(oxlint@1.92.0)(turbo@2.11.10)(typescript@7.0.2)(vitest@5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0)))
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0))
+
   tools/vectors:
     dependencies:
       '@aztec-labs/constants':
