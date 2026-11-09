@@ -1,4 +1,4 @@
-import type { Contact, Hex32, Profile, Settings, TokenInfo } from "@ome-labs/api";
+import type { Hex32, Profile, Settings, TokenInfo } from "@ome-labs/api";
 
 import { readJson, writeJson } from "./files.ts";
 
@@ -6,7 +6,6 @@ import { readJson, writeJson } from "./files.ts";
 export interface ProfileFile {
   profile: Profile | null;
   settings: Settings;
-  contacts: Contact[];
   aliases: Record<Hex32, string>;
   defaultVault: Hex32 | null;
   tokens: Record<Hex32, TokenInfo[]>;
@@ -37,7 +36,6 @@ export class ProfileState {
     const file = await readJson<ProfileFile>(path, {
       profile: null,
       settings: DEFAULT_SETTINGS,
-      contacts: [],
       aliases: {},
       defaultVault: null,
       tokens: {},

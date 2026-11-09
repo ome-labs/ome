@@ -108,7 +108,7 @@ export class DeviceService {
     const review = await this.#proposals.review(ref);
     const proposal = review.proposal;
     const labels: DeviceLabel[] = [
-      ...this.#context.state.file.contacts.map((c) => ({ address: c.address, label: c.label })),
+      ...[...(await this.#context.names())].map(([address, label]) => ({ address, label })),
       ...(this.#context.state.file.tokens[vault] ?? []).map((t) => ({
         address: t.address,
         label: t.symbol,

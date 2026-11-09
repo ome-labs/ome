@@ -58,7 +58,7 @@ fn types(cfg: &Config) -> Vec<Declared> {
         d::ServiceStatus, d::KeeperState, d::NodeStatus, d::SignerStatus, d::Secret, d::UnlockParams,
         d::PassphraseParams, d::SealingKey, d::Status, d::VaultSummary, d::ContractInfo, d::NamedKey,
         d::ConfigView, d::CommitteeMember, d::CommitteeView, d::FoundingInfo, d::VaultDetails,
-        d::MemberReachability, d::AuditView, d::TokenInfo, d::TokenBalance, d::ActivityEntry, d::Contact,
+        d::MemberReachability, d::AuditView, d::TokenInfo, d::TokenBalance, d::ActivityEntry,
         d::InviteHost, d::InvitePreview, d::LobbyViewMember, d::LobbyView, d::LobbyCreateParams,
         d::StartLobbyParams, d::FoundingStepId, d::StepStatus, d::FoundingStep, d::FoundingError,
         d::FoundingState, d::IntentCall, d::Intent, d::ProposalStatus, d::Vote, d::DecodedCall, d::Proposer,
@@ -67,8 +67,8 @@ fn types(cfg: &Config) -> Vec<Declared> {
         d::RejectParams, d::ExecutionPhase, d::ExecutionProgress, d::ContractFunction, d::FunctionKind,
         d::FunctionParam, d::Joiner, d::MembershipParams, d::CommitteeShape, d::MembershipPlan,
         d::RotationRef, d::RotationPlanText, d::RotationStepId, d::RotationStep, d::RotationState, d::DaemonEvent,
-        d::VaultAuditParams, d::AliasParams, d::TokenParams, d::ContractParams, d::ContactParams,
-        d::AddressParams, d::DeviceView, d::EnrollParams, d::SwapSignerParams, d::TokenDeployment, d::Counterparty, d::RemoteKeeper, d::RemoteKeeperParams,
+        d::VaultAuditParams, d::AliasParams, d::TokenParams, d::ContractParams,
+        d::DeviceView, d::EnrollParams, d::SwapSignerParams, d::TokenDeployment, d::Counterparty, d::RemoteKeeper, d::RemoteKeeperParams,
         d::KeeperConnectParams, d::AztecAlias, d::TokenRefParams,
     ]
 }

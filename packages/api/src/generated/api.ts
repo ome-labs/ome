@@ -2251,20 +2251,6 @@ export type ActivityEntry =
     };
 
 /**
- * An address-book entry.
- */
-export type Contact = {
-  /**
-   * Address.
-   */
-  address: Hex32;
-  /**
-   * Label.
-   */
-  label: string;
-};
-
-/**
  * A lobby's host, as an invite names it.
  */
 export type InviteHost = {
@@ -2813,7 +2799,7 @@ export type ReviewChecks = {
 /**
  * Where a recipient's label came from.
  */
-export type LabelSource = "addressBook" | "member";
+export type LabelSource = "aztecWallet" | "member";
 
 /**
  * A transfer's recipient.
@@ -3392,30 +3378,6 @@ export type ContractParams = {
 };
 
 /**
- * Params of `contacts.put`.
- */
-export type ContactParams = {
-  /**
-   * Address.
-   */
-  address: Hex32;
-  /**
-   * Label, the alias rules.
-   */
-  label: string;
-};
-
-/**
- * Params of `contacts.remove`.
- */
-export type AddressParams = {
-  /**
-   * Address.
-   */
-  address: Hex32;
-};
-
-/**
  * A device paired with this member's keeper.
  */
 export type DeviceView = {
@@ -3516,7 +3478,7 @@ export type Counterparty = {
    */
   address: Hex32;
   /**
-   * The address-book label, if any.
+   * Its name in `aztec-wallet`'s aliases, if any.
    */
   label: string | null;
   /**
@@ -3703,11 +3665,8 @@ export interface DaemonMethods {
   "proposals.execute": { params: ProposalRef; result: ProposalView };
   "proposals.cancel": { params: ProposalRef; result: ProposalView };
   "contracts.functions": { params: ContractParams; result: Array<ContractFunction> };
-  "contacts.list": { params: Empty; result: Array<Contact> };
   "aztec.aliases": { params: Empty; result: Array<AztecAlias> };
   "aztec.alias": { params: AztecAlias; result: null };
-  "contacts.put": { params: ContactParams; result: Array<Contact> };
-  "contacts.remove": { params: AddressParams; result: Array<Contact> };
   "membership.request": { params: Empty; result: JoinRequestText };
   "membership.plan": { params: MembershipParams; result: MembershipPlan };
   "membership.begin": { params: RotationPlanText; result: RotationState };

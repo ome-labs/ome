@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { openStoreAt } from "@aztec-labs/kv-store/lmdb-v2";
-import type { AztecAlias } from "@ome-labs/api";
+import type { AztecAlias, Hex32 } from "@ome-labs/api";
 
 import { DaemonError } from "../errors.ts";
 
@@ -47,6 +47,35 @@ export async function setAlias(dir: string, alias: AztecAlias): Promise<void> {
   } finally {
     await store.close();
   }
+}
+
+const ADDRESS = /^0x[0-9a-fA-F]{64}$/u;
+
+/**
+ * Names for addresses, from `aztec-wallet`'s `accounts:` and `contracts:` aliases: Ome keeps no address book of its
+ * own. `accounts:bob` names its address `bob`; an account's name wins over a contract's. An unreadable store reads as
+ * no names.
+ */
+export async function addressNames(dir: string): Promise<Map<Hex32, string>> {
+  const aliases = await listAliases(dir).catch(() => []);
+  const names = new Map<Hex32, string>();
+  for (const type of ["accounts", "contracts"]) {
+    for (const { key, value } of aliases) {
+      const [kind, name] = key.split(":", 2);
+      if (kind !== type || !name || !ADDRESS.test(value)) continue;
+      const address = value.toLowerCase() as Hex32;
+      if (!names.has(address)) names.set(address, name);
+    }
+  }
+  return names;
+}
+
+/** The addresses of `aztec-wallet`'s accounts, which may send to the vault. */
+export async function accountAddresses(dir: string): Promise<Hex32[]> {
+  const aliases = await listAliases(dir).catch(() => []);
+  return aliases
+    .filter(({ key, value }) => key.startsWith("accounts:") && ADDRESS.test(value))
+    .map(({ value }) => value.toLowerCase() as Hex32);
 }
 
 /**

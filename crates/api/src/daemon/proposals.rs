@@ -201,8 +201,8 @@ pub struct ReviewChecks {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum LabelSource {
-    /// The address book.
-    AddressBook,
+    /// An alias in `aztec-wallet`'s store (`accounts:<name>`), which the member set and nobody verified.
+    AztecWallet,
     /// A vault member.
     Member,
 }

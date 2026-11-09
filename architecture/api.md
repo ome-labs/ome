@@ -109,10 +109,10 @@ two changes: times are Unix seconds, and hex values are typed.
 | node       | `node.status`                                                                                                                                     |
 | founding   | `lobby.inspect`, `lobby.create`, `lobby.join`, `lobby.get`, `lobby.list`, `lobby.start`, `lobby.leave`, `founding.begin`, `founding.get`          |
 | vaults     | `vault.list`, `vault.details`, `vault.peers`, `vault.audit`, `vault.activity`, `vault.counterparties`, `vault.alias`, `vault.use`, `vault.retire` |
-| tokens     | `tokens.list`, `tokens.add`, `tokens.deployTest` (local network only)                                                                             |
+| tokens     | `tokens.list`, `tokens.add`, `tokens.remove`, `tokens.deployTest` (local network only)                                                            |
 | proposals  | `proposals.list`, `get`, `preview`, `create`, `review`, `approve`, `reject`, `execute`, `cancel`                                                  |
 | contracts  | `contracts.functions`                                                                                                                             |
-| contacts   | `contacts.list`, `contacts.put`, `contacts.remove`                                                                                                |
+| aztec      | `aztec.aliases`, `aztec.alias`: `aztec-wallet`'s aliases, the only names for addresses (Ome keeps no address book)                                |
 | membership | `membership.request`, `membership.plan`, `membership.begin`, `membership.get`, `membership.list`, `membership.swapSigner`                         |
 | devices    | `devices.pair`, `devices.list`, `devices.revoke`, `devices.enroll`, `devices.forward`                                                             |
 

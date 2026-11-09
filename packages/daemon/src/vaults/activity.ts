@@ -69,7 +69,7 @@ export async function receivedTransfers(context: Context, vault: Hex32): Promise
 export async function counterparties(context: Context, vault: Hex32): Promise<Counterparty[]> {
   const removals = context.vaults.record(vault).removals ?? [];
   const lastRemoval = Math.max(0, ...removals);
-  const contacts = context.state.file.contacts;
+  const names = await context.names();
   const byAddress = new Map<Hex32, Counterparty>();
   for (const { entry } of await receivedTransfers(context, vault)) {
     const known = byAddress.get(entry.from);
@@ -81,7 +81,7 @@ export async function counterparties(context: Context, vault: Hex32): Promise<Co
     }
     byAddress.set(entry.from, {
       address: entry.from,
-      label: contacts.find((c) => c.address === entry.from)?.label ?? null,
+      label: names.get(entry.from) ?? null,
       received: 1,
       firstAt: entry.at,
       lastAt: entry.at,

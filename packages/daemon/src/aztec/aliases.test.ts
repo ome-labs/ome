@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { openStoreAt } from "@aztec-labs/kv-store/lmdb-v2";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { listAliases, setAlias } from "./aliases.ts";
+import { accountAddresses, addressNames, listAliases, setAlias } from "./aliases.ts";
 
 describe("aztec-wallet aliases", () => {
   let dir: string;
@@ -27,5 +27,26 @@ describe("aztec-wallet aliases", () => {
       { key: "accounts:treasury", value: "0x02" },
     ]);
     await expect(setAlias(dir, { key: "treasury", value: "0x02" })).rejects.toThrow(/type/u);
+  });
+
+  it("names addresses from accounts and contracts, an account first", async () => {
+    dir = await mkdtemp(join(tmpdir(), "ome-aztec-wallet-"));
+    const bob = `0x${"0b".repeat(32)}`;
+    const usdc = `0x${"05".repeat(32)}`;
+    const store = await openStoreAt(dir);
+    const aliases = store.openMap<string, Buffer>("aliases");
+    await aliases.set("contracts:bobs-token", Buffer.from(bob.toUpperCase().replace("0X", "0x")));
+    await aliases.set("accounts:bob", Buffer.from(bob));
+    await aliases.set("contracts:usdc", Buffer.from(usdc));
+    await aliases.set("artifacts:token", Buffer.from("/tmp/token.json"));
+    await store.close();
+    expect(await addressNames(dir)).toEqual(
+      new Map([
+        [bob, "bob"],
+        [usdc, "usdc"],
+      ]),
+    );
+    expect(await accountAddresses(dir)).toEqual([bob]);
+    expect(await addressNames(join(dir, "missing"))).toEqual(new Map());
   });
 });

@@ -120,7 +120,8 @@ export async function fakeContext(members = 3, viewingThreshold = 2): Promise<Fa
       address: () => AztecAddress.fromStringUnsafe(address),
       myIndex: () => 1,
     },
-    state: { file: { tokens: {}, contacts: [], profile: { name: "Ada" } } },
+    state: { file: { tokens: {}, profile: { name: "Ada" } } },
+    names: () => Promise.resolve(new Map()),
     wallet: () => wallet,
     emit: () => undefined,
   } as unknown as Context;

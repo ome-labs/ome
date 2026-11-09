@@ -226,33 +226,13 @@ export const handlers: Handlers = {
       }));
   },
 
-  "contacts.list": async (d) => d.state.file.contacts,
   "aztec.aliases": async (d) => listAliases(walletDir(d.state.file.settings.aztecWalletDir)),
   "aztec.alias": async (d, p) => {
     require(d.state.file.settings
       .aztecWalletSync, "aztec-wallet sync is off: ome config set aztec-wallet.sync on");
     await setAlias(walletDir(d.state.file.settings.aztecWalletDir), p);
+    await d.registerSenders();
     return null;
-  },
-  "contacts.put": async (d, p) => {
-    const address = lower(p.address);
-    require(ALIAS.test(p.label), "labels are lowercase letters, digits, - and _");
-    await d.state.update((file) => {
-      file.contacts = [
-        ...file.contacts.filter((c) => c.address !== address),
-        { address, label: p.label },
-      ];
-    });
-    // A contact's notes to the member's vaults are then found through the tags it shares with them.
-    await d.wallet().registerSender(AztecAddress.fromStringUnsafe(address));
-    return d.state.file.contacts;
-  },
-  "contacts.remove": async (d, p) => {
-    const address = lower(p.address);
-    await d.state.update((file) => {
-      file.contacts = file.contacts.filter((c) => c.address !== address);
-    });
-    return d.state.file.contacts;
   },
 
   "membership.request": async (d) => d.membership.request(),

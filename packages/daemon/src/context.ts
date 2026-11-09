@@ -1,6 +1,6 @@
 import type { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee";
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
-import type { DaemonEvent } from "@ome-labs/api";
+import type { DaemonEvent, Hex32 } from "@ome-labs/api";
 import type { OmeWallet } from "@ome-labs/wallet";
 
 import type { KeeperSupervisor } from "./keeper/supervisor.ts";
@@ -27,6 +27,8 @@ export interface Context {
   feePayer(): AztecAddress;
   fee(): { paymentMethod: SponsoredFeePaymentMethod };
   emit(event: DaemonEvent): void;
+  /** Names for addresses, from `aztec-wallet`'s aliases. */
+  names(): Promise<Map<Hex32, string>>;
 }
 
 /** Polls `check` every `intervalMs` until it returns a value, or throws after `timeoutMs`. */

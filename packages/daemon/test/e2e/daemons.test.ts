@@ -1,9 +1,14 @@
-import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
-import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 // Three members found a 2-of-3 vault through their daemons, pay from it with two approvals, see a rejection block a
 // proposal, and then rotate: Carol leaves and a newcomer joins with a join request, receiving the vault's protocol
 // secrets in the reshare. Everything goes through the daemons' sockets, as an app would; each daemon runs its own
 // keeper process and PXE against `aztec start --local-network`.
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { openStoreAt } from "@aztec-labs/kv-store/lmdb-v2";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import type { FoundingState, Hex32, ProposalView, RotationState } from "@ome-labs/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -134,7 +139,11 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
 
     it("shows a transfer into the vault as received, and refuses a token deployment that is not its own", async () => {
       const bobAccount = (await bob.client.call("status", {})).profile?.account as Hex32;
-      await alice.client.call("contacts.put", { address: bobAccount, label: "bob" });
+      // Bob is named in aztec-wallet's aliases, which also makes his notes to the vault findable.
+      const aztecWallet = await mkdtemp(join(tmpdir(), "ome-aztec-wallet-"));
+      await (await openStoreAt(aztecWallet)).close();
+      await alice.client.call("config.set", { aztecWalletDir: aztecWallet, aztecWalletSync: true });
+      await alice.client.call("aztec.alias", { key: "accounts:bob", value: bobAccount });
       await TokenContract.at(AztecAddress.fromStringUnsafe(token), bob.daemon.wallet())
         .methods.transfer(AztecAddress.fromStringUnsafe(vault), 10n)
         .send({ from: AztecAddress.fromStringUnsafe(bobAccount), fee: bob.daemon.fee() });

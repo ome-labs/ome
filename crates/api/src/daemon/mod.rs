@@ -32,7 +32,7 @@ pub use status::{
 };
 use ts_rs::TS;
 pub use vaults::{
-    ActivityEntry, AuditView, CommitteeMember, CommitteeView, ConfigView, Contact, ContractInfo,
+    ActivityEntry, AuditView, CommitteeMember, CommitteeView, ConfigView, ContractInfo,
     Counterparty, FoundingInfo, MemberReachability, NamedKey, TokenBalance, TokenInfo,
     VaultDetails, VaultSummary,
 };
@@ -115,22 +115,6 @@ pub struct TokenRefParams {
 pub struct ContractParams {
     /// Contract.
     pub contract: Hex32,
-}
-
-/// Params of `contacts.put`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct ContactParams {
-    /// Address.
-    pub address: Hex32,
-    /// Label, the alias rules.
-    pub label: String,
-}
-
-/// Params of `contacts.remove`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct AddressParams {
-    /// Address.
-    pub address: Hex32,
 }
 
 /// A method the daemon serves.
@@ -234,16 +218,10 @@ methods! {
     ProposalsCancel = "proposals.cancel" (ProposalRef) -> ProposalView;
     /// A contract's functions.
     ContractsFunctions = "contracts.functions" (ContractParams) -> Vec<ContractFunction>;
-    /// The address book.
-    ContactsList = "contacts.list" (Empty) -> Vec<Contact>;
     /// `aztec-wallet`'s aliases (`accounts:…`, `contracts:…`, `artifacts:…`), read from its store.
     AztecAliases = "aztec.aliases" (Empty) -> Vec<AztecAlias>;
     /// Writes an alias into `aztec-wallet`'s store, when `aztecWalletSync` is on.
     AztecAliasSet = "aztec.alias" (AztecAlias) -> ();
-    /// Adds or relabels a contact.
-    ContactsPut = "contacts.put" (ContactParams) -> Vec<Contact>;
-    /// Removes a contact.
-    ContactsRemove = "contacts.remove" (AddressParams) -> Vec<Contact>;
     /// A join request for this member, to hand to a member of a vault it should join.
     MembershipRequest = "membership.request" (Empty) -> crate::keeper::JoinRequestText;
     /// Plans a membership change.

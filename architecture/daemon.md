@@ -19,18 +19,18 @@ The Ome home is `OME_HOME`, or `~/.ome`. Each profile is `profiles/<name>/`. The
 `-` and `_`, so it can't leave the home. The profile directory is owner-only (`0700`), and every file in it is written
 `0600` and atomically.
 
-| File                          | Holds                                                                                                                |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `profile.json`                | the public profile (name, signer key, account), settings, contacts, vault aliases, the default vault, tracked tokens |
-| `signer.json`                 | the signing key, sealed (`ome-signer`, Argon2id)                                                                     |
-| `keeper-key.sealed`           | the keeper's master key, when no OS keychain holds it                                                                |
-| `secrets/*.sealed`            | the member's Aztec account and each vault's protocol secrets, sealed with the master key (AES-256-GCM)               |
-| `vaults/*.json`               | each vault's record: name, founding constructor (public), names, each epoch's transcript, the last config read       |
-| `rotations/*.json`            | rotations this daemon takes part in                                                                                  |
-| `keeper/`, `keeper.log`       | the keeper's data directory and log                                                                                  |
-| `pxe/`                        | the PXE's store                                                                                                      |
-| `daemon.addr`, `daemon.token` | written at start: the socket path and the session token (`ome-client` discovers them)                                |
-| `daemon.lock`                 | one daemon per profile                                                                                               |
+| File                          | Holds                                                                                                          |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `profile.json`                | the public profile (name, signer key, account), settings, vault aliases, the default vault, tracked tokens     |
+| `signer.json`                 | the signing key, sealed (`ome-signer`, Argon2id)                                                               |
+| `keeper-key.sealed`           | the keeper's master key, when no OS keychain holds it                                                          |
+| `secrets/*.sealed`            | the member's Aztec account and each vault's protocol secrets, sealed with the master key (AES-256-GCM)         |
+| `vaults/*.json`               | each vault's record: name, founding constructor (public), names, each epoch's transcript, the last config read |
+| `rotations/*.json`            | rotations this daemon takes part in                                                                            |
+| `keeper/`, `keeper.log`       | the keeper's data directory and log                                                                            |
+| `pxe/`                        | the PXE's store                                                                                                |
+| `daemon.addr`, `daemon.token` | written at start: the socket path and the session token (`ome-client` discovers them)                          |
+| `daemon.lock`                 | one daemon per profile                                                                                         |
 
 The socket is `daemon.sock` in the profile, unless that path is longer than 100 bytes; it then lives in the temporary
 directory under a hash of the path.
@@ -42,8 +42,8 @@ directory under a hash of the path.
 - `events.subscribe` adds `event` notifications.
 - Errors carry the API kind and code. Errors from the keeper and from `@ome-labs/wasm` keep their kinds; anything else
   is `failed`.
-- All 57 daemon methods are served. The server answers `session.auth` and `events.subscribe` itself, and the other
-  55 each have a handler (`src/server/handlers.ts`) that checks the params it uses. Hex values and points are checked
+- All 60 daemon methods are served. The server answers `session.auth` and `events.subscribe` itself, and the other
+  58 each have a handler (`src/server/handlers.ts`) that checks the params it uses. Hex values and points are checked
   again by the bindings.
 
 ## Signer and keys
@@ -147,8 +147,10 @@ payer the signer trusts in rotations and the one paired devices are told about.
   when that counterparty pays again, never what or how much, until the counterparty handshakes with the vault anew.
   When a rotation that removed members activates, the daemon records it (in chain time) and emits
   `handshakeAdvised` if any counterparty is exposed, so the member can ask them to.
-- Address-book contacts are registered in the PXE as tagging sources (`registerSender`), so their notes to the vault
-  are found by the tags they share with it.
+- Ome keeps no address book: names for addresses come from `aztec-wallet`'s `accounts:` and `contracts:` aliases
+  (reviews, counterparties, a phone's labels). Every `accounts:` alias is registered in the PXE as a tagging source
+  (`registerSender`), at start and with each 15-second sync, so its notes to the vault are found by the tags they
+  share with it.
 - `tokens.remove` stops tracking a token.
 
 ## Working with aztec-wallet
@@ -209,7 +211,7 @@ its reviews and votes; the daemon decides what the phone is asked (`src/devices/
   this member's key.
 - **Forwarding**: on every `proposal` and `payload` keeper event, each not yet executed proposal of a vault where a
   paired device holds this member's key is sent to it with `devices.review`. The daemon adds what only it knows:
-  the config it read, the chain, labels from its contacts and tracked tokens, its own review's simulation, and for a
+  the config it read, the chain, labels from `aztec-wallet`'s aliases and tracked tokens, its own review's simulation, and for a
   reshare rotation the rotation its keeper reshared. `devices.forward` sends one again.
 - **Voting**: in such a vault this profile's key is no longer the member's, so `proposals.approve` and
   `proposals.reject` refuse with "approve or reject there". The device's vote reaches the keeper, which stores and

@@ -14,7 +14,7 @@ const MAX_SOCKET_PATH = 100;
 export interface ProfilePaths {
   readonly name: string;
   readonly dir: string;
-  /** Public profile, settings, contacts, aliases, tokens. */
+  /** Public profile, settings, aliases, tokens. */
   readonly state: string;
   /** The sealed signing key. */
   readonly signer: string;

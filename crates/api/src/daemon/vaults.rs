@@ -1,4 +1,4 @@
-//! Vaults as the member sees them: summaries, details, peers, activity, tokens and contacts.
+//! Vaults as the member sees them: summaries, details, peers, activity and tokens.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -250,22 +250,13 @@ pub enum ActivityEntry {
     },
 }
 
-/// An address-book entry.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct Contact {
-    /// Address.
-    pub address: Hex32,
-    /// Label.
-    pub label: String,
-}
-
 /// Someone who paid the vault, from the transfers it received.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Counterparty {
     /// Sender.
     pub address: Hex32,
-    /// The address-book label, if any.
+    /// Its name in `aztec-wallet`'s aliases, if any.
     pub label: Option<String>,
     /// Transfers received from it.
     pub received: u32,

@@ -21,6 +21,7 @@ import {
 } from "@ome-labs/api";
 import { KeeperClient, OmeWallet } from "@ome-labs/wallet";
 
+import { accountAddresses, addressNames, walletDir } from "./aztec/aliases.ts";
 import type { Context } from "./context.ts";
 import { DeviceService } from "./devices/service.ts";
 import { DaemonError, require } from "./errors.ts";
@@ -88,6 +89,8 @@ export class Daemon implements Context {
   #sync: NodeJS.Timeout | undefined;
   #core: Promise<void> | undefined;
   #masterKey: Buffer | undefined;
+  /** Senders already registered with the PXE, from `aztec-wallet`'s accounts. */
+  readonly #senders = new Set<string>();
 
   constructor(options: DaemonOptions) {
     this.#options = options;
@@ -162,6 +165,26 @@ export class Daemon implements Context {
 
   emit(event: DaemonEvent): void {
     this.#server?.broadcast(event);
+  }
+
+  names(): Promise<Map<Hex32, string>> {
+    return addressNames(walletDir(this.state.file.settings.aztecWalletDir));
+  }
+
+  /**
+   * Registers `aztec-wallet`'s accounts with the PXE as senders, so their notes to the member's vaults are found by
+   * the tags they share with them. Runs at start and with every sync, since aliases change outside the daemon.
+   */
+  async registerSenders(): Promise<void> {
+    if (!this.#wallet) return;
+    for (const address of await accountAddresses(
+      walletDir(this.state.file.settings.aztecWalletDir),
+    )) {
+      if (this.#senders.has(address)) continue;
+      // oxlint-disable-next-line no-await-in-loop
+      await this.#wallet.registerSender(AztecAddress.fromStringUnsafe(address));
+      this.#senders.add(address);
+    }
   }
 
   // Lifecycle.
@@ -331,12 +354,13 @@ export class Daemon implements Context {
         if (file.profile) file.profile.account = address;
       });
     }
-    for (const contact of this.state.file.contacts)
-      // oxlint-disable-next-line no-await-in-loop
-      await wallet.registerSender(AztecAddress.fromStringUnsafe(contact.address));
+    await this.registerSenders();
     await this.vaults.load();
     await this.membership.load();
-    this.#sync = setInterval(() => void this.vaults.sync(), SYNC_INTERVAL_MS);
+    this.#sync = setInterval(() => {
+      void this.vaults.sync();
+      void this.registerSenders();
+    }, SYNC_INTERVAL_MS);
     this.#sync.unref();
   }
 

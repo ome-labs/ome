@@ -165,10 +165,8 @@ export class ProposalService {
       }
     }
     const intent = proposal.intent;
-    const contact =
-      intent.kind === "transfer"
-        ? this.#context.state.file.contacts.find((c) => c.address === intent.to)
-        : undefined;
+    const label =
+      intent.kind === "transfer" ? ((await this.#context.names()).get(intent.to) ?? null) : null;
     return {
       proposal,
       vaultName: record.name,
@@ -190,8 +188,8 @@ export class ProposalService {
         intent.kind === "transfer"
           ? {
               address: intent.to,
-              label: contact?.label ?? null,
-              source: contact ? "addressBook" : null,
+              label,
+              source: label ? "aztecWallet" : null,
             }
           : null,
       simulation,
