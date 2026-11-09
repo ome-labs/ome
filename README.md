@@ -3,16 +3,40 @@
 A private k-of-n multisig on [Aztec](https://aztec.network) with threshold viewing: `k` members to spend, `t` members
 to read, and nobody ever holds the vault's viewing key.
 
-This repository is being rebuilt from scratch, component by component. It currently contains the workspace scaffold
-only.
+## Status
+
+The core is complete and tested as a system: the vault contract, the Rust core (cryptography, wire, protocol, signer,
+networking, keeper, relay, API), the WebAssembly and mobile bindings, the PXE host and the member's daemon (`omed`).
+
+**What works**, end to end on Aztec 6.0.0's local network, and on Testnet with real proofs:
+
+- founding a k-of-n vault through a lobby and a DKG, with every member deriving the same address;
+- paying with `k` approvals, rejecting, cancelling; a removed member's open approval going stale;
+- reading the vault's notes through threshold ECDH, the viewing key never in one place;
+- adding and removing members with a reshare, the vault keeping its address; a removed member's keeper, even
+  restarted from before the removal, cannot read anything sent afterwards (`pnpm test:removal`);
+- keepers on separate networks reaching each other only through a relay, and catching up through its mailboxes
+  (`pnpm test:network`);
+- a member's signing key on a phone (`crates/ffi`, Swift and Kotlin), enrolled with a signer swap;
+- a member's keeper on their own server, reached over TLS pinned by fingerprint;
+- received transfers in a vault's activity, and the counterparties a removed member could still notice.
+
+**Measured:** see `pnpm bench:proving` and the architecture pages; the numbers from the latest run are in
+[architecture/README.md](architecture/README.md#measurements).
+
+**Not built yet:** the desktop and mobile apps; recovery of a lost viewing share; the contract-side check that a
+rotation's shares hold the vault's key (approvers check it today); push notifications; P-256 signer keys held by the
+Secure Enclave or StrongBox; an external audit.
 
 ## Layout
 
 ```text
-contracts/   Nargo workspace (Aztec.nr 6.0.0)
-crates/      Cargo workspace (Rust)
-packages/    TypeScript packages (pnpm)
+contracts/   Nargo workspace (Aztec.nr 6.0.0): the vault contract
+crates/      Cargo workspace (Rust): crypto, wire, protocol, signer, net, keeper, relay, api, client, wasm, ffi
+packages/    TypeScript: the generated API, the wallet (PXE host) and the daemon (omed)
+tools/       golden vectors and the multi-network suite
 scripts/     repository scripts
+architecture/ design pages: what is built, decided and measured
 ```
 
 ## Toolchain
@@ -51,6 +75,19 @@ pnpm --filter @ome-labs/contracts check:failures        # every assert message i
 pnpm --filter @ome-labs/contracts profile               # gate counts per function
 pnpm --filter @ome-labs/contracts profile:flamegraphs   # target/flamegraphs/<artifact>/<function>.svg
 ```
+
+Slow suites (each needs Docker; the first two `aztec start --local-network`, which `--start` starts for you):
+
+```sh
+pnpm test:e2e         # wallet and daemons end to end: founding, paying, rotating, a phone, a keeper on a server
+pnpm test:removal     # the member removal drill, 2-of-3 and 3-of-4
+pnpm test:network     # a relay and three keepers on separate Docker networks
+pnpm bench:proving    # timings with real client-side proofs
+pnpm drill:testnet    # found, fund, pay and rotate on Aztec Testnet with real proofs
+```
+
+CI runs the fast checks on every push to `main` (`.github/workflows/ci.yml`); the slow suites, the mobile bindings
+and, on request, the Testnet drill run by hand (`.github/workflows/extended.yml`).
 
 Daemon (`@ome-labs/daemon`):
 

@@ -262,3 +262,14 @@ Measured: 5 tests in 43 s; the whole suite, 9 tests in 113 s.
 - Bob's daemon refuses it under a wrong fingerprint, then uses it;
 - Alice (her own keeper) and Bob (the remote one) found a vault, pay from it, and Bob reads its balance through
   the remote keeper.
+
+`test/removal/removal.test.ts`, the removal drill, removes Carol from a 2-of-3 vault with `t_v = 2`, then from a
+3-of-4 vault with `t_v = 3`. Her keeper's whole state is copied before the removal.
+
+- The members who stay read a payment sent afterwards.
+- No verification share of the new committee is an old one, and the new committee's partials do not verify as
+  partials of the old committee, so a share of the old one cannot complete a combination with them.
+- Her keeper, restarted from the copy, gets no answer for its old epoch.
+- Her approval of a payment left open goes stale and the payment cannot execute; the vault keeps its address.
+
+Measured: 10 tests in 157 s.

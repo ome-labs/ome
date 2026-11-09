@@ -88,6 +88,34 @@ Ome's cryptography must produce exactly Aztec's bytes. `tools/vectors` computes 
 own packages; CI fails when a committed vector file differs from what the pinned Aztec produces. The contract's
 `ome.*.v0` vectors are pinned in both the Noir tests and `crates/protocol/tests/vectors/contract.json`.
 
+## Measurements
+
+Apple Silicon, Aztec 6.0.0. Local network numbers are from `pnpm bench:proving` (real client-side proofs; the local
+network's own blocks are instant), Testnet numbers from `pnpm drill:testnet`, relay numbers from `pnpm test:network`.
+
+| What                                           | Local network, proven | Testnet, proven |
+| ---------------------------------------------- | --------------------: | --------------: |
+| found a 2-of-3 vault (DKG, deployment)         |                 7.7 s |           102 s |
+| deploy a token and mint to the vault           |                12.2 s |           147 s |
+| 2-of-3 payment: rebuild, prove, send, mined    |                 6.5 s |            55 s |
+| remove a member (reshare, `rotate_membership`) |                 6.2 s |            73 s |
+| every member reads the vault's balance         |                     — |            13 s |
+
+The Testnet run shared the machine with a Docker build, so its times are upper bounds; most of them are block
+inclusion, not proving.
+
+| Threshold and ceremony path                       |   Time |
+| ------------------------------------------------- | -----: |
+| threshold read, 1 point, direct (loopback)        |  19 ms |
+| threshold read, 100 points, direct                |  1.4 s |
+| threshold read, 1 point, through a relay (Docker) |  73 ms |
+| DKG, 3 keepers, `t_v = 2`, direct                 | 0.52 s |
+| DKG, 8 keepers, `t_v = 5`, direct                 | 0.55 s |
+| DKG, 3 keepers, through a relay                   |  1.5 s |
+| a stopped keeper catches up after restart (relay) |  1.2 s |
+
+Relay timings include a `docker exec` per call.
+
 ## Planned components
 
 None: the mobile apps will build on `ome-ffi`.
