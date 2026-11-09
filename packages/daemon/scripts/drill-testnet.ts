@@ -173,3 +173,5 @@ try {
 
 console.log("\nTestnet drill");
 for (const { step: name, seconds } of steps) console.log(`  ${name.padEnd(60)} ${seconds} s`);
+// The PXEs keep timers alive after their daemons stop.
+process.exit(0);

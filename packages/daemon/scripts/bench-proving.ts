@@ -177,3 +177,5 @@ try {
 await dkg(3, 2);
 await dkg(8, 5);
 console.log(JSON.stringify(results, null, 2));
+// The PXEs keep timers alive after their daemons stop.
+process.exit(0);
