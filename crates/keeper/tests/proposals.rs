@@ -14,6 +14,7 @@ async fn a_proposal_its_payload_and_its_votes_reach_every_member() {
     let v = vault(fast_config()).await;
     let (proposal, payload) = v.proposal(10);
     let id = proposal.id().unwrap();
+    let mut second = v.keepers[1].keeper.subscribe();
     let mut third = v.keepers[2].keeper.subscribe();
 
     v.keepers[0]
@@ -26,6 +27,11 @@ async fn a_proposal_its_payload_and_its_votes_reach_every_member() {
         .put_proposal(v.address, &body(&Message::Proposal(proposal.clone())))
         .await
         .unwrap();
+    // A member votes on a proposal its keeper holds.
+    wait_for(&mut second, |e| {
+        matches!(e, KeeperEvent::Proposal { .. }).then_some(())
+    })
+    .await;
     v.keepers[1]
         .keeper
         .put_approval(
@@ -35,8 +41,15 @@ async fn a_proposal_its_payload_and_its_votes_reach_every_member() {
         .await
         .unwrap();
 
+    // The vote and the payload travel separately; wait for both.
+    let (mut voted, mut paid) = (false, false);
     wait_for(&mut third, |e| {
-        matches!(e, KeeperEvent::Approval { slot: 1, .. }).then_some(())
+        match e {
+            KeeperEvent::Approval { slot: 1, .. } => voted = true,
+            KeeperEvent::Payload { .. } => paid = true,
+            _ => {}
+        }
+        (voted && paid).then_some(())
     })
     .await;
     let keeper = &v.keepers[2].keeper;
@@ -102,6 +115,7 @@ async fn a_vote_that_arrives_before_its_proposal_is_held_until_it_does() {
     let (proposal, _) = v.proposal(12);
     let id = proposal.id().unwrap();
     let mut first = v.keepers[0].keeper.subscribe();
+    let mut second = v.keepers[1].keeper.subscribe();
     let mut third = v.keepers[2].keeper.subscribe();
     let away = v.keepers[2].keeper.identity();
     v.harness.net.set_filter(move |_, to, frame| {
@@ -112,6 +126,10 @@ async fn a_vote_that_arrives_before_its_proposal_is_held_until_it_does() {
         .put_proposal(v.address, &body(&Message::Proposal(proposal.clone())))
         .await
         .unwrap();
+    wait_for(&mut second, |e| {
+        matches!(e, KeeperEvent::Proposal { .. }).then_some(())
+    })
+    .await;
     v.keepers[1]
         .keeper
         .put_approval(

@@ -9,8 +9,8 @@ runs:
         path: |
           ~/.aztec
           ~/nargo
-        key: aztec-${{ runner.os }}-${{ hashFiles('.aztecrc') }}-${{ hashFiles('contracts/**/Nargo.toml') }}
-        restore-keys: aztec-${{ runner.os }}-${{ hashFiles('.aztecrc') }}-
+        key: aztec-${{ hashFiles('.aztecrc') }}-${{ hashFiles('contracts/**/Nargo.toml') }}
+        restore-keys: aztec-${{ hashFiles('.aztecrc') }}-
     - name: Install Aztec
       shell: bash
       run: |
