@@ -28,6 +28,7 @@ import { DaemonError, require } from "./errors.ts";
 import { FoundingService } from "./founding/founding.ts";
 import { KeeperSupervisor, keeperBinary } from "./keeper/supervisor.ts";
 import { MembershipService } from "./membership/service.ts";
+import { networkOf, unsupported } from "./node/networks.ts";
 import { NodeService } from "./node/node.ts";
 import { privateDir, writePrivate } from "./profile/files.ts";
 import { type ProfilePaths, omeHome, profilePaths } from "./profile/paths.ts";
@@ -279,6 +280,8 @@ export class Daemon implements Context {
         "not-ready",
         `no Aztec node answers at ${node.url}: ${node.error ?? "no answer"}`,
       );
+    const refused = unsupported(node);
+    if (refused) throw new DaemonError("invalid", refused);
     const sealing = Buffer.from((await this.signer.create(params.passphrase)).slice(2), "hex");
     const key = await (this.#keys as MasterKeyStore).create(sealing);
     const account: Account = {
@@ -292,6 +295,9 @@ export class Daemon implements Context {
     );
     await this.state.update((file) => {
       file.settings.nodeUrl = params.nodeUrl;
+      // A new profile on Testnet reaches the other members through Ome Labs' relay unless relays were chosen.
+      if (file.settings.relays.length === 0)
+        file.settings.relays = [...(networkOf(node)?.relays ?? [])];
       file.profile = {
         name: params.name.trim(),
         signerKey: this.signer.publicKey(),
@@ -326,6 +332,11 @@ export class Daemon implements Context {
   }
 
   async #bootCore(key: Buffer): Promise<void> {
+    // A profile whose node moved to an unsupported network (Alpha) does not start; an unreachable node is checked again
+    // later.
+    const node = await this.node.check();
+    const refused = node.reachable ? unsupported(node) : null;
+    if (refused) throw new DaemonError("invalid", refused);
     this.#secrets = new SecretsStore(this.paths.secrets, key);
     this.#masterKey = key;
     const { settings } = this.state.file;

@@ -35,6 +35,14 @@ The Ome home is `OME_HOME`, or `~/.ome`. Each profile is `profiles/<name>/`. The
 The socket is `daemon.sock` in the profile, unless that path is longer than 100 bytes; it then lives in the temporary
 directory under a hash of the path.
 
+## Networks
+
+This release runs on the local network and on Testnet (`src/node/networks.ts`), recognised by the node's L1 chain and
+rollup version. `profile.create` refuses any other node, and Aztec's mainnet (Alpha) with "not released for Aztec's
+mainnet yet" until the audit; a profile whose node later moves to an unsupported network does not start its core. A
+new Testnet profile gets Ome Labs' relay (`relay.ome.network`, peer id `12D3KooWEKh8…XXYWo`) unless relays were
+already chosen; a local network needs none.
+
 ## The server
 
 - Newline-delimited JSON-RPC 2.0, the keeper's framing.

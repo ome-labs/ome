@@ -130,20 +130,8 @@ pub(crate) async fn init(ctx: &mut Ctx, args: InitArgs) -> Result<()> {
     let prover = args
         .prover
         .unwrap_or(if local { Prover::None } else { Prover::Native });
-    let relays = if !args.relays.is_empty() || !ctx.interactive {
-        args.relays
-    } else {
-        let relay: String = cliclack::input("A relay, if members cannot reach each other directly")
-            .placeholder("/dns4/relay.example/tcp/4001/p2p/12D3… (Enter to skip)")
-            .required(false)
-            .interact()?;
-        relay
-            .split(',')
-            .map(str::trim)
-            .filter(|r| !r.is_empty())
-            .map(String::from)
-            .collect()
-    };
+    // Testnet profiles get Ome Labs' relay from the daemon; `--relay` replaces it.
+    let relays = args.relays;
     let current = ctx
         .client_for_setup()
         .await?
@@ -210,6 +198,21 @@ pub(crate) async fn init(ctx: &mut Ctx, args: InitArgs) -> Result<()> {
         .await?;
     if !relays.is_empty() {
         status.settings = client.call::<RelaysSet>(&RelaysParams { relays }).await?;
+    }
+    if !status.settings.relays.is_empty() {
+        ctx.info(&format!(
+            "Relays: {}",
+            status
+                .settings
+                .relays
+                .iter()
+                // `/dns4/relay.ome.network/udp/4001/…` → `relay.ome.network`, once per host.
+                .filter_map(|r| r.split('/').nth(2))
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     let touch_id = args.touch_id
         || (cfg!(target_os = "macos")
