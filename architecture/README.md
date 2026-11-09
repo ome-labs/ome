@@ -101,13 +101,14 @@ network's own blocks are instant), Testnet numbers from `pnpm drill:testnet`, re
 
 | What                                           | Local network, proven | Testnet, proven |
 | ---------------------------------------------- | --------------------: | --------------: |
-| found a 2-of-3 vault (DKG, deployment)         |                 7.7 s |           102 s |
-| deploy a token and mint to the vault           |                12.2 s |           147 s |
-| 2-of-3 payment: rebuild, prove, send, mined    |                 6.5 s |            55 s |
-| remove a member (reshare, `rotate_membership`) |                 6.2 s |            73 s |
-| every member reads the vault's balance         |                     — |            13 s |
+| found a 2-of-3 vault (DKG, deployment)         |                 7.7 s |            54 s |
+| deploy a token and mint to the vault           |                12.4 s |           142 s |
+| 2-of-3 payment: rebuild, prove, send, mined    |                 6.5 s |            59 s |
+| remove a member (reshare, `rotate_membership`) |                 6.3 s |            73 s |
+| every member reads the vault's balance         |                     — |            14 s |
 
-The Testnet run shared the machine with a Docker build, so its times are upper bounds; most of them are block
+Measured after `rotate_membership` started checking the committee polynomial (85,734 → 100,552 gates): proving a
+rotation went from 6.2 s to 6.3 s locally, and the Testnet rotation stayed at 73 s. Most Testnet time is block
 inclusion, not proving.
 
 | Threshold and ceremony path                       |   Time |
