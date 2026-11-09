@@ -15,10 +15,13 @@ use libp2p::{Multiaddr, PeerId, identity};
 use ome_relay::{Error, Limits, Relay, RelayConfig, Result, health, store::MailboxStore};
 use serde_json::json;
 
+/// The release this relay belongs to; release-please updates it.
+const VERSION: &str = "0.0.0"; // x-release-please-version
+
 #[derive(Parser)]
 #[command(
     name = "ome-relay",
-    version,
+    version = VERSION,
     about = "Untrusted Ome relay: circuits and ciphertext mailboxes"
 )]
 struct Cli {

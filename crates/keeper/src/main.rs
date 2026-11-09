@@ -27,7 +27,7 @@ use zeroize::Zeroizing;
 #[derive(Parser)]
 #[command(
     name = "ome-keeper",
-    version,
+    version = ome_api::RELEASE_VERSION,
     about = "Ome keeper: custody of a member's viewing shares"
 )]
 struct Cli {

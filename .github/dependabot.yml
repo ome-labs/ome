@@ -1,0 +1,14 @@
+# Weekly updates for the actions the workflows use. npm and Cargo dependencies are pinned on purpose (Aztec 6.0.0
+# throughout) and updated by hand; Dependabot still raises security alerts for them.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+      include: scope

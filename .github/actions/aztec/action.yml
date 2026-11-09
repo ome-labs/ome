@@ -1,0 +1,23 @@
+name: Install Aztec
+description: Installs the Aztec toolchain pinned in .aztecrc, with the Nargo dependencies cached.
+runs:
+  using: composite
+  steps:
+    - name: Cache Aztec toolchain and Nargo dependencies
+      uses: actions/cache@v6
+      with:
+        path: |
+          ~/.aztec
+          ~/nargo
+        key: aztec-${{ runner.os }}-${{ hashFiles('.aztecrc') }}-${{ hashFiles('contracts/**/Nargo.toml') }}
+        restore-keys: aztec-${{ runner.os }}-${{ hashFiles('.aztecrc') }}-
+    - name: Install Aztec
+      shell: bash
+      run: |
+        VERSION="$(cat "$GITHUB_WORKSPACE/.aztecrc")"
+        if [ ! -x "$HOME/.aztec/versions/$VERSION/bin/aztec" ]; then
+          curl -fsSL "https://install.aztec-labs.com/$VERSION/install" | VERSION="$VERSION" bash
+        fi
+        ln -sfn "$HOME/.aztec/versions/$VERSION" "$HOME/.aztec/current"
+        echo "$HOME/.aztec/bin" >> "$GITHUB_PATH"
+        echo "$HOME/.aztec/current/bin" >> "$GITHUB_PATH"

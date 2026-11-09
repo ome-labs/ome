@@ -1,0 +1,587 @@
+# Builds, tests and publishes a release: the npm packages, the platform archives (curl and Homebrew), the relay and
+# keeper images, the GitHub release and the Homebrew formula.
+#
+# - Dry run: Actions → Release → Run workflow on main with "publish" off. Builds everything and installs it through
+#   npm, the install script and Homebrew on each platform. Nothing leaves the run.
+# - Release: merging the release pull request starts this workflow on the new tag with "publish" on
+#   (release-please.yml). The jobs that sign and publish run in the `release` environment and wait for approval:
+#   once for signing the macOS binaries, then once for publishing (npm, images, the GitHub release and Homebrew).
+#
+# architecture/release.md describes what is published and how to verify it.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish (only on a release tag; off builds and tests without publishing)
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: plan
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          version=$(node -p 'require("./packages/ome/package.json").version')
+          if [ "$PUBLISH" = true ] && [ "$GITHUB_REF" != "refs/tags/v$version" ]; then
+            echo "::error::Publishing needs the tag v$version; this run is on $GITHUB_REF."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "Ome $version, publish: $PUBLISH" >> "$GITHUB_STEP_SUMMARY"
+
+  verify:
+    name: Verify
+    needs: plan
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  npm:
+    name: npm packages
+    needs: plan
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      # Release builds use no caches that other runs could have written, except the pinned Aztec toolchain.
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache: false
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.108
+      - uses: ./.github/actions/aztec
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run build --filter=@ome-labs/ome...
+      - run: node scripts/packaging/npm.ts release/npm
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm
+          path: release/npm/*.tgz
+          if-no-files-found: error
+
+  binaries:
+    name: Binaries (${{ matrix.platform }})
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - { platform: darwin-arm64, runner: macos-15 }
+          # The oldest supported Ubuntu keeps the glibc requirement low.
+          - { platform: linux-x64, runner: ubuntu-22.04 }
+          - { platform: linux-arm64, runner: ubuntu-22.04-arm }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache: false
+      # Embeds the dependency list in the binaries, for `cargo audit bin`.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-auditable
+      - run: scripts/cargo.sh auditable build --release --locked -p ome-cli -p ome-keeper
+      - run: crates/target/release/ome --version && crates/target/release/ome-keeper --version
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bin-${{ matrix.platform }}
+          path: |
+            crates/target/release/ome
+            crates/target/release/ome-keeper
+          if-no-files-found: error
+
+  sign:
+    name: Sign macOS binaries
+    needs: [plan, binaries]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: macos-15
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: bin-darwin-arm64
+          path: bin
+      # The self-signed "Ome Labs Code Signing" certificate gives the binaries a designated requirement that survives
+      # updates, so the keychain keeps trusting a member's Touch ID sealing key (architecture/release.md).
+      - name: Sign
+        env:
+          P12: ${{ secrets.MACOS_SIGN_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_SIGN_P12_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/sign.keychain-db"
+          password=$(openssl rand -hex 24)
+          printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/sign.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 900 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/sign.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/sign.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          # Self-signed, so not "valid" to find-identity -v; codesign signs with it all the same.
+          identity=$(security find-identity -p codesigning "$keychain" | awk '/\)/ { print $2; exit }')
+          [ -n "$identity" ] || { echo "::error::No signing identity in MACOS_SIGN_P12"; exit 1; }
+          codesign --force --keychain "$keychain" --sign "$identity" --identifier network.ome.ome bin/ome
+          codesign --force --keychain "$keychain" --sign "$identity" --identifier network.ome.keeper bin/ome-keeper
+      - name: Remove the signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/sign.keychain-db" 2> /dev/null || true
+      - name: Check the signatures
+        run: |
+          chmod +x bin/ome bin/ome-keeper
+          for program in ome ome-keeper; do
+            codesign --verify --strict "bin/$program"
+            codesign --display --requirements - "bin/$program" 2>&1 | tee /dev/stderr | grep -q 'certificate leaf = H"'
+          done
+          bin/ome --version
+      - uses: actions/upload-artifact@v7
+        with:
+          name: signed-darwin-arm64
+          path: bin/*
+          if-no-files-found: error
+
+  package:
+    name: Package (${{ matrix.platform }})
+    needs: [plan, npm, binaries, sign]
+    if: ${{ !cancelled() && needs.npm.result == 'success' && needs.binaries.result == 'success' && needs.sign.result != 'failure' }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - { platform: darwin-arm64, runner: macos-15 }
+          - { platform: linux-x64, runner: ubuntu-22.04 }
+          - { platform: linux-arm64, runner: ubuntu-22.04-arm }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm
+          path: release/npm
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.platform == 'darwin-arm64' && needs.plan.outputs.publish == 'true' && 'signed-darwin-arm64' || format('bin-{0}', matrix.platform) }}
+          path: release/bin
+      - run: node scripts/packaging/platform.ts ${{ matrix.platform }} release/bin release/platform
+      # Installs the daemon's dependencies on this platform: some are native.
+      - run: node scripts/packaging/archive.ts ${{ matrix.platform }} release/bin release/npm release/archive
+      - uses: actions/upload-artifact@v7
+        with:
+          name: platform-${{ matrix.platform }}
+          path: release/platform/*.tgz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: archive-${{ matrix.platform }}
+          path: release/archive/*.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+
+  assets:
+    name: Checksums, SBOMs and attestations
+    needs: [plan, package]
+    if: ${{ !cancelled() && needs.package.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: archive-*
+          path: release/assets
+          merge-multiple: true
+      - run: cd release/assets && sha256sum -- *.tar.gz > SHA256SUMS && cat SHA256SUMS
+      - uses: anchore/sbom-action/download-syft@v0
+        id: syft
+      - name: SBOMs
+        env:
+          SYFT: ${{ steps.syft.outputs.cmd }}
+        run: |
+          for archive in release/assets/*.tar.gz; do
+            name=$(basename "$archive" .tar.gz)
+            mkdir -p "$RUNNER_TEMP/$name"
+            tar -xzf "$archive" -C "$RUNNER_TEMP/$name"
+            "$SYFT" scan "dir:$RUNNER_TEMP/$name" --source-name "$name" -o "spdx-json=release/assets/$name.spdx.json"
+          done
+      - run: cp scripts/install.sh release/assets/install.sh
+      - name: Homebrew formula
+        run: node scripts/packaging/formula.ts release/assets/SHA256SUMS > release/ome.rb
+      - name: Attest the archives
+        if: needs.plan.outputs.publish == 'true'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-checksums: release/assets/SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: assets
+          path: release/assets/*
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: formula
+          path: release/ome.rb
+          if-no-files-found: error
+
+  install:
+    name: Install (${{ matrix.platform }})
+    needs: [plan, npm, package, assets]
+    if: ${{ !cancelled() && needs.assets.result == 'success' }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: darwin-arm64, runner: macos-15 }
+          - { platform: linux-x64, runner: ubuntu-24.04 }
+          - { platform: linux-arm64, runner: ubuntu-24.04-arm }
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm
+          path: release/npm
+      - uses: actions/download-artifact@v8
+        with:
+          name: platform-${{ matrix.platform }}
+          path: release/npm
+      - uses: actions/download-artifact@v8
+        with:
+          name: assets
+          path: release/assets
+      - uses: actions/download-artifact@v8
+        with:
+          name: formula
+          path: release
+      - name: npm
+        run: |
+          prefix="$RUNNER_TEMP/npm"
+          npm install --global --prefix "$prefix" --no-audit --no-fund release/npm/*.tgz
+          PATH="$prefix/bin:$PATH" node scripts/packaging/smoke.ts "$VERSION" npm
+      - name: Install script, with the Node on PATH
+        run: |
+          OME_HOME="$RUNNER_TEMP/curl" OME_DOWNLOAD_BASE="$PWD/release/assets" \
+            sh release/assets/install.sh --version "$VERSION" --no-modify-path
+          PATH="$RUNNER_TEMP/curl/bin:$PATH" OME_HOME="$RUNNER_TEMP/curl" node scripts/packaging/smoke.ts "$VERSION" "install script"
+      - name: Install script, without Node
+        run: |
+          env -i HOME="$HOME" PATH=/usr/bin:/bin OME_HOME="$RUNNER_TEMP/bare" OME_DOWNLOAD_BASE="$PWD/release/assets" \
+            sh release/assets/install.sh --version "$VERSION" --no-modify-path
+          test -x "$RUNNER_TEMP/bare/runtime/bin/node"
+          OME_HOME="$RUNNER_TEMP/bare" "$RUNNER_TEMP/bare/bin/ome" --version
+      - name: Homebrew
+        # Homebrew is on the macOS and Linux x64 runners.
+        if: matrix.platform != 'linux-arm64'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv 2> /dev/null || /home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew tap-new --no-git ome-test/local
+          tap="$(brew --repo ome-test/local)"
+          node scripts/packaging/formula.ts release/assets/SHA256SUMS "file://$PWD/release/assets" > "$tap/Formula/ome.rb"
+          brew install --formula ome-test/local/ome
+          brew test ome-test/local/ome
+          node scripts/packaging/smoke.ts "$VERSION" Homebrew
+
+  images:
+    name: Image ${{ matrix.image }} (${{ matrix.arch }})
+    needs: [plan, verify, install]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ${{ matrix.runner }}
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [relay, keeper]
+        arch: [amd64, arm64]
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/ome-labs/ome-${{ matrix.image }}
+          labels: |
+            org.opencontainers.image.title=ome-${{ matrix.image }}
+            org.opencontainers.image.description=Ome ${{ matrix.image }}
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.url=https://ome.network
+      # Pushed by digest only; the merge job tags the multi-architecture manifest.
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: crates
+          file: crates/relay/deploy/Dockerfile
+          target: ${{ matrix.image }}
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=ghcr.io/ome-labs/ome-${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+      - run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+
+  manifests:
+    name: Image ${{ matrix.image }}
+    needs: [plan, images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      matrix:
+        image: [relay, keeper]
+    env:
+      IMAGE: ghcr.io/ome-labs/ome-${{ matrix.image }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: digest-${{ matrix.image }}-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=v${{ env.VERSION }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ env.VERSION }}
+            type=raw,value=latest
+            type=sha
+      - name: Tag the manifest
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          tags=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && tags+=(--tag "$tag")
+          done <<< "$TAGS"
+          sources=()
+          for digest in *; do
+            sources+=("$IMAGE@sha256:$digest")
+          done
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+      - uses: sigstore/cosign-installer@v4
+      - name: Sign
+        run: |
+          digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)
+          cosign sign --yes "$IMAGE@$digest"
+
+  npm-publish:
+    name: Publish to npm
+    needs: [plan, verify, install]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      # Trusted publishing (OIDC, no token; provenance attached) needs npm 11.5.1 or later.
+      - run: npm install --global npm@latest
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm
+          path: npm
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: platform-*
+          path: npm
+          merge-multiple: true
+      # Dependencies first, the launcher last. A version already on npm (the PXE fork between its own releases, or a
+      # re-run) is skipped.
+      - name: Publish
+        run: |
+          for name in ome-darwin-arm64 ome-linux-x64 ome-linux-arm64 api wasm contracts pxe wallet daemon ome; do
+            file=$(ls npm/ome-labs-$name-[0-9]*.tgz)
+            version=$(tar -xOzf "$file" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).version')
+            if npm view "@ome-labs/$name@$version" version > /dev/null 2>&1; then
+              echo "@ome-labs/$name@$version is already published"
+            else
+              npm publish "$file" --access public
+            fi
+          done
+
+  # Waits on the same approval as npm and the images, so one review publishes everything.
+  github-release:
+    name: GitHub release and Homebrew
+    needs: [plan, verify, install]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: assets
+          path: assets
+      - uses: actions/download-artifact@v8
+        with:
+          name: formula
+          path: formula
+      # release-please made the draft release and its tag; it goes public once its files are attached.
+      - name: Publish the release
+        run: |
+          gh release upload "v$VERSION" assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+      - name: Update the Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone --depth 1 "https://x-access-token:$TAP_TOKEN@github.com/ome-labs/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp formula/ome.rb tap/Formula/ome.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/ome.rb
+          git commit -m "ome $VERSION"
+          git push
+
+  published:
+    name: Published (${{ matrix.platform }})
+    needs: [plan, github-release, npm-publish, manifests]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: darwin-arm64, runner: macos-15 }
+          - { platform: linux-x64, runner: ubuntu-24.04 }
+          - { platform: linux-arm64, runner: ubuntu-24.04-arm }
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: npm
+        run: |
+          prefix="$RUNNER_TEMP/npm"
+          # The registry can take a few minutes to serve a new version everywhere.
+          for attempt in 1 2 3 4 5 6; do
+            npm install --global --prefix "$prefix" --no-audit --no-fund "@ome-labs/ome@$VERSION" && break
+            [ "$attempt" = 6 ] && exit 1
+            sleep 30
+          done
+          PATH="$prefix/bin:$PATH" node scripts/packaging/smoke.ts "$VERSION" npm
+      - name: Install script
+        run: |
+          curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION/install.sh" \
+            | OME_HOME="$RUNNER_TEMP/curl" sh -s -- --version "$VERSION" --no-modify-path
+          PATH="$RUNNER_TEMP/curl/bin:$PATH" OME_HOME="$RUNNER_TEMP/curl" node scripts/packaging/smoke.ts "$VERSION" "install script"
+      - name: Attestation
+        run: |
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern "ome-$VERSION-${{ matrix.platform }}.tar.gz"
+          gh attestation verify "ome-$VERSION-${{ matrix.platform }}.tar.gz" --repo "$GITHUB_REPOSITORY"
+      - name: Homebrew
+        if: matrix.platform != 'linux-arm64'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv 2> /dev/null || /home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install ome-labs/tap/ome
+          node scripts/packaging/smoke.ts "$VERSION" Homebrew
+      - uses: sigstore/cosign-installer@v4
+        if: matrix.platform == 'linux-x64'
+      - name: Images
+        if: matrix.platform == 'linux-x64'
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          for image in relay keeper; do
+            cosign verify "ghcr.io/ome-labs/ome-$image:$VERSION" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/v$VERSION" \
+              > /dev/null
+            docker run --rm "ghcr.io/ome-labs/ome-$image:$VERSION" "ome-$image" --version
+          done
