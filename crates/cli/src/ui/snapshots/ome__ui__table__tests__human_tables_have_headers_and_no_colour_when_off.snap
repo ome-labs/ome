@@ -1,0 +1,7 @@
+---
+source: cli/src/ui/table.rs
+expression: "table().render(Mode::Human, false)"
+---
+ID        STATUS
+4f2ac91e  ready
+9b10	x    executed

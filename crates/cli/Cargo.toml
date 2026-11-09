@@ -1,0 +1,64 @@
+[package]
+name = "ome-cli"
+description = "ome: an Ome member's command line, a client of their daemon (omed)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ome"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+clap_complete = "4.6.11"
+cliclack = "0.5.7"
+comfy-table = "8.0.1"
+console = "0.16.6"
+ome-api = { workspace = true }
+ome-client = { workspace = true }
+qrcode = { version = "0.14.1", default-features = false }
+ratatui = "0.30.2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "sync"] }
+zeroize = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6.2"
+objc2 = "0.6.4"
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "NSError",
+  "NSString",
+] }
+objc2-local-authentication = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "block2",
+  "LAContext",
+  "LAError",
+] }
+security-framework = "3.7.0"
+
+[dev-dependencies]
+insta = "1.49.0"
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread"] }
+
+# Same as the workspace lints, except `unsafe_code` is `deny` instead of `forbid`: the macOS Touch ID module
+# (`secret/touch_id.rs`) calls LocalAuthentication through objc2 and is the only place that opts out.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+print_stdout = "warn"
+todo = "warn"
+unwrap_used = "warn"

@@ -1,0 +1,255 @@
+//! What every command gets: the profile, the output mode, whether it may prompt, and the daemon session.
+
+use std::{
+    cell::Cell,
+    io::{IsTerminal, Write},
+};
+
+use ome_client::{DEFAULT_PROFILE, DaemonClient, Home, Profile};
+use serde::Serialize;
+use tokio::sync::OnceCell;
+
+use crate::{
+    args::Global,
+    error::{Error, Result},
+    launch,
+    ui::theme,
+};
+
+/// The file in the Ome home that names the profile `ome profile use` chose.
+pub(crate) const CURRENT_PROFILE: &str = "current-profile";
+
+/// How results are printed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Mode {
+    /// Prompts, steps and colour on stderr; results on stdout.
+    Human,
+    /// One JSON value on stdout.
+    Json,
+    /// One record per line, tab-separated.
+    Plain,
+}
+
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line switches"
+)]
+pub(crate) struct Ctx {
+    pub(crate) home: Home,
+    pub(crate) profile: Profile,
+    /// Whether the profile was named (`--profile`, `OME_PROFILE`), so hints repeat it.
+    pub(crate) named_profile: bool,
+    pub(crate) mode: Mode,
+    /// Prompts allowed: a terminal on stdin and stderr, human mode, no `--no-input`.
+    pub(crate) interactive: bool,
+    pub(crate) yes: bool,
+    pub(crate) quiet: bool,
+    pub(crate) verbose: bool,
+    /// `--vault`.
+    pub(crate) vault: Option<String>,
+    client: OnceCell<DaemonClient>,
+    /// Set while a flow runs other commands inside it (a membership change approving its proposal), so only the
+    /// flow's own result is printed as JSON.
+    nested: Cell<bool>,
+}
+
+/// Restores the context when a nested command ends.
+pub(crate) struct Nested<'a>(&'a Cell<bool>, bool);
+
+impl Drop for Nested<'_> {
+    fn drop(&mut self) {
+        self.0.set(self.1);
+    }
+}
+
+impl Ctx {
+    pub(crate) fn new(global: &Global) -> Result<Self> {
+        let home = Home::from_env().map_err(Error::from)?;
+        let (name, named_profile) = match &global.profile {
+            Some(name) => (name.clone(), true),
+            None => (current_profile(&home), false),
+        };
+        let profile = home
+            .profile(&name)
+            .map_err(|e| Error::usage(e.to_string()))?;
+        let mode = if global.json {
+            Mode::Json
+        } else if global.plain {
+            Mode::Plain
+        } else {
+            Mode::Human
+        };
+        let terminal = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+        Ok(Self {
+            home,
+            profile,
+            named_profile,
+            mode,
+            interactive: terminal && mode == Mode::Human && !global.no_input,
+            yes: global.yes,
+            quiet: global.quiet,
+            verbose: global.verbose,
+            vault: global.vault.clone(),
+            client: OnceCell::new(),
+            nested: Cell::new(false),
+        })
+    }
+
+    /// Steps, notes and prompts are shown.
+    pub(crate) fn human(&self) -> bool {
+        self.mode == Mode::Human && !self.quiet
+    }
+
+    #[expect(
+        clippy::unused_self,
+        reason = "output decisions go through the context"
+    )]
+    pub(crate) fn color(&self) -> bool {
+        console::colors_enabled()
+    }
+
+    /// `ome <args>`, with `--profile` when the profile was named.
+    pub(crate) fn ome(&self, args: &str) -> String {
+        if self.named_profile {
+            format!("ome --profile {} {args}", self.profile.name())
+        } else {
+            format!("ome {args}")
+        }
+    }
+
+    /// A result line on stdout.
+    #[expect(
+        clippy::unused_self,
+        reason = "output decisions go through the context"
+    )]
+    pub(crate) fn out(&self, text: &str) {
+        let mut stdout = std::io::stdout().lock();
+        let _ = writeln!(stdout, "{text}");
+    }
+
+    /// Runs the commands a flow calls into until the guard drops: their JSON results are not printed.
+    pub(crate) fn nest(&self) -> Nested<'_> {
+        Nested(&self.nested, self.nested.replace(true))
+    }
+
+    /// The result as one JSON value on stdout.
+    pub(crate) fn json<T: Serialize>(&self, value: &T) -> Result<()> {
+        if self.nested.get() {
+            return Ok(());
+        }
+        let text = serde_json::to_string_pretty(value)
+            .map_err(|e| Error::failed(format!("could not encode the result: {e}")))?;
+        self.out(&text);
+        Ok(())
+    }
+
+    /// What to run next, after a state change.
+    pub(crate) fn next(&self, args: &str) {
+        if self.human() {
+            eprintln!("  {} {}", theme::dim("next:"), theme::name(self.ome(args)));
+        }
+    }
+
+    pub(crate) fn intro(&self, title: &str) {
+        if self.human() {
+            let _ = cliclack::intro(theme::bold(title));
+        }
+    }
+
+    pub(crate) fn outro(&self, text: &str) {
+        if self.human() {
+            let _ = cliclack::outro(text);
+        }
+    }
+
+    /// A section on the rail: a title and its lines.
+    pub(crate) fn section(&self, title: &str, lines: &[String]) {
+        if self.human() {
+            let mut text = title.to_owned();
+            for line in lines {
+                text.push('\n');
+                text.push_str(line);
+            }
+            let _ = cliclack::log::step(text);
+        }
+    }
+
+    pub(crate) fn info(&self, text: &str) {
+        if self.human() {
+            let _ = cliclack::log::info(text);
+        }
+    }
+
+    pub(crate) fn warn(&self, text: &str) {
+        if self.human() {
+            let _ = cliclack::log::warning(text);
+        }
+    }
+
+    pub(crate) fn success(&self, text: &str) {
+        if self.human() {
+            let _ = cliclack::log::success(text);
+        }
+    }
+
+    /// The daemon session, starting the daemon first when the profile exists but its daemon is not running.
+    pub(crate) async fn client(&self) -> Result<&DaemonClient> {
+        self.connect(false).await
+    }
+
+    /// The daemon session, starting the daemon even for a profile not set up yet (`ome init`).
+    pub(crate) async fn client_for_setup(&self) -> Result<&DaemonClient> {
+        self.connect(true).await
+    }
+
+    async fn connect(&self, setup: bool) -> Result<&DaemonClient> {
+        self.client
+            .get_or_try_init(|| async {
+                match DaemonClient::discover(&self.profile).await {
+                    Ok(client) => Ok(client),
+                    Err(_) if setup || launch::profile_exists(&self.profile) => {
+                        launch::start(self).await?;
+                        Ok(DaemonClient::discover(&self.profile).await?)
+                    }
+                    Err(_) => Err(Error::new(
+                        crate::error::Exit::Daemon,
+                        format!("There is no profile {:?} yet.", self.profile.name()),
+                    )
+                    .hint(format!("Set one up with `{}`.", self.ome("init")))),
+                }
+            })
+            .await
+    }
+
+    /// A session with an already-running daemon, never starting one.
+    pub(crate) async fn running_client(&self) -> Option<&DaemonClient> {
+        if let Some(client) = self.client.get() {
+            return Some(client);
+        }
+        let client = DaemonClient::discover(&self.profile).await.ok()?;
+        let _ = self.client.set(client);
+        self.client.get()
+    }
+
+    /// Restarts the daemon, which reads some settings (the node URL) only as it starts.
+    pub(crate) async fn restart_daemon(&mut self) -> Result<()> {
+        self.drop_client();
+        launch::stop(&self.profile).await?;
+        launch::start(self).await?;
+        Ok(())
+    }
+
+    /// Forgets the session, after the daemon stopped.
+    pub(crate) fn drop_client(&mut self) {
+        self.client = OnceCell::new();
+    }
+}
+
+/// The profile `ome profile use` chose, or the default.
+fn current_profile(home: &Home) -> String {
+    std::fs::read_to_string(home.root().join(CURRENT_PROFILE))
+        .map(|name| name.trim().to_owned())
+        .ok()
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| DEFAULT_PROFILE.to_owned())
+}
