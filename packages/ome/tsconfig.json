@@ -1,0 +1,9 @@
+{
+  "extends": "klarity/tsconfig/library/node",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true
+  },
+  "include": ["bin"]
+}

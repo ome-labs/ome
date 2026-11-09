@@ -11,6 +11,12 @@ release/
 *.tsbuildinfo
 coverage/
 
+# The repository's LICENSE, copied into each npm package when it is packed (scripts/packaging/npm.ts)
+packages/*/LICENSE
+!packages/pxe/LICENSE
+crates/wasm/LICENSE
+contracts/LICENSE
+
 # @ome-labs/pxe: Aztec's dest/ with our patch, built by packages/pxe/scripts/fork.ts
 packages/pxe/dest/
 

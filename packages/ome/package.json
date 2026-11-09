@@ -1,0 +1,51 @@
+{
+  "name": "@ome-labs/ome",
+  "version": "0.0.0",
+  "description": "Ome, a private k-of-n multisig on Aztec: the ome command line, its daemon omed and the ome-keeper that holds your viewing share",
+  "keywords": [
+    "aztec",
+    "cli",
+    "multisig",
+    "ome",
+    "privacy",
+    "threshold-cryptography",
+    "wallet"
+  ],
+  "homepage": "https://ome.network",
+  "bugs": "https://github.com/ome-labs/ome/issues",
+  "license": "Apache-2.0",
+  "author": "Ome Labs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ome-labs/ome.git",
+    "directory": "packages/ome"
+  },
+  "bin": {
+    "ome": "./bin/ome.js",
+    "ome-keeper": "./bin/ome-keeper.js",
+    "omed": "./bin/omed.js"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ome-labs/daemon": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "klarity": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
