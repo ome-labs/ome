@@ -29,4 +29,4 @@ pub const API_VERSION: u32 = 0;
 /// The Ome release these crates belong to: `ome`, `ome-keeper` and `omed` of one release report the same version.
 /// release-please sets it, which leaves the crates' own Cargo version (and `Cargo.lock`) alone: the crates are not
 /// published on their own.
-pub const RELEASE_VERSION: &str = "0.0.0"; // x-release-please-version
+pub const RELEASE_VERSION: &str = "0.1.0"; // x-release-please-version

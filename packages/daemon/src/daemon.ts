@@ -42,7 +42,7 @@ import { SignerService } from "./signer/signer.ts";
 import { VaultService } from "./vaults/service.ts";
 
 /** Release of this daemon. */
-export const DAEMON_VERSION = "0.0.0"; // x-release-please-version
+export const DAEMON_VERSION = "0.1.0"; // x-release-please-version
 
 const SYNC_INTERVAL_MS = 15_000;
 const ACCOUNT_SECRET = "account";

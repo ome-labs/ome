@@ -16,7 +16,7 @@ use ome_relay::{Error, Limits, Relay, RelayConfig, Result, health, store::Mailbo
 use serde_json::json;
 
 /// The release this relay belongs to; release-please updates it.
-const VERSION: &str = "0.0.0"; // x-release-please-version
+const VERSION: &str = "0.1.0"; // x-release-please-version
 
 #[derive(Parser)]
 #[command(
