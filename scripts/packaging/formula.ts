@@ -47,6 +47,8 @@ class Ome < Formula
   version "${release}"
   license "Apache-2.0"
 
+  depends_on "node@24"
+
   on_macos do
     on_arm do
       ${block("darwin-arm64")}
@@ -62,12 +64,10 @@ class Ome < Formula
     end
   end
 
-  depends_on "node@24"
-
   def install
     libexec.install Dir["*"]
     # The daemon runs with Homebrew's Node, also when a login service starts it without PATH.
-    inreplace libexec/"bin/omed", 'node_default=""', %Q(node_default="#{Formula["node@24"].opt_bin}/node")
+    inreplace libexec/"bin/omed", 'node_default=""', %Q(node_default="#{formula_opt_bin("node@24")}/node")
     bin.install_symlink libexec/"bin/ome", libexec/"bin/omed", libexec/"bin/ome-keeper"
   end
 
