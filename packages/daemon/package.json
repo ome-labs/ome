@@ -12,6 +12,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "bench:proving": "node scripts/bench-proving.ts",
+    "drill:testnet": "node scripts/drill-testnet.ts",
     "test": "vitest run",
     "test:e2e": "vitest run -c vitest.e2e.config.ts",
     "test:removal": "vitest run -c vitest.removal.config.ts",

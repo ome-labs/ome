@@ -44,7 +44,11 @@ export async function member(name: string, settings: Partial<Settings> = {}): Pr
   const client = await DaemonClient.discover("default", home);
   const events: DaemonEvent[] = [];
   await client.subscribe((event) => events.push(event));
-  await client.call("profile.create", { name, nodeUrl: NODE_URL, passphrase: PASSPHRASE });
+  await client.call("profile.create", {
+    name,
+    nodeUrl: settings.nodeUrl ?? NODE_URL,
+    passphrase: PASSPHRASE,
+  });
   await client.call("signer.unlock", { secret: { passphrase: PASSPHRASE }, ttlSecs: 3600 });
   return {
     name,
@@ -64,6 +68,7 @@ export async function until<T>(
   check: () => Promise<T | undefined>,
   what: string,
   timeoutMs = 600_000,
+  intervalMs = 500,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -72,7 +77,7 @@ export async function until<T>(
     if (value !== undefined) return value;
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
     // oxlint-disable-next-line no-await-in-loop
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 }
 
