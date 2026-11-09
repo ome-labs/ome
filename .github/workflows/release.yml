@@ -483,19 +483,23 @@ jobs:
           pattern: platform-*
           path: npm
           merge-multiple: true
-      # Dependencies first, the launcher last. A version already on npm (the PXE fork between its own releases, or a
-      # re-run) is skipped.
+      # Dependencies first, the launcher last. Publishes without asking the registry first: a new version can take
+      # minutes to show up there. A version npm already has (the PXE fork between its own releases, or a re-run) is
+      # skipped; any other error fails the job.
       - name: Publish
         run: |
+          set -o pipefail
           for name in ome-darwin-arm64 ome-linux-x64 ome-linux-arm64 api wasm contracts pxe wallet daemon ome; do
             file=$(ls ./npm/ome-labs-$name-[0-9]*.tgz)
-            version=$(tar -xOzf "$file" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).version')
-            if npm view "@ome-labs/$name@$version" version > /dev/null 2>&1; then
-              echo "@ome-labs/$name@$version is already published"
+            # A path without ./ would be read as a GitHub repository (npm/<name>). The PXE fork's version
+            # (6.0.0-ome.N) is a prerelease, which npm publishes only with an explicit tag.
+            if npm publish "$file" --access public --tag latest 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
+              continue
+            fi
+            if grep -qiE "previously published|cannot publish over|previously staged" "$RUNNER_TEMP/npm.log"; then
+              echo "$file: this version is already on npm, skipped"
             else
-              # A path without ./ would be read as a GitHub repository (npm/<name>). The PXE fork's version
-              # (6.0.0-ome.N) is a prerelease, which npm publishes only with an explicit tag.
-              npm publish "$file" --access public --tag latest
+              exit 1
             fi
           done
 
@@ -546,7 +550,7 @@ jobs:
 
   published:
     name: Published (${{ matrix.platform }})
-    needs: [plan, github-release, npm-publish, manifests]
+    needs: [plan, github-release, manifests]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -567,16 +571,6 @@ jobs:
         with:
           node-version-file: .node-version
           package-manager-cache: false
-      - name: npm
-        run: |
-          prefix="$RUNNER_TEMP/npm"
-          # The registry can take a few minutes to serve a new version everywhere.
-          for attempt in 1 2 3 4 5 6; do
-            npm install --global --prefix "$prefix" --no-audit --no-fund "@ome-labs/ome@$VERSION" && break
-            [ "$attempt" = 6 ] && exit 1
-            sleep 30
-          done
-          PATH="$prefix/bin:$PATH" node scripts/packaging/smoke.ts "$VERSION" npm
       - name: Install script
         run: |
           curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION/install.sh" \

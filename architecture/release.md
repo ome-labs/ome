@@ -71,19 +71,19 @@ offline backup.
 its tag `v<version>`, then dispatches `.github/workflows/release.yml` on that tag with `publish` on (a tag pushed with
 `GITHUB_TOKEN` would not start a workflow; a dispatch does). Dispatching `release.yml` by hand on `main` is a dry run.
 
-| Job                            | Does                                                                                                                 |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| Verify                         | all of `ci.yml` on the commit                                                                                        |
-| npm packages                   | builds the workspace and packs every package (`scripts/packaging/npm.ts`)                                            |
-| Binaries                       | `cargo auditable build --release` of `ome` and `ome-keeper` on each platform's own runner                            |
-| Sign macOS binaries            | signs with the certificate in a temporary keychain; checks the designated requirement (publish only)                 |
-| Package                        | platform npm packages and archives (`platform.ts`, `archive.ts`) on each platform                                    |
-| Checksums, SBOMs, attestations | `SHA256SUMS`, syft SBOMs, `install.sh`, the formula; GitHub build attestations (publish only)                        |
-| Install                        | npm, the install script (with and without Node) and Homebrew from the built files, then `scripts/packaging/smoke.ts` |
-| Images, manifests              | per-architecture builds pushed by digest with SBOM and provenance, then tagged and cosign-signed                     |
-| Publish to npm                 | trusted publishing (OIDC, no token; provenance attached); skips versions already published                           |
-| GitHub release and Homebrew    | uploads the files, publishes the draft, commits the formula to the tap                                               |
-| Published                      | installs the released version through every path and verifies attestations and signatures                            |
+| Job                            | Does                                                                                                                                                                               |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Verify                         | all of `ci.yml` on the commit                                                                                                                                                      |
+| npm packages                   | builds the workspace and packs every package (`scripts/packaging/npm.ts`)                                                                                                          |
+| Binaries                       | `cargo auditable build --release` of `ome` and `ome-keeper` on each platform's own runner                                                                                          |
+| Sign macOS binaries            | signs with the certificate in a temporary keychain; checks the designated requirement (publish only)                                                                               |
+| Package                        | platform npm packages and archives (`platform.ts`, `archive.ts`) on each platform                                                                                                  |
+| Checksums, SBOMs, attestations | `SHA256SUMS`, syft SBOMs, `install.sh`, the formula; GitHub build attestations (publish only)                                                                                      |
+| Install                        | npm, the install script (with and without Node) and Homebrew from the built files, then `scripts/packaging/smoke.ts`                                                               |
+| Images, manifests              | per-architecture builds pushed by digest with SBOM and provenance, then tagged and cosign-signed                                                                                   |
+| Publish to npm                 | trusted publishing (OIDC, no token; provenance attached); publishes without querying the registry first, and skips a version npm reports as already published                      |
+| GitHub release and Homebrew    | uploads the files, publishes the draft, commits the formula to the tap                                                                                                             |
+| Published                      | installs the release through the install script and Homebrew and verifies attestations and image signatures; npm is not re-checked, since a new version can take minutes to appear |
 
 Jobs that sign or publish run in the `release` environment, which allows only `v*` tags and needs a maintainer's
 approval: once for signing, once for publishing. Every job gets only the permissions it uses; release builds use no
