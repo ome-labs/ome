@@ -146,6 +146,17 @@ payer the signer trusts in rotations and the one paired devices are told about.
   `handshakeAdvised` if any counterparty is exposed, so the member can ask them to.
 - Address-book contacts are registered in the PXE as tagging sources (`registerSender`), so their notes to the vault
   are found by the tags they share with it.
+- `tokens.remove` stops tracking a token.
+
+## Working with aztec-wallet
+
+`aztec.aliases` reads `aztec-wallet`'s typed aliases (`accounts:…`, `contracts:…`, `artifacts:…`) from its own store
+(`@aztec-labs/cli-wallet` keeps them in the `aliases` map of an LMDB store, `@aztec-labs/kv-store` 6.0.0) in
+`settings.aztecWalletDir`, default `~/.aztec/wallet`. The store is opened for each call only. A directory without a
+store is checked first: opening a missing one aborts the process from the native binding.
+
+With `settings.aztecWalletSync` on, `vault.alias` also writes `accounts:<alias>` into that store, so `aztec-wallet` can
+pay the vault by name; `aztec.alias` writes one alias. Sync is off by default.
 
 ## Membership
 

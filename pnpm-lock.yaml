@@ -324,6 +324,9 @@ importers:
       '@aztec-labs/foundation':
         specifier: 'catalog:'
         version: 6.0.0(supports-color@7.2.0)
+      '@aztec-labs/kv-store':
+        specifier: 'catalog:'
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
       '@aztec-labs/noir-contracts.js':
         specifier: 'catalog:'
         version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)

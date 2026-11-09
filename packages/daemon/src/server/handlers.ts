@@ -9,6 +9,7 @@ import type {
   VaultSummary,
 } from "@ome-labs/api";
 
+import { listAliases, setAlias, walletDir } from "../aztec/aliases.ts";
 import type { Daemon } from "../daemon.ts";
 import { DaemonError, require } from "../errors.ts";
 import { artifactOf } from "../proposals/intents.ts";
@@ -51,6 +52,8 @@ export const handlers: Handlers = {
       if (p.proverEnabled !== undefined) file.settings.proverEnabled = p.proverEnabled;
       if (p.unlockTimeoutSecs !== undefined) file.settings.unlockTimeoutSecs = p.unlockTimeoutSecs;
       if (p.feePayerSalt !== undefined) file.settings.feePayerSalt = lower(p.feePayerSalt);
+      if (p.aztecWalletDir !== undefined) file.settings.aztecWalletDir = p.aztecWalletDir || null;
+      if (p.aztecWalletSync !== undefined) file.settings.aztecWalletSync = p.aztecWalletSync;
     });
     if (p.feePayerSalt !== undefined) await d.setFeePayer(d.state.file.settings.feePayerSalt);
     return d.state.file.settings;
@@ -136,6 +139,12 @@ export const handlers: Handlers = {
     await d.state.update((file) => {
       file.aliases[vault] = p.alias;
     });
+    // With sync on, aztec-wallet can pay the vault by name too.
+    if (d.state.file.settings.aztecWalletSync)
+      await setAlias(walletDir(d.state.file.settings.aztecWalletDir), {
+        key: `accounts:${p.alias}`,
+        value: vault,
+      });
     return vaultList(d);
   },
   "vault.retire": async (d, p) => {
@@ -165,6 +174,14 @@ export const handlers: Handlers = {
       ];
     });
     return info;
+  },
+  "tokens.remove": async (d, p) => {
+    const vault = d.vaults.record(lower(p.vault)).address;
+    const token = lower(p.token);
+    await d.state.update((file) => {
+      file.tokens[vault] = (file.tokens[vault] ?? []).filter((t) => t.address !== token);
+    });
+    return d.state.file.tokens[vault] ?? [];
   },
   "tokens.deployTest": async (d, p) => {
     const vault = d.vaults.record(lower(p.vault)).address;
@@ -210,6 +227,13 @@ export const handlers: Handlers = {
   },
 
   "contacts.list": async (d) => d.state.file.contacts,
+  "aztec.aliases": async (d) => listAliases(walletDir(d.state.file.settings.aztecWalletDir)),
+  "aztec.alias": async (d, p) => {
+    require(d.state.file.settings
+      .aztecWalletSync, "aztec-wallet sync is off: ome config set aztec-wallet.sync on");
+    await setAlias(walletDir(d.state.file.settings.aztecWalletDir), p);
+    return null;
+  },
   "contacts.put": async (d, p) => {
     const address = lower(p.address);
     require(ALIAS.test(p.label), "labels are lowercase letters, digits, - and _");

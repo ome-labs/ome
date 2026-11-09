@@ -43,6 +43,10 @@ pub struct Settings {
     pub fee_payer_salt: Hex32,
     /// The keeper on another machine this daemon uses instead of running its own.
     pub remote_keeper: Option<RemoteKeeper>,
+    /// `aztec-wallet`'s data directory, when not `~/.aztec/wallet`.
+    pub aztec_wallet_dir: Option<String>,
+    /// Also write vault aliases into `aztec-wallet`'s store (`accounts:<alias>`), so it can pay a vault by name.
+    pub aztec_wallet_sync: bool,
 }
 
 /// Params of `config.set`: the settings to change.
@@ -65,6 +69,14 @@ pub struct SettingsPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub fee_payer_salt: Option<Hex32>,
+    /// `aztec-wallet`'s data directory; empty for the default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub aztec_wallet_dir: Option<String>,
+    /// Write vault aliases into `aztec-wallet`'s store.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub aztec_wallet_sync: Option<bool>,
 }
 
 /// Params of `relays.set`.

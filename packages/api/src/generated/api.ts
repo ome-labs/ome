@@ -1576,6 +1576,14 @@ export type Settings = {
    * The keeper on another machine this daemon uses instead of running its own.
    */
   remoteKeeper: RemoteKeeper | null;
+  /**
+   * `aztec-wallet`'s data directory, when not `~/.aztec/wallet`.
+   */
+  aztecWalletDir: string | null;
+  /**
+   * Also write vault aliases into `aztec-wallet`'s store (`accounts:<alias>`), so it can pay a vault by name.
+   */
+  aztecWalletSync: boolean;
 };
 
 /**
@@ -1598,6 +1606,14 @@ export type SettingsPatch = {
    * Salt of the fee payer's `SponsoredFPC` instance.
    */
   feePayerSalt?: Hex32;
+  /**
+   * `aztec-wallet`'s data directory; empty for the default.
+   */
+  aztecWalletDir?: string;
+  /**
+   * Write vault aliases into `aztec-wallet`'s store.
+   */
+  aztecWalletSync?: boolean;
 };
 
 /**
@@ -3564,6 +3580,34 @@ export type KeeperConnectParams = {
   remote: RemoteKeeperParams | null;
 };
 
+/**
+ * An alias in `aztec-wallet`'s store, such as `accounts:alice` or `contracts:usdc`.
+ */
+export type AztecAlias = {
+  /**
+   * `<type>:<name>`.
+   */
+  key: string;
+  /**
+   * What it stands for: an address, or an artifact path.
+   */
+  value: string;
+};
+
+/**
+ * Params of `tokens.remove`.
+ */
+export type TokenRefParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * Token contract.
+   */
+  token: Hex32;
+};
+
 /** Every keeper method: what it takes and returns. */
 export interface KeeperMethods {
   "session.auth": { params: AuthParams; result: null };
@@ -3647,6 +3691,7 @@ export interface DaemonMethods {
   "vault.use": { params: VaultParams; result: Array<VaultSummary> };
   "tokens.list": { params: VaultParams; result: Array<TokenBalance> };
   "tokens.add": { params: TokenParams; result: TokenInfo };
+  "tokens.remove": { params: TokenRefParams; result: Array<TokenInfo> };
   "tokens.deployTest": { params: VaultParams; result: TokenInfo };
   "proposals.list": { params: VaultParams; result: Array<ProposalView> };
   "proposals.get": { params: ProposalRef; result: ProposalView };
@@ -3659,6 +3704,8 @@ export interface DaemonMethods {
   "proposals.cancel": { params: ProposalRef; result: ProposalView };
   "contracts.functions": { params: ContractParams; result: Array<ContractFunction> };
   "contacts.list": { params: Empty; result: Array<Contact> };
+  "aztec.aliases": { params: Empty; result: Array<AztecAlias> };
+  "aztec.alias": { params: AztecAlias; result: null };
   "contacts.put": { params: ContactParams; result: Array<Contact> };
   "contacts.remove": { params: AddressParams; result: Array<Contact> };
   "membership.request": { params: Empty; result: JoinRequestText };

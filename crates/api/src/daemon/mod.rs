@@ -92,6 +92,24 @@ pub struct TokenDeployment {
     pub decimals: u8,
 }
 
+/// An alias in `aztec-wallet`'s store, such as `accounts:alice` or `contracts:usdc`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AztecAlias {
+    /// `<type>:<name>`.
+    pub key: String,
+    /// What it stands for: an address, or an artifact path.
+    pub value: String,
+}
+
+/// Params of `tokens.remove`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct TokenRefParams {
+    /// Vault.
+    pub vault: Hex32,
+    /// Token contract.
+    pub token: Hex32,
+}
+
 /// Params of `contracts.functions`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct ContractParams {
@@ -192,6 +210,8 @@ methods! {
     TokensList = "tokens.list" (VaultParams) -> Vec<TokenBalance>;
     /// Tracks a token.
     TokensAdd = "tokens.add" (TokenParams) -> TokenInfo;
+    /// Stops tracking a token.
+    TokensRemove = "tokens.remove" (TokenRefParams) -> Vec<TokenInfo>;
     /// Deploys a test token and mints to the vault (local network only).
     TokensDeployTest = "tokens.deployTest" (VaultParams) -> TokenInfo;
     /// The vault's proposals.
@@ -216,6 +236,10 @@ methods! {
     ContractsFunctions = "contracts.functions" (ContractParams) -> Vec<ContractFunction>;
     /// The address book.
     ContactsList = "contacts.list" (Empty) -> Vec<Contact>;
+    /// `aztec-wallet`'s aliases (`accounts:…`, `contracts:…`, `artifacts:…`), read from its store.
+    AztecAliases = "aztec.aliases" (Empty) -> Vec<AztecAlias>;
+    /// Writes an alias into `aztec-wallet`'s store, when `aztecWalletSync` is on.
+    AztecAliasSet = "aztec.alias" (AztecAlias) -> ();
     /// Adds or relabels a contact.
     ContactsPut = "contacts.put" (ContactParams) -> Vec<Contact>;
     /// Removes a contact.

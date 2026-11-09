@@ -19,6 +19,8 @@ export const DEFAULT_SETTINGS: Settings = {
   feePayerSalt: `0x${"00".repeat(32)}`,
   unlockTimeoutSecs: 3600,
   remoteKeeper: null,
+  aztecWalletDir: null,
+  aztecWalletSync: false,
 };
 
 /** The profile file, read once and written on every change. */

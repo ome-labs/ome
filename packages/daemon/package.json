@@ -22,6 +22,7 @@
   "dependencies": {
     "@aztec-labs/aztec.js": "catalog:",
     "@aztec-labs/foundation": "catalog:",
+    "@aztec-labs/kv-store": "catalog:",
     "@aztec-labs/noir-contracts.js": "catalog:",
     "@aztec-labs/stdlib": "catalog:",
     "@ome-labs/api": "workspace:*",
