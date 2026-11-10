@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{
-    AbiValue, DecodedArg, Effects, FunctionKind, GovernanceChange, ReviewError, Secret,
-    SimulationError, TokenInfo,
+    AbiValue, DecodedArg, Effects, FeeEstimate, FunctionKind, GovernanceChange, MemberRef,
+    ReviewError, Secret, SimulationError, TokenInfo,
 };
 use crate::{Amount, Hex32};
 
@@ -93,10 +93,14 @@ pub struct Vote {
     pub index: u32,
     /// Name.
     pub name: String,
+    /// An approval, or a rejection.
+    pub approve: bool,
     /// Whether the signature verifies.
     pub valid: bool,
     /// Reason, for rejections.
     pub reason: Option<String>,
+    /// Unix seconds this member's keeper first stored it.
+    pub at: u64,
 }
 
 /// A call as the payload encodes it, decoded with the contract's artifact when this member has it.
@@ -132,13 +136,31 @@ pub struct Proposer {
 }
 
 /// An execution.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Execution {
     /// Transaction.
     pub tx_hash: Hex32,
     /// Unix seconds.
     pub at: u64,
+    /// The member who executed it, from the receipt their keeper signed; `None` when they are no longer a member.
+    pub executor: Option<MemberRef>,
+    /// Block that included it.
+    pub block: Option<u64>,
+}
+
+/// A member executing a proposal right now.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionView {
+    /// Who.
+    pub member: MemberRef,
+    /// How far they are.
+    pub phase: ExecutionPhase,
+    /// Unix seconds they started.
+    pub since: u64,
+    /// Whether it is this member.
+    pub mine: bool,
 }
 
 /// A proposal as this member sees it.
@@ -159,10 +181,8 @@ pub struct ProposalView {
     pub threshold: u32,
     /// Members.
     pub members: u32,
-    /// Approvals.
-    pub approvals: Vec<Vote>,
-    /// Valid rejections from slots that have not also approved.
-    pub rejections: Vec<Vote>,
+    /// Approvals, then valid rejections from slots that have not also approved, each with its time.
+    pub votes: Vec<Vote>,
     /// This member's slot.
     pub my_slot: u32,
     /// Whether this member approved.
@@ -173,6 +193,8 @@ pub struct ProposalView {
     pub config_version: u32,
     /// The vault's current config version.
     pub current_config_version: u32,
+    /// Unix seconds the proposer made it (the clock `expires_at` uses).
+    pub created_at: u64,
     /// Unix seconds it expires.
     pub expires_at: u64,
     /// Transaction nonce.
@@ -189,8 +211,22 @@ pub struct ProposalView {
     pub token: Option<TokenInfo>,
     /// The execution, once executed.
     pub execution: Option<Execution>,
+    /// A member executing it right now.
+    pub executing: Option<ExecutionView>,
     /// The cancel proposal targeting it, or the proposal a cancel targets.
     pub cancelled_by: Option<Hex32>,
+}
+
+impl ProposalView {
+    /// The approvals among `votes`.
+    pub fn approvals(&self) -> impl Iterator<Item = &Vote> {
+        self.votes.iter().filter(|v| v.approve)
+    }
+
+    /// The rejections among `votes`.
+    pub fn rejections(&self) -> impl Iterator<Item = &Vote> {
+        self.votes.iter().filter(|v| !v.approve)
+    }
 }
 
 /// Gas a simulation used.
@@ -250,6 +286,8 @@ pub struct Simulation {
     pub error: Option<SimulationError>,
     /// What it does to the vault, when it succeeded.
     pub effects: Option<Effects>,
+    /// What it is expected to cost, when it succeeded.
+    pub fee: Option<FeeEstimate>,
 }
 
 /// What a signature covers.
@@ -300,6 +338,20 @@ pub struct ProposalPreview {
     pub error: Option<SimulationError>,
     /// What it would do to the vault, when it succeeded.
     pub effects: Option<Effects>,
+    /// What it is expected to cost, when it succeeded.
+    pub fee: Option<FeeEstimate>,
+}
+
+/// Params of `proposals.execute`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ExecuteParams {
+    /// Vault.
+    pub vault: Hex32,
+    /// Proposal id.
+    pub id: Hex32,
+    /// Execute even while another member is: both prove, and the proposal's nonce lets one land.
+    #[ts(optional)]
+    pub force: Option<bool>,
 }
 
 /// Params naming a proposal.

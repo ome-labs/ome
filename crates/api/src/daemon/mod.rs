@@ -3,6 +3,7 @@
 mod contracts;
 mod devices;
 mod events;
+mod fees;
 mod founding;
 mod membership;
 mod proposals;
@@ -17,6 +18,7 @@ pub use contracts::{
 };
 pub use devices::{DeviceView, EnrollParams, SwapSignerParams};
 pub use events::{DaemonEvent, EventEnvelope, EventSeq, SubscribeParams, Subscription};
+pub use fees::{FeeEstimate, FeePayerKind, FeesStatus};
 pub use founding::{
     FoundingError, FoundingState, FoundingStep, FoundingStepId, InviteHost, InvitePreview,
     LobbyCreateParams, LobbyView, LobbyViewMember, StartLobbyParams, StepStatus,
@@ -26,10 +28,10 @@ pub use membership::{
     RotationState, RotationStep, RotationStepId,
 };
 pub use proposals::{
-    ApproveParams, DecodedCall, Execution, ExecutionPhase, ExecutionProgress, Gas, Intent,
-    IntentCall, LabelSource, ProposalPreview, ProposalRef, ProposalStatus, ProposalView,
-    ProposeParams, Proposer, Recipient, RejectParams, Review, ReviewChecks, Signs, Simulation,
-    Vote,
+    ApproveParams, DecodedCall, ExecuteParams, Execution, ExecutionPhase, ExecutionProgress,
+    ExecutionView, Gas, Intent, IntentCall, LabelSource, ProposalPreview, ProposalRef,
+    ProposalStatus, ProposalView, ProposeParams, Proposer, Recipient, RejectParams, Review,
+    ReviewChecks, Signs, Simulation, Vote,
 };
 pub use review::{
     BalanceChange, CallResult, Effects, GovernanceChange, NoteCounts, PolicyWarning, ReviewError,
@@ -164,6 +166,8 @@ methods! {
     SignerSealingKey = "signer.sealingKey" (PassphraseParams) -> SealingKey;
     /// Checks the node now.
     NodeStatusGet = "node.status" (Empty) -> NodeStatus;
+    /// The fee payer this member trusts and its Fee Juice.
+    FeesStatusGet = "fees.status" (Empty) -> FeesStatus;
     /// Decodes an invite.
     LobbyInspect = "lobby.inspect" (InviteParams) -> InvitePreview;
     /// Opens a lobby as host.
@@ -223,8 +227,8 @@ methods! {
     ProposalsApprove = "proposals.approve" (ApproveParams) -> ProposalView;
     /// Rejects.
     ProposalsReject = "proposals.reject" (RejectParams) -> ProposalView;
-    /// Executes a ready proposal from this device.
-    ProposalsExecute = "proposals.execute" (ProposalRef) -> ProposalView;
+    /// Executes a ready proposal from this device; refuses with `conflict` while another member is executing it.
+    ProposalsExecute = "proposals.execute" (ExecuteParams) -> ProposalView;
     /// Proposes cancelling a proposal.
     ProposalsCancel = "proposals.cancel" (ProposalRef) -> ProposalView;
     /// A contract's functions.

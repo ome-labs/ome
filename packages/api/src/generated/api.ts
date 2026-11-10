@@ -896,7 +896,7 @@ export type PayloadParams = {
 };
 
 /**
- * Params of `receipts.put`.
+ * Params of `receipts.put`: this keeper's member executed `proposal`, and the keeper signs the receipt.
  */
 export type ReceiptParams = {
   /**
@@ -911,6 +911,10 @@ export type ReceiptParams = {
    * Transaction that executed it.
    */
   txHash: Hex32;
+  /**
+   * Block that included it.
+   */
+  block: number;
 };
 
 /**
@@ -929,6 +933,80 @@ export type Receipt = {
    * Unix seconds it was stored.
    */
   at: number;
+  /**
+   * Block that included it.
+   */
+  block: number;
+  /**
+   * The executing member's index in the current committee; `None` when its keeper is no longer a member.
+   */
+  executor: number | null;
+};
+
+/**
+ * A stored approval or rejection, with when this keeper first stored it.
+ */
+export type StoredVote = {
+  /**
+   * Canonical encoding.
+   */
+  body: HexBytes;
+  /**
+   * Unix seconds this keeper stored it.
+   */
+  at: number;
+};
+
+/**
+ * Params of `claims.put`: this keeper's member is executing `proposal`.
+ */
+export type ClaimParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * Proposal being executed.
+   */
+  proposal: Hex32;
+  /**
+   * How far it is; `mined` or `failed` ends the claim.
+   */
+  phase: ExecutionPhase;
+  /**
+   * Unix seconds the execution started.
+   */
+  startedAt: number;
+};
+
+/**
+ * A member executing a proposal, as a claim this keeper holds.
+ */
+export type Claim = {
+  /**
+   * Proposal being executed.
+   */
+  proposal: Hex32;
+  /**
+   * The executing member's index.
+   */
+  member: number;
+  /**
+   * How far it is.
+   */
+  phase: ExecutionPhase;
+  /**
+   * Unix seconds the execution started.
+   */
+  startedAt: number;
+  /**
+   * Unix seconds of its last update; a claim lapses `CLAIM_TTL_SECS` after it.
+   */
+  updatedAt: number;
+  /**
+   * Whether it is this keeper's member.
+   */
+  mine: boolean;
 };
 
 /**
@@ -1683,6 +1761,29 @@ export type KeeperEvent =
        * Transaction hash.
        */
       txHash: Hex32;
+      /**
+       * The executing member's index, when its keeper is a member.
+       */
+      executor: number | null;
+    }
+  | {
+      type: "claim";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Proposal id.
+       */
+      proposal: Hex32;
+      /**
+       * The executing member's index.
+       */
+      member: number;
+      /**
+       * How far it is; `mined` or `failed` ends the claim.
+       */
+      phase: ExecutionPhase;
     }
   | {
       type: "lobby";
@@ -2095,6 +2196,10 @@ export type Status = {
    * The vault commands use when none is named.
    */
   defaultVault: Hex32 | null;
+  /**
+   * The fee payer and its Fee Juice, once the daemon has a wallet.
+   */
+  fees: FeesStatus | null;
 };
 
 /**
@@ -2877,6 +2982,10 @@ export type Vote = {
    */
   name: string;
   /**
+   * An approval, or a rejection.
+   */
+  approve: boolean;
+  /**
    * Whether the signature verifies.
    */
   valid: boolean;
@@ -2884,6 +2993,10 @@ export type Vote = {
    * Reason, for rejections.
    */
   reason: string | null;
+  /**
+   * Unix seconds this member's keeper first stored it.
+   */
+  at: number;
 };
 
 /**
@@ -2950,6 +3063,103 @@ export type Execution = {
    * Unix seconds.
    */
   at: number;
+  /**
+   * The member who executed it, from the receipt their keeper signed; `None` when they are no longer a member.
+   */
+  executor: MemberRef | null;
+  /**
+   * Block that included it.
+   */
+  block: number | null;
+};
+
+/**
+ * A member executing a proposal right now.
+ */
+export type ExecutionView = {
+  /**
+   * Who.
+   */
+  member: MemberRef;
+  /**
+   * How far they are.
+   */
+  phase: ExecutionPhase;
+  /**
+   * Unix seconds they started.
+   */
+  since: number;
+  /**
+   * Whether it is this member.
+   */
+  mine: boolean;
+};
+
+/**
+ * Params of `proposals.execute`.
+ */
+export type ExecuteParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * Proposal id.
+   */
+  id: Hex32;
+  /**
+   * Execute even while another member is: both prove, and the proposal's nonce lets one land.
+   */
+  force?: boolean;
+};
+
+/**
+ * The fee payer and its Fee Juice.
+ */
+export type FeesStatus = {
+  /**
+   * The fee payer contract.
+   */
+  payer: Hex32;
+  /**
+   * Whose it is.
+   */
+  kind: FeePayerKind;
+  /**
+   * Its Fee Juice, in base units; `None` when the node can't be read.
+   */
+  feeJuice: Amount | null;
+  /**
+   * It holds Fee Juice to pay with.
+   */
+  healthy: boolean;
+};
+
+/**
+ * Whose fee payer it is.
+ */
+export type FeePayerKind = "sponsored" | "own";
+
+/**
+ * What a transaction is expected to cost, from its simulation and the node's current fees.
+ */
+export type FeeEstimate = {
+  /**
+   * Gas the simulation used.
+   */
+  gas: Gas;
+  /**
+   * Its cost at the node's current minimum fees, in Fee Juice base units.
+   */
+  fee: Amount;
+  /**
+   * The most it may cost: Aztec's wallet pads the fee per gas by half against fee changes before inclusion.
+   */
+  maxFee: Amount;
+  /**
+   * Who pays.
+   */
+  payer: Hex32;
 };
 
 /**
@@ -2985,13 +3195,9 @@ export type ProposalView = {
    */
   members: number;
   /**
-   * Approvals.
+   * Approvals, then valid rejections from slots that have not also approved, each with its time.
    */
-  approvals: Array<Vote>;
-  /**
-   * Valid rejections from slots that have not also approved.
-   */
-  rejections: Array<Vote>;
+  votes: Array<Vote>;
   /**
    * This member's slot.
    */
@@ -3012,6 +3218,10 @@ export type ProposalView = {
    * The vault's current config version.
    */
   currentConfigVersion: number;
+  /**
+   * Unix seconds the proposer made it (the clock `expires_at` uses).
+   */
+  createdAt: number;
   /**
    * Unix seconds it expires.
    */
@@ -3044,6 +3254,10 @@ export type ProposalView = {
    * The execution, once executed.
    */
   execution: Execution | null;
+  /**
+   * A member executing it right now.
+   */
+  executing: ExecutionView | null;
   /**
    * The cancel proposal targeting it, or the proposal a cancel targets.
    */
@@ -3133,6 +3347,10 @@ export type Simulation = {
    * What it does to the vault, when it succeeded.
    */
   effects: Effects | null;
+  /**
+   * What it is expected to cost, when it succeeded.
+   */
+  fee: FeeEstimate | null;
 };
 
 /**
@@ -3219,6 +3437,10 @@ export type ProposalPreview = {
    * What it would do to the vault, when it succeeded.
    */
   effects: Effects | null;
+  /**
+   * What it is expected to cost, when it succeeded.
+   */
+  fee: FeeEstimate | null;
 };
 
 /**
@@ -4119,6 +4341,29 @@ export type DaemonEvent =
       summary: string;
     }
   | {
+      type: "proposalExecuting";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Proposal id.
+       */
+      proposal: Hex32;
+      /**
+       * One line.
+       */
+      summary: string;
+      /**
+       * Who.
+       */
+      by: MemberRef;
+      /**
+       * How far they are.
+       */
+      phase: ExecutionPhase;
+    }
+  | {
       type: "proposalExecuted";
       /**
        * Vault.
@@ -4136,6 +4381,63 @@ export type DaemonEvent =
        * Transaction.
        */
       txHash: Hex32;
+      /**
+       * Who executed it, when their keeper is a member.
+       */
+      by: MemberRef | null;
+    }
+  | {
+      type: "proposalCancelled";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * The cancelled proposal.
+       */
+      proposal: Hex32;
+      /**
+       * One line.
+       */
+      summary: string;
+      /**
+       * The cancellation that ran.
+       */
+      byProposal: Hex32;
+    }
+  | {
+      type: "proposalExpiring";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Proposal id.
+       */
+      proposal: Hex32;
+      /**
+       * One line.
+       */
+      summary: string;
+      /**
+       * Unix seconds it expires.
+       */
+      at: number;
+    }
+  | {
+      type: "proposalExpired";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Proposal id.
+       */
+      proposal: Hex32;
+      /**
+       * One line.
+       */
+      summary: string;
     }
   | {
       type: "execution";
@@ -4595,11 +4897,13 @@ export interface KeeperMethods {
   "artifacts.status": { params: ArtifactParams; result: ArtifactStatus };
   "artifacts.fetch": { params: ArtifactParams; result: ArtifactStatus };
   "approvals.put": { params: BodyParams; result: null };
-  "approvals.list": { params: ProposalParams; result: Array<HexBytes> };
+  "approvals.list": { params: ProposalParams; result: Array<StoredVote> };
   "rejections.put": { params: BodyParams; result: null };
-  "rejections.list": { params: ProposalParams; result: Array<HexBytes> };
+  "rejections.list": { params: ProposalParams; result: Array<StoredVote> };
   "receipts.put": { params: ReceiptParams; result: null };
   "receipts.list": { params: VaultParams; result: Array<Receipt> };
+  "claims.put": { params: ClaimParams; result: null };
+  "claims.list": { params: VaultParams; result: Array<Claim> };
   "audit.list": { params: AuditParams; result: Array<AuditEntry> };
   "lobby.open": { params: LobbyOpenParams; result: LobbyOpened };
   "lobby.join": { params: LobbyJoinParams; result: LobbyJoined };
@@ -4632,6 +4936,7 @@ export interface DaemonMethods {
   "signer.lock": { params: Empty; result: SignerStatus };
   "signer.sealingKey": { params: PassphraseParams; result: SealingKey };
   "node.status": { params: Empty; result: NodeStatus };
+  "fees.status": { params: Empty; result: FeesStatus };
   "lobby.inspect": { params: InviteParams; result: InvitePreview };
   "lobby.create": { params: LobbyCreateParams; result: LobbyView };
   "lobby.join": { params: InviteParams; result: LobbyView };
@@ -4661,7 +4966,7 @@ export interface DaemonMethods {
   "proposals.review": { params: ProposalRef; result: Review };
   "proposals.approve": { params: ApproveParams; result: ProposalView };
   "proposals.reject": { params: RejectParams; result: ProposalView };
-  "proposals.execute": { params: ProposalRef; result: ProposalView };
+  "proposals.execute": { params: ExecuteParams; result: ProposalView };
   "proposals.cancel": { params: ProposalRef; result: ProposalView };
   "contracts.functions": { params: ContractFunctionsParams; result: Array<ContractFunction> };
   "contracts.register": { params: ContractRegisterParams; result: ContractView };

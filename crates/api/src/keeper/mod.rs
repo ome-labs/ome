@@ -27,8 +27,8 @@ pub use lobby::{
     LobbyStartParams, LobbyStatus,
 };
 pub use records::{
-    BodyParams, IdParams, MailboxPolled, PayloadParams, PayloadStored, ProposalParams,
-    ProposalStored, Receipt, ReceiptParams, TxObserved, TxParams,
+    BodyParams, Claim, ClaimParams, IdParams, MailboxPolled, PayloadParams, PayloadStored,
+    ProposalParams, ProposalStored, Receipt, ReceiptParams, StoredVote, TxObserved, TxParams,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -157,15 +157,19 @@ methods! {
     /// Stores and replicates an approval.
     ApprovalsPut = "approvals.put" (BodyParams) -> ();
     /// A proposal's approvals.
-    ApprovalsList = "approvals.list" (ProposalParams) -> Vec<HexBytes>;
+    ApprovalsList = "approvals.list" (ProposalParams) -> Vec<StoredVote>;
     /// Stores and replicates a rejection.
     RejectionsPut = "rejections.put" (BodyParams) -> ();
     /// A proposal's rejections.
-    RejectionsList = "rejections.list" (ProposalParams) -> Vec<HexBytes>;
-    /// Stores and replicates an execution receipt.
+    RejectionsList = "rejections.list" (ProposalParams) -> Vec<StoredVote>;
+    /// Signs, stores and replicates the receipt of an execution by this keeper's member.
     ReceiptsPut = "receipts.put" (ReceiptParams) -> ();
     /// A vault's execution receipts.
     ReceiptsList = "receipts.list" (VaultParams) -> Vec<Receipt>;
+    /// Announces that this keeper's member is executing a proposal, or how far it is.
+    ClaimsPut = "claims.put" (ClaimParams) -> ();
+    /// A vault's live execution claims.
+    ClaimsList = "claims.list" (VaultParams) -> Vec<Claim>;
     /// The vault's ECDH audit log, newest first.
     AuditList = "audit.list" (AuditParams) -> Vec<AuditEntry>;
     /// Opens a lobby as host.

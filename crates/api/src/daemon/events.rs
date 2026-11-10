@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{
-    ExecutionProgress, FoundingState, KeeperState, LobbyView, MemberRef, NodeStatus, RotationState,
-    SignerStatus, TokenInfo,
+    ExecutionPhase, ExecutionProgress, FoundingState, KeeperState, LobbyView, MemberRef,
+    NodeStatus, RotationState, SignerStatus, TokenInfo,
 };
 use crate::{Amount, Hex32, keeper::KeeperEvent};
 
@@ -132,6 +132,19 @@ pub enum DaemonEvent {
         /// One line.
         summary: String,
     },
+    /// A member started executing a proposal, moved to another phase, or stopped (`mined` or `failed`).
+    ProposalExecuting {
+        /// Vault.
+        vault: Hex32,
+        /// Proposal id.
+        proposal: Hex32,
+        /// One line.
+        summary: String,
+        /// Who.
+        by: MemberRef,
+        /// How far they are.
+        phase: ExecutionPhase,
+    },
     /// A proposal's transaction was mined.
     ProposalExecuted {
         /// Vault.
@@ -142,6 +155,39 @@ pub enum DaemonEvent {
         summary: String,
         /// Transaction.
         tx_hash: Hex32,
+        /// Who executed it, when their keeper is a member.
+        by: Option<MemberRef>,
+    },
+    /// A cancellation executed: the proposal's nonce is spent and it can never run.
+    ProposalCancelled {
+        /// Vault.
+        vault: Hex32,
+        /// The cancelled proposal.
+        proposal: Hex32,
+        /// One line.
+        summary: String,
+        /// The cancellation that ran.
+        by_proposal: Hex32,
+    },
+    /// An open proposal expires within the hour: announced once.
+    ProposalExpiring {
+        /// Vault.
+        vault: Hex32,
+        /// Proposal id.
+        proposal: Hex32,
+        /// One line.
+        summary: String,
+        /// Unix seconds it expires.
+        at: u64,
+    },
+    /// An open proposal expired without executing: announced once.
+    ProposalExpired {
+        /// Vault.
+        vault: Hex32,
+        /// Proposal id.
+        proposal: Hex32,
+        /// One line.
+        summary: String,
     },
     /// An execution on this device advanced.
     Execution {
@@ -231,7 +277,11 @@ impl DaemonEvent {
             | Self::ProposalVoted { vault, .. }
             | Self::ProposalReady { vault, .. }
             | Self::ProposalBlocked { vault, .. }
+            | Self::ProposalExecuting { vault, .. }
             | Self::ProposalExecuted { vault, .. }
+            | Self::ProposalCancelled { vault, .. }
+            | Self::ProposalExpiring { vault, .. }
+            | Self::ProposalExpired { vault, .. }
             | Self::Received { vault, .. }
             | Self::BalanceChanged { vault, .. }
             | Self::ContractAvailable { vault, .. }

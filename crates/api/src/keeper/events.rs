@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{CeremonyKind, CeremonyStatus, LobbyStatus};
-use crate::{Hex16, Hex32};
+use crate::{Hex16, Hex32, daemon::ExecutionPhase};
 
 /// Something the member's daemon should know about.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -110,6 +110,19 @@ pub enum KeeperEvent {
         proposal: Hex32,
         /// Transaction hash.
         tx_hash: Hex32,
+        /// The executing member's index, when its keeper is a member.
+        executor: Option<u32>,
+    },
+    /// A member started executing a proposal, moved to another phase, or finished.
+    Claim {
+        /// Vault.
+        vault: Hex32,
+        /// Proposal id.
+        proposal: Hex32,
+        /// The executing member's index.
+        member: u32,
+        /// How far it is; `mined` or `failed` ends the claim.
+        phase: ExecutionPhase,
     },
     /// A lobby changed: opened or joined, roster changed, started or closed.
     Lobby {

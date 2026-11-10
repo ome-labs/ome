@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::VaultSummary;
+use super::{FeesStatus, VaultSummary};
 use crate::{Hex32, Point};
 
 /// What `daemon.info` reports.
@@ -270,4 +270,6 @@ pub struct Status {
     pub vaults: Vec<VaultSummary>,
     /// The vault commands use when none is named.
     pub default_vault: Option<Hex32>,
+    /// The fee payer and its Fee Juice, once the daemon has a wallet.
+    pub fees: Option<FeesStatus>,
 }
