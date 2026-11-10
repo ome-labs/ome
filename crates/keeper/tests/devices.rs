@@ -355,6 +355,7 @@ async fn keepers_adopt_a_swapped_signer_once_the_chain_holds_it() {
     let (proposal, payload) = Draft {
         request: ExecutionRequest {
             calls: vec![rotation.to_call(&v.protocol())],
+            authwits: vec![],
             extras: vec![],
         },
         tx_nonce: Base::from(99u64),
@@ -417,6 +418,7 @@ async fn keepers_adopt_a_new_threshold_once_the_chain_holds_it() {
                 hide_msg_sender: false,
                 args: vec![field(&Base::from(3u64))],
             }],
+            authwits: vec![],
             extras: vec![],
         },
         tx_nonce: Base::from(98u64),

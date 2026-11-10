@@ -246,3 +246,31 @@ async fn receipts_replicate_and_an_unknown_spend_raises_an_alarm() {
     .await;
     assert_eq!(spend, Hex32([8; 32]));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_approval_must_sign_every_authwit_the_proposal_grants() {
+    let v = vault(fast_config()).await;
+    let (mut proposal, _) = v.proposal(15);
+    proposal.authwits = vec![[0x07; 32]];
+    let keeper = &v.keepers[0].keeper;
+    keeper
+        .put_proposal(v.address, &body(&Message::Proposal(proposal.clone())))
+        .await
+        .unwrap();
+
+    let mut transaction_only = v.approval(&proposal, 0, 0);
+    transaction_only.signatures.truncate(1);
+    let refused = keeper
+        .put_approval(v.address, &body(&Message::Approval(transaction_only)))
+        .await;
+    assert!(refused.is_err());
+
+    keeper
+        .put_approval(
+            v.address,
+            &body(&Message::Approval(v.approval(&proposal, 0, 0))),
+        )
+        .await
+        .unwrap();
+    assert_eq!(keeper.approvals(proposal.id().unwrap()).unwrap().len(), 1);
+}

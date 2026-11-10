@@ -36,7 +36,7 @@ use ome_net::{Mailbox, MemoryMailbox, MemoryNetwork, Peer};
 use ome_protocol::{
     membership::Vault as ProtocolVault,
     payload::{Call, CallKind, ChainInfo, ExecutionRequest, selector},
-    proposals::{Draft, approval_message_for},
+    proposals::{Draft, approval_messages_for},
     vault::{Committee, Config, SignerSet, rejection_message},
 };
 use ome_wire::{
@@ -439,6 +439,7 @@ impl Vault {
         let draft = Draft {
             request: ExecutionRequest {
                 calls: vec![call],
+                authwits: vec![],
                 extras: vec![],
             },
             tx_nonce: Base::from(amount),
@@ -456,14 +457,13 @@ impl Vault {
 
     /// An approval of `proposal` claiming `slot`, signed with member `signer`'s key (a different one forges it).
     pub fn approval(&self, proposal: &Proposal, slot: u32, signer: usize) -> Approval {
-        let message = approval_message_for(&self.protocol(), proposal).unwrap();
-        let signature = schnorr::sign(
-            &self.signers[signer],
-            message,
-            &mut ChaCha20Rng::seed_from_u64(9),
-        )
-        .unwrap();
-        Approval::new(proposal.id().unwrap(), slot, &signature)
+        let mut rng = ChaCha20Rng::seed_from_u64(9);
+        let signatures: Vec<_> = approval_messages_for(&self.protocol(), proposal)
+            .unwrap()
+            .into_iter()
+            .map(|message| schnorr::sign(&self.signers[signer], message, &mut rng).unwrap())
+            .collect();
+        Approval::new(proposal.id().unwrap(), slot, &signatures)
     }
 
     /// Member `slot` rejects `proposal`.

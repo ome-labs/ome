@@ -470,15 +470,24 @@ impl Keeper {
 
     pub(crate) async fn store_approval(&self, vault: [u8; 32], approval: &Approval) -> Result<()> {
         let proposal = self.stored_proposal(vault, &approval.proposal)?;
-        let message = approval_message(
-            parse_field(&vault)?,
-            parse_field(&proposal.outer_hash)?,
-            proposal.config_version,
-            proposal.expires_at,
-        );
-        self.verify_vote(vault, approval.slot, message, &approval.signature)
-            .await?;
-        let body = encode_body(&Message::Approval(*approval))?;
+        // The transaction's hash, then each authwit's: one signature apiece.
+        let hashes: Vec<_> = std::iter::once(&proposal.outer_hash)
+            .chain(&proposal.authwits)
+            .collect();
+        if approval.signatures.len() != hashes.len() {
+            return Err(Error::Invalid("an approval signs each authwit".into()));
+        }
+        for (hash, signature) in hashes.into_iter().zip(&approval.signatures) {
+            let message = approval_message(
+                parse_field(&vault)?,
+                parse_field(hash)?,
+                proposal.config_version,
+                proposal.expires_at,
+            );
+            self.verify_vote(vault, approval.slot, message, signature)
+                .await?;
+        }
+        let body = encode_body(&Message::Approval(approval.clone()))?;
         if self
             .0
             .store
