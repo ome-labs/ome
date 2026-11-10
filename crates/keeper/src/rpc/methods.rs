@@ -8,13 +8,13 @@ use ome_api::{
     jsonrpc::Request,
     keeper::{
         self as api, ApprovalsList, ApprovalsPut, ArtifactsFetch, ArtifactsGet, ArtifactsPut,
-        ArtifactsStatus, AuditList, CeremonyDkg, CeremonyReshare, CeremonyStatusGet, DevicesList,
-        DevicesOffer, DevicesReview, DevicesRevoke, EcdhBatch, KeeperInfoGet, KeeperJoinRequest,
-        LobbyClose, LobbyInspect, LobbyJoin, LobbyLeave, LobbyList, LobbyOpen, LobbyStart,
-        LobbyStatusGet, MailboxPoll, PayloadsGet, PayloadsPut, PeersStatus, ProposalsGet,
-        ProposalsList, ProposalsPut, ReceiptsList, ReceiptsPut, RejectionsList, RejectionsPut,
-        VaultList, VaultObserveConfig, VaultObserveTx, VaultRegister, VaultRetire, VaultStatusGet,
-        VaultSync, VaultUpdateSigners,
+        ArtifactsStatus, AuditList, CeremonyDkg, CeremonyReshare, CeremonyStatusGet, ClaimsList,
+        ClaimsPut, DevicesList, DevicesOffer, DevicesReview, DevicesRevoke, EcdhBatch,
+        KeeperInfoGet, KeeperJoinRequest, LobbyClose, LobbyInspect, LobbyJoin, LobbyLeave,
+        LobbyList, LobbyOpen, LobbyStart, LobbyStatusGet, MailboxPoll, PayloadsGet, PayloadsPut,
+        PeersStatus, ProposalsGet, ProposalsList, ProposalsPut, ReceiptsList, ReceiptsPut,
+        RejectionsList, RejectionsPut, VaultList, VaultObserveConfig, VaultObserveTx,
+        VaultRegister, VaultRetire, VaultStatusGet, VaultSync, VaultUpdateSigners,
     },
 };
 use ome_protocol::vault::Config;
@@ -173,17 +173,32 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
             convert::artifact_status(keeper.fetch_artifact(p.vault.0, p.class_id.0).await?)
         };
         ApprovalsPut => |p: api::BodyParams| async move { keeper.put_approval(p.vault.0, &p.body.0).await };
-        ApprovalsList => |p: api::ProposalParams| async move { Ok(hex_bodies(keeper.approvals(p.proposal.0)?)) };
+        ApprovalsList => |p: api::ProposalParams| async move {
+            Ok(convert::votes(keeper.approval_entries(p.proposal.0)?))
+        };
         RejectionsPut => |p: api::BodyParams| async move { keeper.put_rejection(p.vault.0, &p.body.0).await };
         RejectionsList => |p: api::ProposalParams| async move {
-            Ok(hex_bodies(keeper.rejections(p.proposal.0)?))
+            Ok(convert::votes(keeper.rejection_entries(p.proposal.0)?))
         };
         ReceiptsPut => |p: api::ReceiptParams| async move {
-            keeper.put_receipt(p.vault.0, p.proposal.0, p.tx_hash.0).await
+            keeper.put_receipt(p.vault.0, p.proposal.0, p.tx_hash.0, p.block).await
         };
         ReceiptsList => |p: api::VaultParams| async move {
-            Ok(keeper.receipts(p.vault.0)?.iter().map(convert::receipt).collect())
+            let mut receipts = Vec::new();
+            for entry in keeper.receipts(p.vault.0)? {
+                let signed = convert::signed_receipt(&entry);
+                let executor = match &signed {
+                    Some(r) => keeper.member_index(p.vault.0, &r.executor).await,
+                    None => None,
+                };
+                receipts.push(convert::receipt(&entry, signed.as_ref(), executor));
+            }
+            Ok(receipts)
         };
+        ClaimsPut => |p: api::ClaimParams| async move {
+            keeper.put_claim(p.vault.0, p.proposal.0, p.phase, p.started_at).await
+        };
+        ClaimsList => |p: api::VaultParams| async move { Ok(keeper.claims(p.vault.0).await) };
         AuditList => |p: api::AuditParams| async move {
             let limit = p.limit.unwrap_or(100).min(MAX_AUDIT);
             Ok(keeper.audit_log(p.vault.0, limit)?.into_iter().map(convert::audit).collect())

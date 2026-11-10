@@ -149,6 +149,8 @@ pub(crate) struct State {
     pub(crate) devices: HashMap<IdentityPublic, DeviceRecord>,
     /// Artifacts being fetched from members, by class.
     pub(crate) artifact_fetches: HashMap<[u8; 32], ArtifactFetch>,
+    /// Members executing a proposal right now.
+    pub(crate) claims: crate::service::claims::Claims,
 }
 
 impl State {
@@ -219,6 +221,7 @@ impl Keeper {
             last_sync: HashMap::new(),
             last_mailbox_poll: 0,
             orphans: HashMap::new(),
+            claims: HashMap::new(),
             lobbies: HashMap::new(),
             offers: Offers::new(),
             devices: HashMap::new(),
@@ -523,6 +526,7 @@ impl Keeper {
             Message::ArtifactChunk(chunk) => {
                 self.on_artifact_chunk(signer, message.header, chunk).await;
             }
+            Message::ExecutionClaim(claim) => self.on_claim(signer, message.header, claim).await,
             Message::Echo(echo) => self.on_echo(scope, &echo).await,
             body if is_ceremony_message(&body) => {
                 self.on_ceremony_message(signer, scope, body).await;

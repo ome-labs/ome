@@ -27,6 +27,7 @@ pub use keeper::{Keeper, KeeperConfig, KeeperParts};
 pub use ome_api::keeper::{LobbyRole, LobbyStatus, Observation};
 pub use service::{
     ceremonies::{CeremonyInfo, DkgResult, NewMember, ReshareRequest, ReshareResult},
+    claims::CLAIM_TTL_SECS,
     devices::DeviceReviewRequest,
     ecdh::MemberPartials,
     lobby::{LobbyInfo, LobbyOpen, LobbyPlanInfo},

@@ -226,14 +226,17 @@ async fn receipts_replicate_and_an_unknown_spend_raises_an_alarm() {
 
     v.keepers[0]
         .keeper
-        .put_receipt(v.address, id, [7; 32])
+        .put_receipt(v.address, id, [7; 32], 12)
         .await
         .unwrap();
 
-    wait_for(&mut second, |e| {
-        matches!(e, KeeperEvent::Receipt { .. }).then_some(())
+    // The receipt names the member whose keeper signed it.
+    let executor = wait_for(&mut second, |e| match e {
+        KeeperEvent::Receipt { executor, .. } => Some(*executor),
+        _ => None,
     })
     .await;
+    assert_eq!(executor, Some(1));
     assert!(v.keepers[1].keeper.observe_tx(v.address, [7; 32]).unwrap());
     assert!(!v.keepers[1].keeper.observe_tx(v.address, [8; 32]).unwrap());
     let spend = wait_for(&mut second, |e| match e {

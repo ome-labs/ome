@@ -16,7 +16,7 @@ use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
 use support::{Harness, TestKeeper, WAIT, body, fast_config, vault, vault_on, wait_for};
 
-/// Cuts member 3 off, then member 1 proposes with a payload and member 2 approves.
+/// Cuts member 3 off, then member 1 proposes with a payload, member 2 approves and member 2 executes it.
 async fn records_while_member_3_is_away(v: &support::Vault) -> [u8; 32] {
     let away = v.keepers[2].keeper.identity();
     v.harness
@@ -52,6 +52,16 @@ async fn records_while_member_3_is_away(v: &support::Vault) -> [u8; 32] {
         matches!(e, KeeperEvent::Approval { .. }).then_some(())
     })
     .await;
+    let id = proposal.id().unwrap();
+    v.keepers[1]
+        .keeper
+        .put_receipt(v.address, id, [7; 32], 12)
+        .await
+        .unwrap();
+    wait_for(&mut first, |e| {
+        matches!(e, KeeperEvent::Receipt { .. }).then_some(())
+    })
+    .await;
     assert_eq!(
         v.keepers[2].keeper.proposals(v.address).unwrap(),
         Vec::<Vec<u8>>::new()
@@ -68,14 +78,19 @@ async fn an_offline_member_catches_up_through_sync() {
 
     v.keepers[2].keeper.sync(v.address).await.unwrap();
 
-    // The approval and the payload arrive in either order.
-    let (mut approval, mut payload) = (false, false);
+    // The approval, the payload and the receipt arrive in any order; the receipt still names member 2, whoever
+    // sent it.
+    let (mut approval, mut payload, mut executor) = (false, false, None);
     wait_for(&mut third, |e| {
         approval |= matches!(e, KeeperEvent::Approval { .. });
         payload |= matches!(e, KeeperEvent::Payload { .. });
-        (approval && payload).then_some(())
+        if let KeeperEvent::Receipt { executor: by, .. } = e {
+            executor = Some(*by);
+        }
+        (approval && payload && executor.is_some()).then_some(())
     })
     .await;
+    assert_eq!(executor, Some(Some(2)));
     assert_eq!(v.keepers[2].keeper.proposals(v.address).unwrap().len(), 1);
     assert_eq!(v.keepers[2].keeper.approvals(id).unwrap().len(), 1);
 }

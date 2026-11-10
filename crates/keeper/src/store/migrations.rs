@@ -113,4 +113,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (class_id, idx)
     );
     ",
+    // 5: receipts keep their signed body, which names the executing member's keeper.
+    "
+    ALTER TABLE receipts ADD COLUMN body BLOB;
+    ",
 ];

@@ -8,8 +8,11 @@ use ome_api::{
 use ome_crypto::threshold::ecdh::Partial;
 use ome_net::identity::peer_id;
 use ome_wire::{
-    IdentityPublic,
-    messages::lobby::{Invite, KeeperContact},
+    IdentityPublic, Message, decode_body,
+    messages::{
+        lobby::{Invite, KeeperContact},
+        proposals::ExecutionReceipt,
+    },
     types::{Bytes64, scalar},
 };
 
@@ -82,12 +85,36 @@ pub(super) fn reachability(member: &MemberReachability) -> api::Reachability {
     }
 }
 
-pub(super) fn receipt(receipt: &ReceiptEntry) -> api::Receipt {
-    api::Receipt {
-        proposal: receipt.proposal.into(),
-        tx_hash: receipt.tx_hash.into(),
-        at: receipt.at,
+/// The signed receipt in a stored entry, when it has one.
+pub(super) fn signed_receipt(entry: &ReceiptEntry) -> Option<ExecutionReceipt> {
+    match decode_body(entry.body.as_deref()?) {
+        Ok(Message::ExecutionReceipt(receipt)) => Some(receipt),
+        _ => None,
     }
+}
+
+pub(super) fn receipt(
+    entry: &ReceiptEntry,
+    signed: Option<&ExecutionReceipt>,
+    executor: Option<u32>,
+) -> api::Receipt {
+    api::Receipt {
+        proposal: entry.proposal.into(),
+        tx_hash: entry.tx_hash.into(),
+        at: entry.at,
+        block: signed.map_or(0, |r| r.block),
+        executor,
+    }
+}
+
+pub(super) fn votes(entries: Vec<(Vec<u8>, u64)>) -> Vec<api::StoredVote> {
+    entries
+        .into_iter()
+        .map(|(body, at)| api::StoredVote {
+            body: body.into(),
+            at,
+        })
+        .collect()
 }
 
 pub(super) fn audit(entry: AuditEntry) -> api::AuditEntry {

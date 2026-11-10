@@ -94,7 +94,8 @@ impl Keeper {
         self.broadcast(vault, Message::Rejection(rejection)).await
     }
 
-    /// Records that `proposal` executed in `tx_hash` and tells the other members.
+    /// Records that this keeper's member executed `proposal` in `tx_hash`, signed by this keeper so every member
+    /// names the executor, and tells the other members.
     ///
     /// # Errors
     /// Storage errors.
@@ -103,13 +104,23 @@ impl Keeper {
         vault: [u8; 32],
         proposal: [u8; 32],
         tx_hash: [u8; 32],
+        block: u64,
     ) -> Result<()> {
-        self.store_receipt(vault, proposal, tx_hash)?;
-        self.broadcast(
-            vault,
-            Message::ExecutionReceipt(ExecutionReceipt { proposal, tx_hash }),
-        )
-        .await
+        let receipt =
+            ExecutionReceipt::sign(&self.0.keys.identity, vault, proposal, tx_hash, block)?;
+        self.store_receipt(vault, &receipt).await?;
+        self.broadcast(vault, Message::ExecutionReceipt(receipt))
+            .await
+    }
+
+    /// The index of `identity`'s member in `vault`'s committee.
+    pub async fn member_index(&self, vault: [u8; 32], identity: &IdentityPublic) -> Option<u32> {
+        let state = self.0.state.lock().await;
+        state
+            .vaults
+            .get(&vault)
+            .and_then(|v| v.committee.member(identity))
+            .map(|m| m.index)
     }
 
     /// Checks a vault transaction the daemon observed against known executions; an unknown one raises
@@ -172,6 +183,22 @@ impl Keeper {
         self.0.store.approvals(&proposal)
     }
 
+    /// Approval bodies of a proposal with when this keeper stored each.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn approval_entries(&self, proposal: [u8; 32]) -> Result<Vec<(Vec<u8>, u64)>> {
+        self.0.store.approval_entries(&proposal)
+    }
+
+    /// Rejection bodies of a proposal with when this keeper stored each.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn rejection_entries(&self, proposal: [u8; 32]) -> Result<Vec<(Vec<u8>, u64)>> {
+        self.0.store.rejection_entries(&proposal)
+    }
+
     /// Rejection bodies of a proposal.
     ///
     /// # Errors
@@ -209,9 +236,7 @@ impl Keeper {
                 Some(Vote::Rejection(rejection)) => self.store_rejection(vault, &rejection).await,
                 _ => return,
             },
-            Message::ExecutionReceipt(receipt) => {
-                self.store_receipt(vault, receipt.proposal, receipt.tx_hash)
-            }
+            Message::ExecutionReceipt(receipt) => self.store_receipt(vault, &receipt).await,
             _ => Ok(()),
         };
         if let Err(error) = result {
@@ -275,7 +300,7 @@ impl Keeper {
         v.committee.member(identity).map(Peer::from)
     }
 
-    async fn active_vault(&self, vault: [u8; 32]) -> Result<()> {
+    pub(crate) async fn active_vault(&self, vault: [u8; 32]) -> Result<()> {
         let state = self.0.state.lock().await;
         state
             .vaults
@@ -371,16 +396,24 @@ impl Keeper {
         self.store_payload(vault, payload)
     }
 
-    fn store_receipt(&self, vault: [u8; 32], proposal: [u8; 32], tx_hash: [u8; 32]) -> Result<()> {
-        if self
-            .0
-            .store
-            .put_receipt(&proposal, &vault, &tx_hash, self.now())?
-        {
+    /// Stores a receipt its executor's keeper signed for this vault, and ends the claims on its proposal.
+    async fn store_receipt(&self, vault: [u8; 32], receipt: &ExecutionReceipt) -> Result<()> {
+        receipt.verify(vault)?;
+        let body = encode_body(&Message::ExecutionReceipt(*receipt))?;
+        let stored = self.0.store.put_receipt(
+            &receipt.proposal,
+            &vault,
+            &receipt.tx_hash,
+            &body,
+            self.now(),
+        )?;
+        self.end_claims(vault, receipt.proposal).await;
+        if stored {
             self.emit(KeeperEvent::Receipt {
                 vault: vault.into(),
-                proposal: proposal.into(),
-                tx_hash: tx_hash.into(),
+                proposal: receipt.proposal.into(),
+                tx_hash: receipt.tx_hash.into(),
+                executor: self.member_index(vault, &receipt.executor).await,
             });
         }
         Ok(())

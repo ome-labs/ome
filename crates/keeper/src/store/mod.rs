@@ -65,7 +65,12 @@ pub struct ReceiptEntry {
     pub tx_hash: [u8; 32],
     /// Unix seconds it was stored.
     pub at: u64,
+    /// The signed receipt (a `Message::ExecutionReceipt`); `None` for one stored before receipts were signed.
+    pub body: Option<Vec<u8>>,
 }
+
+/// A receipt's proposal id and its signed body (`None` for one stored before receipts were signed).
+pub type StoredReceipt = ([u8; 32], Option<Vec<u8>>);
 
 /// One ECDH audit entry.
 #[derive(Clone, Debug, Serialize)]
@@ -410,6 +415,38 @@ impl Store {
         })
     }
 
+    /// Approval bodies of a proposal with the time each was stored, by slot.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn approval_entries(&self, proposal: &[u8; 32]) -> Result<Vec<(Vec<u8>, u64)>> {
+        self.vote_entries("approvals", proposal)
+    }
+
+    /// Rejection bodies of a proposal with the time each was stored, by slot.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn rejection_entries(&self, proposal: &[u8; 32]) -> Result<Vec<(Vec<u8>, u64)>> {
+        self.vote_entries("rejections", proposal)
+    }
+
+    fn vote_entries(&self, table: &str, proposal: &[u8; 32]) -> Result<Vec<(Vec<u8>, u64)>> {
+        self.with(|c| {
+            let mut statement = c.prepare(&format!(
+                "SELECT body, created_at FROM {table} WHERE proposal = ?1 ORDER BY slot"
+            ))?;
+            statement
+                .query_map(params![proposal], |row| {
+                    Ok((
+                        row.get(0)?,
+                        u64::try_from(row.get::<_, i64>(1)?).unwrap_or(0),
+                    ))
+                })?
+                .collect()
+        })
+    }
+
     /// Ids of every proposal of `vault`.
     ///
     /// # Errors
@@ -520,10 +557,10 @@ impl Store {
     ///
     /// # Errors
     /// Storage errors.
-    pub fn receipts(&self, vault: &[u8; 32]) -> Result<Vec<([u8; 32], [u8; 32])>> {
+    pub fn receipts(&self, vault: &[u8; 32]) -> Result<Vec<StoredReceipt>> {
         self.with(|c| {
             let mut statement = c.prepare(
-                "SELECT proposal, tx_hash FROM receipts WHERE vault = ?1 ORDER BY created_at",
+                "SELECT proposal, body FROM receipts WHERE vault = ?1 ORDER BY created_at",
             )?;
             statement
                 .query_map(params![vault], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -541,15 +578,17 @@ impl Store {
         proposal: &[u8; 32],
         vault: &[u8; 32],
         tx_hash: &[u8; 32],
+        body: &[u8],
         now: u64,
     ) -> Result<bool> {
         self.with(|c| {
             c.execute(
-                "INSERT INTO receipts (proposal, vault, tx_hash, created_at) VALUES (?1, ?2, ?3, ?4)
+                "INSERT INTO receipts (proposal, vault, tx_hash, body, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
                  ON CONFLICT (proposal) DO UPDATE SET
-                    vault = excluded.vault, tx_hash = excluded.tx_hash, created_at = excluded.created_at
+                    vault = excluded.vault, tx_hash = excluded.tx_hash, body = excluded.body,
+                    created_at = excluded.created_at
                  WHERE receipts.vault IS NOT excluded.vault OR receipts.tx_hash IS NOT excluded.tx_hash",
-                params![proposal, vault, tx_hash, ts(now)],
+                params![proposal, vault, tx_hash, body, ts(now)],
             )
             .map(|n| n > 0)
         })
@@ -562,7 +601,7 @@ impl Store {
     pub fn receipt_entries(&self, vault: &[u8; 32]) -> Result<Vec<ReceiptEntry>> {
         self.with(|c| {
             let mut statement = c.prepare(
-                "SELECT proposal, tx_hash, created_at FROM receipts WHERE vault = ?1
+                "SELECT proposal, tx_hash, created_at, body FROM receipts WHERE vault = ?1
                  ORDER BY created_at DESC, rowid DESC",
             )?;
             statement
@@ -571,6 +610,7 @@ impl Store {
                         proposal: row.get(0)?,
                         tx_hash: row.get(1)?,
                         at: u64::try_from(row.get::<_, i64>(2)?).unwrap_or(0),
+                        body: row.get(3)?,
                     })
                 })?
                 .collect()

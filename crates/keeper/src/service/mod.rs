@@ -3,6 +3,7 @@
 
 pub(crate) mod artifacts;
 pub(crate) mod ceremonies;
+pub(crate) mod claims;
 pub(crate) mod devices;
 pub(crate) mod ecdh;
 pub(crate) mod lobby;

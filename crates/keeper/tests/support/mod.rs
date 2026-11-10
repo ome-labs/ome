@@ -442,6 +442,7 @@ impl Vault {
                 extras: vec![],
             },
             tx_nonce: Base::from(amount),
+            created_at: 1_700_000_000,
             expires_at: 1_800_000_000,
             summary: format!("transfer {amount}"),
             proposer: 1,

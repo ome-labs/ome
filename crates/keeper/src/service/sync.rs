@@ -3,10 +3,7 @@ use std::collections::HashSet;
 use ome_wire::{
     Header, IdentityPublic, Message, decode_body,
     limits::MAX_SYNC_ITEMS,
-    messages::{
-        proposals::ExecutionReceipt,
-        sync::{SyncRequest, VoteRef},
-    },
+    messages::sync::{SyncRequest, VoteRef},
 };
 
 use crate::keeper::Keeper;
@@ -153,12 +150,12 @@ impl Keeper {
                 records.push(decode_body(&body)?);
             }
         }
-        for (proposal, tx_hash) in store.receipts(vault)? {
-            if !their_receipts.contains(&proposal) {
-                records.push(Message::ExecutionReceipt(ExecutionReceipt {
-                    proposal,
-                    tx_hash,
-                }));
+        // Receipts travel as their executor signed them; one stored before receipts were signed is not sent.
+        for (proposal, body) in store.receipts(vault)? {
+            if !their_receipts.contains(&proposal)
+                && let Some(body) = body
+            {
+                records.push(decode_body(&body)?);
             }
         }
         records.truncate(MAX_SYNC_RECORDS);
