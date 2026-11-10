@@ -33,7 +33,7 @@ import {
 } from "@ome-labs/wasm";
 
 import { type Context, until } from "../context.ts";
-import { DaemonError, require } from "../errors.ts";
+import { DaemonError, notReady, require } from "../errors.ts";
 import { readAllJson, writeJson } from "../profile/files.ts";
 import { summaryOf } from "../proposals/intents.ts";
 import type { Stored } from "../proposals/views.ts";
@@ -129,7 +129,7 @@ export class MembershipService {
 
   async request(): Promise<{ request: string }> {
     const profile = this.#context.state.file.profile;
-    if (!profile) throw new DaemonError("not-ready", "create a profile first");
+    if (!profile) throw notReady("profile", "create a profile first");
     return this.#context.keeper.client.call("keeper.joinRequest", {
       name: profile.name,
       signerKey: profile.signerKey,
@@ -339,7 +339,7 @@ export class MembershipService {
   /** The rotation the reshare produced, as `rotate_membership` performs it. */
   #rotation(rotating: Rotating): Rotation {
     const manifest = rotating.result?.manifest;
-    if (!manifest) throw new DaemonError("not-ready", "the reshare has not finished");
+    if (!manifest) throw notReady("reshare", "the reshare has not finished");
     return {
       signers: rotating.plan.newMembers.map((m) => m.signerKey),
       threshold: rotating.plan.threshold,
@@ -556,7 +556,6 @@ export class MembershipService {
     const keeper = this.#context.keeper.client;
     await keeper.call("payloads.put", { vault: vaultAddress, body: tx.payloadBody });
     await keeper.call("proposals.put", { vault: vaultAddress, body: tx.proposal });
-    this.#context.emit({ type: "vaultActivity", vault: vaultAddress });
     return tx.id as Hex32;
   }
 

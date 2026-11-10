@@ -79,10 +79,39 @@ export async function tokenInfo(
   };
 }
 
+/**
+ * Refuses with `insufficient-funds` when the vault is known to hold less of `token` than `amount`. A token the member
+ * doesn't track, or a balance that can't be read now, is no reason to refuse: the simulation decides then.
+ */
+export async function requireBalance(
+  context: Context,
+  vault: Hex32,
+  token: Hex32,
+  amount: string,
+): Promise<void> {
+  const info = (context.state.file.tokens[vault] ?? []).find((t) => t.address === token);
+  if (!info) return;
+  const [read] = await balances(context, vault, [info]);
+  if (read?.balance === null || read?.balance === undefined) return;
+  if (BigInt(read.balance) >= BigInt(amount)) return;
+  throw DaemonError.detailed(
+    {
+      kind: "insufficient-funds",
+      funds: { type: "token", token: info },
+      needed: amount,
+      held: read.balance,
+    },
+    `the vault holds ${read.balance} base units of ${info.symbol}; the transfer needs ${amount}`,
+  );
+}
+
 /** The vault's private balance of each token the member tracks. */
-export async function balances(context: Context, vault: Hex32): Promise<TokenBalance[]> {
+export async function balances(
+  context: Context,
+  vault: Hex32,
+  tokens: readonly TokenInfo[] = context.state.file.tokens[vault] ?? [],
+): Promise<TokenBalance[]> {
   const from = context.vaults.address(vault);
-  const tokens = context.state.file.tokens[vault] ?? [];
   return Promise.all(
     tokens.map(async (token) => {
       try {
@@ -107,7 +136,10 @@ export async function balances(context: Context, vault: Hex32): Promise<TokenBal
 /** Deploys a test token from the member's account and mints 1,000 whole tokens to the vault (local network only). */
 export async function deployTestToken(context: Context, vault: Hex32): Promise<TokenInfo> {
   if (context.node.status.l1ChainId !== LOCAL_CHAIN_ID)
-    throw new DaemonError("invalid", "test tokens are only for the local network");
+    throw DaemonError.detailed(
+      { kind: "network", expected: "local", actual: context.node.network() },
+      "test tokens are only for the local network",
+    );
   const from = context.account();
   const fee = context.fee();
   const { contract } = await TokenContract.deploy(

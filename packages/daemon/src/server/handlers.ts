@@ -145,6 +145,7 @@ export const handlers: Handlers = {
         key: `accounts:${p.alias}`,
         value: vault,
       });
+    d.emit({ type: "vaultUpdated", vault });
     return vaultList(d);
   },
   "vault.retire": async (d, p) => {
@@ -153,6 +154,7 @@ export const handlers: Handlers = {
     await d.keeper.client.call("vault.retire", { vault: record.address, force: true });
     record.status = "removed";
     await d.vaults.save(record);
+    d.emit({ type: "vaultUpdated", vault: record.address });
     return vaultList(d);
   },
   "vault.use": async (d, p) => {
@@ -160,6 +162,7 @@ export const handlers: Handlers = {
     await d.state.update((file) => {
       file.defaultVault = vault;
     });
+    d.emit({ type: "vaultUpdated", vault });
     return vaultList(d);
   },
 
@@ -173,6 +176,7 @@ export const handlers: Handlers = {
         info,
       ];
     });
+    d.emit({ type: "tokenAdded", vault, token: info });
     return info;
   },
   "tokens.remove": async (d, p) => {
@@ -181,6 +185,7 @@ export const handlers: Handlers = {
     await d.state.update((file) => {
       file.tokens[vault] = (file.tokens[vault] ?? []).filter((t) => t.address !== token);
     });
+    d.emit({ type: "tokenRemoved", vault, token });
     return d.state.file.tokens[vault] ?? [];
   },
   "tokens.deployTest": async (d, p) => {
@@ -189,6 +194,8 @@ export const handlers: Handlers = {
     await d.state.update((file) => {
       file.tokens[vault] = [...(file.tokens[vault] ?? []), info];
     });
+    d.emit({ type: "tokenAdded", vault, token: info });
+    d.emit({ type: "balanceChanged", vault, token: info.address });
     return info;
   },
 

@@ -12,7 +12,7 @@ import type {
 import { decodeProposal } from "@ome-labs/wasm";
 
 import type { Context } from "../context.ts";
-import { DaemonError, require } from "../errors.ts";
+import { DaemonError, notReady, require } from "../errors.ts";
 import type { MembershipService } from "../membership/service.ts";
 import { peerId } from "../peer-id.ts";
 import type { ProposalService } from "../proposals/service.ts";
@@ -48,7 +48,7 @@ export class DeviceService {
   /** A one-time pairing offer; the daemon polls fast until it expires or a device pairs. */
   async pair(): Promise<DeviceOffer> {
     const profile = this.#context.state.file.profile;
-    if (!profile) throw new DaemonError("not-ready", "create a profile first");
+    if (!profile) throw notReady("profile", "create a profile first");
     const offer = await this.#context.keeper.client.call("devices.offer", {
       member: profile.name,
       network: this.#context.node.network(),
@@ -138,8 +138,6 @@ export class DeviceService {
   onKeeperEvent(event: KeeperEvent): void {
     if (event.type === "proposal" || event.type === "payload")
       void this.#forwardPending(event.vault).catch(() => undefined);
-    if (event.type === "deviceVote")
-      this.#context.emit({ type: "vaultActivity", vault: event.vault });
   }
 
   /** Forwards every proposal of `vault` the device has not been sent yet, once its payload is here. */

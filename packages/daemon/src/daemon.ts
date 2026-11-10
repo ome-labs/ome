@@ -24,7 +24,7 @@ import { KeeperClient, OmeWallet } from "@ome-labs/wallet";
 import { accountAddresses, addressNames, walletDir } from "./aztec/aliases.ts";
 import type { Context } from "./context.ts";
 import { DeviceService } from "./devices/service.ts";
-import { DaemonError, require } from "./errors.ts";
+import { DaemonError, notReady, require } from "./errors.ts";
 import { FoundingService } from "./founding/founding.ts";
 import { KeeperSupervisor, keeperBinary } from "./keeper/supervisor.ts";
 import { MembershipService } from "./membership/service.ts";
@@ -33,12 +33,14 @@ import { NodeService } from "./node/node.ts";
 import { privateDir, writePrivate } from "./profile/files.ts";
 import { type ProfilePaths, omeHome, profilePaths } from "./profile/paths.ts";
 import { ProfileState } from "./profile/state.ts";
+import { ProposalEvents } from "./proposals/events.ts";
 import { ProposalService } from "./proposals/service.ts";
 import { type MasterKeyStore, masterKeyStore } from "./secrets/master-key.ts";
 import { SecretsStore } from "./secrets/store.ts";
 import { handlers } from "./server/handlers.ts";
 import { DaemonServer } from "./server/server.ts";
 import { SignerService } from "./signer/signer.ts";
+import { ReceivedWatcher } from "./vaults/received.ts";
 import { VaultService } from "./vaults/service.ts";
 
 /** Release of this daemon. */
@@ -77,6 +79,8 @@ export class Daemon implements Context {
   readonly proposals: ProposalService;
   readonly membership: MembershipService;
   readonly devices: DeviceService;
+  readonly #proposalEvents: ProposalEvents;
+  readonly #received: ReceivedWatcher;
   readonly #options: DaemonOptions;
   readonly #startedAt = Math.floor(Date.now() / 1000);
   #state: ProfileState | undefined;
@@ -108,17 +112,22 @@ export class Daemon implements Context {
     this.devices = new DeviceService(this, this.proposals, this.membership);
     this.proposals.rotationApprover = (vault, stored, tx, secret) =>
       this.membership.approve(vault, stored, tx, secret);
+    this.#proposalEvents = new ProposalEvents(
+      (ref) => this.proposals.get(ref),
+      (event) => this.emit(event),
+    );
+    this.#received = new ReceivedWatcher(this);
   }
 
   // Context.
 
   get state(): ProfileState {
-    if (!this.#state) throw new DaemonError("not-ready", "the daemon is starting");
+    if (!this.#state) throw notReady("starting", "the daemon is starting");
     return this.#state;
   }
 
   get node(): NodeService {
-    if (!this.#node) throw new DaemonError("not-ready", "the daemon is starting");
+    if (!this.#node) throw notReady("starting", "the daemon is starting");
     return this.#node;
   }
 
@@ -132,18 +141,17 @@ export class Daemon implements Context {
   }
 
   secrets(): SecretsStore {
-    if (!this.#secrets) throw new DaemonError("not-ready", "unlock the signer first");
+    if (!this.#secrets) throw notReady("signer", "unlock the signer first");
     return this.#secrets;
   }
 
   account(): AztecAddress {
-    if (!this.#account)
-      throw new DaemonError("not-ready", "the member's account is not loaded yet");
+    if (!this.#account) throw notReady("starting", "the member's account is not loaded yet");
     return this.#account;
   }
 
   feePayer(): AztecAddress {
-    if (!this.#feePayer) throw new DaemonError("not-ready", "the wallet is not running yet");
+    if (!this.#feePayer) throw notReady("starting", "the wallet is not running yet");
     return this.#feePayer;
   }
 
@@ -342,7 +350,7 @@ export class Daemon implements Context {
     const { settings } = this.state.file;
     await this.keeper.subscribe((event) => {
       this.emit({ type: "keeperEvent", event });
-      if ("vault" in event) this.emit({ type: "vaultActivity", vault: event.vault });
+      void this.#proposalEvents.onKeeperEvent(event);
       this.devices.onKeeperEvent(event);
     });
     await this.#startKeeper();
@@ -369,10 +377,19 @@ export class Daemon implements Context {
     await this.vaults.load();
     await this.membership.load();
     this.#sync = setInterval(() => {
-      void this.vaults.sync();
+      void this.vaults.sync().then(() => this.#checkReceived());
       void this.registerSenders();
     }, SYNC_INTERVAL_MS);
     this.#sync.unref();
+  }
+
+  /** Announces transfers into each active vault that arrived since the last sync. */
+  async #checkReceived(): Promise<void> {
+    for (const record of this.vaults.list().filter((r) => r.status === "active")) {
+      // One vault at a time: each read goes through the keepers' threshold ECDH.
+      // oxlint-disable-next-line no-await-in-loop
+      await this.#received.check(record.address);
+    }
   }
 
   /** Starts the keeper the settings name: a remote one, or the daemon's own. */
@@ -385,7 +402,7 @@ export class Daemon implements Context {
       await this.keeper.startRemote({ ...remote, token: token.toString("utf8") });
       return;
     }
-    if (!this.#masterKey) throw new DaemonError("not-ready", "unlock the signer first");
+    if (!this.#masterKey) throw notReady("signer", "unlock the signer first");
     await this.keeper.start(
       {
         dataDir: this.paths.keeperDir,

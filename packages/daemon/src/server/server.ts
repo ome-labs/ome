@@ -3,7 +3,13 @@ import { chmod, rm } from "node:fs/promises";
 import { type Server, type Socket, createServer } from "node:net";
 import { createInterface } from "node:readline";
 
-import type { DaemonEvent, DaemonMethod } from "@ome-labs/api";
+import type {
+  DaemonEvent,
+  DaemonMethod,
+  EventEnvelope,
+  SubscribeParams,
+  Subscription,
+} from "@ome-labs/api";
 
 import { DaemonError, toRpcError } from "../errors.ts";
 
@@ -12,6 +18,8 @@ export type Handler = (method: DaemonMethod, params: unknown) => Promise<unknown
 
 /** Largest accepted request line. */
 const MAX_LINE = 1 << 20;
+/** Events kept for clients that reconnect and ask for what they missed. */
+const REPLAY = 1024;
 
 interface Request {
   readonly jsonrpc?: unknown;
@@ -23,7 +31,8 @@ interface Request {
 /**
  * The daemon API on an owner-only Unix socket: newline-delimited JSON-RPC 2.0, the keeper's framing. The first call of
  * every connection is `session.auth { token }`, compared in constant time; after `events.subscribe` the connection
- * also receives `event` notifications.
+ * also receives `event` notifications. Events are numbered within an epoch (this server's start, in milliseconds), and
+ * the last {@link REPLAY} are kept so a client that reconnects with `since` receives what it missed.
  */
 export class DaemonServer {
   readonly #server: Server;
@@ -31,6 +40,9 @@ export class DaemonServer {
   readonly #methods: ReadonlySet<string>;
   readonly #subscribers = new Set<Socket>();
   readonly #connections = new Set<Socket>();
+  readonly #epoch = Date.now();
+  readonly #recent: EventEnvelope[] = [];
+  #sent = 0;
 
   private constructor(token: string, methods: ReadonlySet<string>, handle: Handler) {
     this.#token = Buffer.from(token, "utf8");
@@ -54,10 +66,33 @@ export class DaemonServer {
     return server;
   }
 
-  /** Sends `event` to every subscribed connection. */
+  /** Numbers `event`, keeps it for replay, and sends it to every subscribed connection. */
   broadcast(event: DaemonEvent): void {
-    const line = `${JSON.stringify({ jsonrpc: "2.0", method: "event", params: event })}\n`;
+    this.#sent += 1;
+    const envelope: EventEnvelope = {
+      seq: { epoch: this.#epoch, n: this.#sent },
+      at: Math.floor(Date.now() / 1000),
+      event,
+    };
+    this.#recent.push(envelope);
+    if (this.#recent.length > REPLAY) this.#recent.shift();
+    const line = notification(envelope);
     for (const socket of this.#subscribers) socket.write(line);
+  }
+
+  /**
+   * Answers `events.subscribe`: the events after `since` when they are all still kept, or `reset` when they aren't
+   * (another epoch, or older than the oldest kept).
+   */
+  #subscription(params: SubscribeParams): { answer: Subscription; replay: EventEnvelope[] } {
+    const since = params.since;
+    const answer = { epoch: this.#epoch, latest: this.#sent, reset: false };
+    if (!since) return { answer, replay: [] };
+    const oldest = this.#recent[0]?.seq.n ?? this.#sent + 1;
+    const replayable =
+      since.epoch === this.#epoch && since.n >= oldest - 1 && since.n <= this.#sent;
+    if (!replayable) return { answer: { ...answer, reset: true }, replay: [] };
+    return { answer, replay: this.#recent.filter((envelope) => envelope.seq.n > since.n) };
   }
 
   close(): Promise<void> {
@@ -108,8 +143,11 @@ export class DaemonServer {
         return;
       }
       if (request.method === "events.subscribe") {
+        // Replayed events follow the answer and come before any new one: JavaScript runs this to the end first.
+        const { answer, replay } = this.#subscription((request.params ?? {}) as SubscribeParams);
+        reply(request.id, { result: answer });
+        for (const envelope of replay) socket.write(notification(envelope));
         this.#subscribers.add(socket);
-        reply(request.id, { result: null });
         return;
       }
       if (!this.#methods.has(request.method)) {
@@ -132,4 +170,8 @@ export class DaemonServer {
     const candidate = Buffer.from(given, "utf8");
     return candidate.length === this.#token.length && timingSafeEqual(candidate, this.#token);
   }
+}
+
+function notification(envelope: EventEnvelope): string {
+  return `${JSON.stringify({ jsonrpc: "2.0", method: "event", params: envelope })}\n`;
 }

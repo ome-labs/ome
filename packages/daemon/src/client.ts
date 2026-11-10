@@ -8,8 +8,12 @@ import type {
   DaemonMethod,
   DaemonParams,
   DaemonResult,
+  ErrorDetails,
   ErrorKind,
+  EventEnvelope,
+  EventSeq,
   RpcError,
+  Subscription,
 } from "@ome-labs/api";
 
 import { omeHome } from "./profile/paths.ts";
@@ -17,13 +21,18 @@ import { omeHome } from "./profile/paths.ts";
 /** An error the daemon returned, with its API kind. */
 export class DaemonCallError extends Error {
   readonly kind: ErrorKind;
+  readonly details: ErrorDetails | undefined;
 
   constructor(error: RpcError) {
     super(error.message);
     this.name = "DaemonCallError";
     this.kind = error.data?.kind ?? "failed";
+    this.details = error.data?.details;
   }
 }
+
+/** Receives each event, with its number and time. */
+export type EventListener = (event: DaemonEvent, envelope: EventEnvelope) => void;
 
 /** Typed client of a daemon (`ome_api::daemon`), for TypeScript apps and tests; Rust apps use `ome-client`. */
 export class DaemonClient {
@@ -32,7 +41,8 @@ export class DaemonClient {
     number,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
   >();
-  readonly #listeners = new Set<(event: DaemonEvent) => void>();
+  readonly #listeners = new Set<EventListener>();
+  #subscribed = false;
   #next = 0;
 
   private constructor(socket: Socket) {
@@ -46,7 +56,8 @@ export class DaemonClient {
         params?: unknown;
       };
       if (message.method === "event") {
-        for (const listener of this.#listeners) listener(message.params as DaemonEvent);
+        const envelope = message.params as EventEnvelope;
+        for (const listener of this.#listeners) listener(envelope.event, envelope);
         return;
       }
       const pending = message.id === undefined ? undefined : this.#pending.get(message.id);
@@ -94,10 +105,28 @@ export class DaemonClient {
     });
   }
 
-  async subscribe(listener: (event: DaemonEvent) => void): Promise<() => void> {
-    if (this.#listeners.size === 0) await this.call("events.subscribe", {});
+  /**
+   * Calls `listener` with every event from now on. With `since` (the last event a previous session saw), the daemon
+   * first replays the ones after it, or answers `reset` when it can't; the answer is returned either way.
+   */
+  async subscribe(
+    listener: EventListener,
+    since?: EventSeq,
+  ): Promise<{ stop: () => void; subscription: Subscription | undefined }> {
+    // Added before asking: replayed events arrive right after the answer.
     this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
+    const stop = () => {
+      this.#listeners.delete(listener);
+    };
+    if (this.#subscribed && !since) return { stop, subscription: undefined };
+    try {
+      const subscription = await this.call("events.subscribe", since ? { since } : {});
+      this.#subscribed = true;
+      return { stop, subscription };
+    } catch (error) {
+      stop();
+      throw error;
+    }
   }
 
   close(): void {

@@ -16,8 +16,9 @@ import type { VaultTx } from "@ome-labs/wallet";
 import { decodeProposal, rejectionMessage, signerSwapSlot } from "@ome-labs/wasm";
 
 import type { Context } from "../context.ts";
-import { DaemonError, require } from "../errors.ts";
-import { payloadOf, summaryOf } from "./intents.ts";
+import { DaemonError, notReady, require } from "../errors.ts";
+import { requireBalance } from "../vaults/tokens.ts";
+import { intentOf, payloadOf, summaryOf } from "./intents.ts";
 import { type Stored, proposalView, storedProposals } from "./views.ts";
 
 /** `rotate_membership(...)`'s selector; its proposals are approved through the membership service. */
@@ -113,11 +114,12 @@ export class ProposalService {
 
   /** Builds a proposal and stores it with the keeper, which replicates it to every member. */
   async create(params: ProposeParams, txNonce?: Fr): Promise<ProposalView> {
+    if (params.intent.kind === "transfer")
+      await requireBalance(this.#context, params.vault, params.intent.token, params.intent.amount);
     const tx = await this.#prepare(params, txNonce);
     const keeper = this.#context.keeper.client;
     await keeper.call("payloads.put", { vault: params.vault, body: tx.payloadBody });
     await keeper.call("proposals.put", { vault: params.vault, body: tx.proposal });
-    this.#context.emit({ type: "vaultActivity", vault: params.vault });
     return this.get({ vault: params.vault, id: tx.id });
   }
 
@@ -133,8 +135,7 @@ export class ProposalService {
 
   /** The transaction a stored proposal describes, rebuilt and checked on this device. */
   async #rebuilt(stored: Stored): Promise<VaultTx> {
-    if (!stored.payload)
-      throw new DaemonError("not-ready", "the proposal's payload has not arrived yet");
+    if (!stored.payload) throw notReady("payload", "the proposal's payload has not arrived yet");
     return this.#context
       .wallet()
       .vaultTxOf(this.#context.vaults.address(stored.vault), stored.body, stored.payload);
@@ -238,7 +239,7 @@ export class ProposalService {
         signer.approveSignerSwap(input, chain, stored.body, stored.payload ?? "", feePayers, now),
       );
     } else if (rotation) {
-      if (!this.#approveRotation) throw new DaemonError("not-ready", "rotations are not available");
+      if (!this.#approveRotation) throw notReady("starting", "rotations are not available");
       approval = await this.#approveRotation(params.vault, stored, tx, params.secret);
     } else {
       const chain = await wallet.chain();
@@ -252,7 +253,6 @@ export class ProposalService {
         vault: params.vault,
         body: approval,
       });
-    this.#context.emit({ type: "vaultActivity", vault: params.vault });
     return this.get(params);
   }
 
@@ -269,13 +269,15 @@ export class ProposalService {
       vault: params.vault,
       body: rejection,
     });
-    this.#context.emit({ type: "vaultActivity", vault: params.vault });
     return this.get(params);
   }
 
   /** Executes a ready proposal from this device and stores the receipt with the keeper. */
   async execute(ref: ProposalRef): Promise<ProposalView> {
     const { stored } = await this.#stored(ref);
+    const intent = intentOf(stored.info.summary);
+    if (intent.kind === "transfer")
+      await requireBalance(this.#context, ref.vault, intent.token, intent.amount);
     const progress = (phase: ExecutionProgress["phase"], extra: Partial<ExecutionProgress> = {}) =>
       this.#context.emit({
         type: "execution",

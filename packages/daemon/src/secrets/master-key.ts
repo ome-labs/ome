@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
-import { DaemonError } from "../errors.ts";
+import { notReady } from "../errors.ts";
 import { writePrivate } from "../profile/files.ts";
 import { open, seal } from "./sealing.ts";
 
@@ -155,6 +155,6 @@ export async function masterKeyStore(account: string, path: string): Promise<Mas
 
 /** Throws `not-ready` while the keeper's key cannot be read yet. */
 export function requireKey(key: Buffer | null): Buffer {
-  if (!key) throw new DaemonError("not-ready", "unlock the signer to start the keeper");
+  if (!key) throw notReady("signer", "unlock the signer to start the keeper");
   return key;
 }

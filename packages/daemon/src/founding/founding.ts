@@ -22,7 +22,7 @@ import {
 } from "@ome-labs/wallet";
 
 import { type Context, until } from "../context.ts";
-import { DaemonError } from "../errors.ts";
+import { DaemonError, notReady } from "../errors.ts";
 import { peerId } from "../peer-id.ts";
 import type { VaultRecord } from "../vaults/records.ts";
 
@@ -91,7 +91,7 @@ export class FoundingService {
 
   #member() {
     const profile = this.#context.state.file.profile;
-    if (!profile) throw new DaemonError("not-ready", "create a profile first");
+    if (!profile) throw notReady("profile", "create a profile first");
     return { name: profile.name, signerKey: profile.signerKey };
   }
 
@@ -108,8 +108,8 @@ export class FoundingService {
   async join(invite: string): Promise<LobbyView> {
     const preview = await this.inspect(invite);
     if (!preview.sameNetwork)
-      throw new DaemonError(
-        "invalid",
+      throw DaemonError.detailed(
+        { kind: "network", expected: preview.network, actual: this.#context.node.network() },
         `the invite is for ${preview.network}, this daemon is on ${this.#context.node.network()}`,
       );
     const { lobby } = await this.#context.keeper.client.call("lobby.join", {

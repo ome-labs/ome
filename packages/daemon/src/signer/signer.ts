@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import type { Hex32, Point, Secret, SignerStatus } from "@ome-labs/api";
 import { UnlockedSigner, generateSigner, sealedPublicKey, sealingKey } from "@ome-labs/wasm";
 
-import { DaemonError } from "../errors.ts";
+import { DaemonError, notReady } from "../errors.ts";
 import { writePrivate } from "../profile/files.ts";
 
 /**
@@ -91,7 +91,7 @@ export class SignerService {
   }
 
   #sealedOrThrow(): string {
-    if (!this.#sealed) throw new DaemonError("not-ready", "create a profile first");
+    if (!this.#sealed) throw notReady("profile", "create a profile first");
     return this.#sealed;
   }
 }

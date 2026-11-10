@@ -21,7 +21,7 @@ import {
 import { decodeProposal, signerSetCommitment } from "@ome-labs/wasm";
 
 import type { Context } from "../context.ts";
-import { DaemonError } from "../errors.ts";
+import { DaemonError, notReady } from "../errors.ts";
 import { peerId } from "../peer-id.ts";
 import { readAllJson, writeJson } from "../profile/files.ts";
 import { type VaultRecord, secretsName, setupOf } from "./records.ts";
@@ -57,13 +57,13 @@ export class VaultService {
 
   manifest(vault: Hex32): Manifest {
     const manifest = this.#manifests.get(this.record(vault).address);
-    if (!manifest) throw new DaemonError("not-ready", "the vault's committee is not loaded yet");
+    if (!manifest) throw notReady("vault", "the vault's committee is not loaded yet");
     return manifest;
   }
 
   deployment(vault: Hex32): VaultDeployment {
     const deployment = this.#deployments.get(this.record(vault).address);
-    if (!deployment) throw new DaemonError("not-ready", "the vault is not loaded yet");
+    if (!deployment) throw notReady("vault", "the vault is not loaded yet");
     return deployment;
   }
 
@@ -151,11 +151,15 @@ export class VaultService {
     };
     if (observation === "activated") await this.attach(vault);
     if (observation === "removed") record.status = "removed";
-    if (observation === "current" && (await this.#adoptSwap(record.address, config)))
-      this.#context.emit({ type: "vaultActivity", vault: record.address });
+    const swapped = observation === "current" && (await this.#adoptSwap(record.address, config));
     await this.save(record);
-    if (observation !== "current" && observation !== "outdated")
-      this.#context.emit({ type: "vaultActivity", vault: record.address });
+    if (swapped || (observation !== "current" && observation !== "outdated")) {
+      // A swap, an activated or unknown committee, or a removal: the config and who is in the vault changed.
+      this.#context.emit({ type: "configChanged", vault: record.address, version: config.version });
+      this.#context.emit({ type: "memberChanged", vault: record.address });
+    }
+    if (observation === "removed")
+      this.#context.emit({ type: "vaultUpdated", vault: record.address });
     return observation;
   }
 

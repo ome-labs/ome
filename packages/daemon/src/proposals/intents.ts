@@ -4,7 +4,7 @@ import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 import type { ContractArtifact } from "@aztec-labs/stdlib/abi";
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import { type ExecutionPayload, mergeExecutionPayloads } from "@aztec-labs/stdlib/tx";
-import type { Intent } from "@ome-labs/api";
+import type { Hex32, Intent } from "@ome-labs/api";
 
 import type { Context } from "../context.ts";
 import { DaemonError, require } from "../errors.ts";
@@ -32,8 +32,12 @@ export async function artifactOf(
     ? await pxe.getContractArtifact(instance.originalContractClassId)
     : undefined;
   if (!artifact)
-    throw new DaemonError(
-      "not-found",
+    throw DaemonError.detailed(
+      {
+        kind: "unknown-contract",
+        address: address.toString() as Hex32,
+        ...(instance ? { classId: instance.originalContractClassId.toString() as Hex32 } : {}),
+      },
       `contract ${address.toString()} is not registered with this member`,
     );
   return artifact;

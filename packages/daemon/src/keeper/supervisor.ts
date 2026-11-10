@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { API_VERSION, type KeeperEvent, type KeeperState } from "@ome-labs/api";
 import { KeeperClient } from "@ome-labs/wallet";
 
-import { DaemonError } from "../errors.ts";
+import { notReady } from "../errors.ts";
 import { privateDir } from "../profile/files.ts";
 
 /** Listen on every interface, so members on other machines can dial in; ports are picked by the OS. */
@@ -32,7 +32,7 @@ export function keeperBinary(home: string): string {
     fileURLToPath(new URL("../../../../crates/target/debug/ome-keeper", import.meta.url)),
   ].filter((path): path is string => Boolean(path));
   const found = candidates.find((path) => existsSync(path));
-  if (!found) throw new DaemonError("not-ready", "ome-keeper not found; set OME_KEEPER_BIN");
+  if (!found) throw notReady("keeper", "ome-keeper not found; set OME_KEEPER_BIN");
   return found;
 }
 
@@ -97,7 +97,7 @@ export class KeeperSupervisor {
 
   /** The keeper's client; throws `not-ready` until it runs. */
   get client(): KeeperClient {
-    if (!this.#client) throw new DaemonError("not-ready", `the keeper is ${this.#state.status}`);
+    if (!this.#client) throw notReady("keeper", `the keeper is ${this.#state.status}`);
     return this.#client;
   }
 
