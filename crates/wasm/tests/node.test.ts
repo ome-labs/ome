@@ -205,10 +205,14 @@ describe("proposals and votes", () => {
     ]);
     expect(result.authwitWitnesses?.[0]?.witness).toHaveLength(49);
 
-    // A caller the transaction doesn't call gets no authwit.
+    // A caller reached through another contract is allowed (the daemon's simulation checks the use); a transaction
+    // without calls uses no authwit.
     expect(
-      thrown(() => proposal(f, NOW + 3600, [amm], [{ ...authwit, caller: randomField() }])).message,
-    ).toMatch(/not called by the transaction/u);
+      proposal(f, NOW + 3600, [amm], [{ ...authwit, caller: randomField() }]).authwits,
+    ).toHaveLength(1);
+    expect(thrown(() => proposal(f, NOW + 3600, [], [authwit])).message).toMatch(
+      /without calls uses no authwit/u,
+    );
   });
 
   it("refuses to sign what fails the checks", () => {

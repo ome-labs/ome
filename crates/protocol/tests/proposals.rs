@@ -199,7 +199,7 @@ fn a_proposal_carries_its_authwit_hashes_and_checks_out() {
 }
 
 #[test]
-fn an_authwit_is_granted_only_to_a_called_contract_and_never_to_the_vault() {
+fn an_authwit_needs_calls_and_is_never_granted_to_or_consumed_by_the_vault() {
     let f = fixture();
     let vault = field(&f.vault.address());
     let build = |change: &dyn Fn(&mut ExecutionRequest)| {
@@ -208,11 +208,14 @@ fn an_authwit_is_granted_only_to_a_called_contract_and_never_to_the_vault() {
         swap_draft(request).build(&f.vault, chain())
     };
 
+    // A caller the transaction reaches through another contract (an AMM behind a router) is allowed here; the
+    // daemon's simulation shows whether the transaction uses it.
+    assert!(build(&|r| r.authwits[0].caller = field(&Base::from(0x6666u64))).is_ok());
     assert_eq!(
-        build(&|r| r.authwits[0].caller = field(&Base::from(0x6666u64))).map(|_| ()),
+        build(&|r| r.calls.clear()).map(|_| ()),
         Err(Error::InvalidAuthwit {
             index: 0,
-            reason: "the caller is not called by the transaction"
+            reason: "a transaction without calls uses no authwit"
         })
     );
     assert_eq!(

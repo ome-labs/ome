@@ -72,7 +72,7 @@ impl Draft {
 ///
 /// - the payload is the one referenced, and decodes to a valid execution request;
 /// - the calls hash to the proposal's outer hash on this vault and chain, and the authwits to its authwit hashes;
-/// - every authwit's caller is called by the transaction, and none is consumed by the vault;
+/// - the authwits pass [`ExecutionRequest::check_authwits`];
 /// - it is for the current config version, its deadline has not passed (`now` is unix seconds), the proposer is a
 ///   member, and the fee method keeps fees off the vault.
 ///

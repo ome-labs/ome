@@ -21,8 +21,8 @@ use crate::{
 pub struct ExecutionRequest {
     /// The calls, at most five. None is a valid cancellation: it burns the nonce.
     pub calls: Vec<Call>,
-    /// Private authwits the vault grants with the calls, at most four, each signed beside the transaction. Every
-    /// caller is the target of one of the calls, so an authwit can only be used inside this transaction's own flow.
+    /// Private authwits the vault grants with the calls, at most four, each signed beside the transaction and usable
+    /// once, before the deadline, under the current config.
     pub authwits: Vec<Authwit>,
     /// Execution data the PXE needs but the signature does not cover (auth witnesses, capsules, extra hashed
     /// arguments), encoded by the daemon. It cannot change which calls run or with which arguments; contracts must
@@ -75,25 +75,22 @@ impl ExecutionRequest {
             .collect()
     }
 
-    /// Checks the authwits against the vault: each caller is the target of one of the calls other than the vault (whose
-    /// own calls need no authwit), and no authwit is consumed by the vault itself.
+    /// Checks the authwits against the vault: a transaction with calls to use them, a caller other than the vault
+    /// (whose own calls need no authwit), and a consumer other than the vault.
+    ///
+    /// Whether the transaction really uses each authwit, and through which contract, is read from a simulation by the
+    /// member's daemon (`architecture/protocol.md`); a rule over the calls alone would refuse a router calling an AMM.
     ///
     /// # Errors
     /// [`Error::InvalidAuthwit`].
     pub fn check_authwits(&self, vault: Base) -> Result<(), Error> {
-        let targets = self
-            .calls
-            .iter()
-            .map(|call| parse_field(&call.to))
-            .collect::<Result<Vec<_>, _>>()?;
         for (index, authwit) in self.authwits.iter().enumerate() {
             let invalid = |reason| Error::InvalidAuthwit { index, reason };
-            let caller = parse_field(&authwit.caller)?;
-            if caller == vault {
-                return Err(invalid("the vault needs no authwit for its own calls"));
+            if self.calls.is_empty() {
+                return Err(invalid("a transaction without calls uses no authwit"));
             }
-            if !targets.contains(&caller) {
-                return Err(invalid("the caller is not called by the transaction"));
+            if parse_field(&authwit.caller)? == vault {
+                return Err(invalid("the vault needs no authwit for its own calls"));
             }
             if parse_field(&authwit.call.to)? == vault {
                 return Err(invalid("the vault cannot consume its own authwit"));
