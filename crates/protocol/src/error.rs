@@ -77,6 +77,30 @@ pub enum Error {
     /// A function signature contains whitespace.
     #[error("function signature contains whitespace")]
     InvalidSignatureText,
+    /// More authwits than a proposal may grant.
+    #[error("{0} authwits; a proposal grants at most 4")]
+    TooManyAuthwits(usize),
+    /// An authwit cannot be granted with a vault transaction.
+    #[error("authwit {index} is invalid: {reason}")]
+    InvalidAuthwit {
+        /// Position of the authwit.
+        index: usize,
+        /// What is wrong with it.
+        reason: &'static str,
+    },
+    /// The proposal's authwit hashes are not the payload's.
+    #[error("payload authwits do not hash to the proposed authwits")]
+    AuthwitMismatch,
+    /// An approval carries another number of signatures than the proposal has messages to sign.
+    #[error("slot {slot} signed {got} messages; the proposal has {expected}")]
+    SignatureCount {
+        /// The approving slot.
+        slot: u32,
+        /// The transaction plus each authwit.
+        expected: usize,
+        /// Signatures in the approval.
+        got: usize,
+    },
     /// The payload is not the one the proposal references.
     #[error("payload does not match the proposal")]
     PayloadMismatch,

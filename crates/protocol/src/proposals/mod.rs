@@ -4,6 +4,6 @@ mod approval;
 mod proposal;
 mod tally;
 
-pub use approval::{approval_message_for, verify_approval, verify_rejection};
+pub use approval::{approval_messages_for, verify_approval, verify_rejection};
 pub use proposal::{Draft, FEE_EXTERNAL, check_proposal};
 pub use tally::{Status, Tally};

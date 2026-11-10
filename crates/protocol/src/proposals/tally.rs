@@ -1,7 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use ome_crypto::schnorr;
-use ome_wire::messages::proposals::{Approval, Proposal, Rejection};
+use ome_crypto::{Base, schnorr};
+use ome_wire::{
+    messages::proposals::{Approval, Proposal, Rejection},
+    types::parse_field,
+};
 
 use super::{verify_approval, verify_rejection};
 use crate::{Error, membership::Vault, vault::Witness};
@@ -33,7 +36,8 @@ pub struct Tally<'a> {
     vault: &'a Vault,
     proposal: &'a Proposal,
     id: [u8; 32],
-    approvals: BTreeMap<u32, schnorr::Signature>,
+    /// Each approving slot's signatures: the transaction's, then each authwit's.
+    approvals: BTreeMap<u32, Vec<schnorr::Signature>>,
     rejections: BTreeSet<u32>,
 }
 
@@ -61,8 +65,12 @@ impl<'a> Tally<'a> {
         if self.voted(approval.slot) {
             return Ok(false);
         }
-        let signature = schnorr::Signature::try_from(&approval.signature)?;
-        self.approvals.insert(approval.slot, signature);
+        let signatures = approval
+            .signatures
+            .iter()
+            .map(schnorr::Signature::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.approvals.insert(approval.slot, signatures);
         Ok(true)
     }
 
@@ -101,18 +109,35 @@ impl<'a> Tally<'a> {
         }
     }
 
-    /// The auth witness once approved: the `k` lowest-slot approvals (enough for the contract, and the same witness
-    /// whichever member builds it).
+    /// The transaction's auth witness once approved: the `k` lowest-slot approvals (enough for the contract, and the
+    /// same witness whichever member builds it).
     #[must_use]
     pub fn witness(&self) -> Option<Witness> {
+        self.witness_at(0)
+    }
+
+    /// Each authwit's message hash and auth witness once approved, in the proposal's order, built like
+    /// [`Tally::witness`].
+    #[must_use]
+    pub fn authwit_witnesses(&self) -> Option<Vec<(Base, Witness)>> {
+        self.proposal
+            .authwits
+            .iter()
+            .enumerate()
+            .map(|(index, hash)| Some((parse_field(hash).ok()?, self.witness_at(index + 1)?)))
+            .collect()
+    }
+
+    /// The witness of approval message `index` (0 the transaction, then each authwit).
+    fn witness_at(&self, index: usize) -> Option<Witness> {
         let needed = usize::try_from(self.vault.config().threshold).ok()?;
         if self.approvals.len() < needed {
             return None;
         }
         let signers = self.vault.signers();
         let mut signatures = vec![None; signers.keys().len()];
-        for (slot, signature) in self.approvals.iter().take(needed) {
-            signatures[usize::try_from(*slot).ok()?] = Some(*signature);
+        for (slot, approval) in self.approvals.iter().take(needed) {
+            signatures[usize::try_from(*slot).ok()?] = Some(*approval.get(index)?);
         }
         Some(Witness::encode(
             signers,

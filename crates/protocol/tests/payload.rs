@@ -9,7 +9,7 @@ use ome_crypto::Base;
 use ome_protocol::{
     Error,
     payload::{
-        Call, CallKind, ChainInfo, ExecutionRequest, app_payload_fields, app_payload_hash,
+        Authwit, Call, CallKind, ChainInfo, ExecutionRequest, app_payload_fields, app_payload_hash,
         arguments, outer_hash, selector,
     },
 };
@@ -116,6 +116,33 @@ fn app_payload_and_outer_hashes_match_aztec() {
         assert_eq!(
             outer_hash(vault, chain, payload_hash),
             base(&case["outerHash"]),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn authwit_hashes_match_aztec() {
+    let v = payload();
+    let chain = ChainInfo {
+        chain_id: base(&v["context"]["chainId"]),
+        version: base(&v["context"]["version"]),
+    };
+
+    for (name, case) in v["authwits"].as_object().unwrap() {
+        let authwit = Authwit {
+            caller: field(&base(&case["caller"])),
+            call: call(&case["call"]),
+        };
+        assert_eq!(authwit.validate(0), Ok(()), "{name}");
+        assert_eq!(
+            authwit.inner_hash().unwrap(),
+            base(&case["innerHash"]),
+            "{name}"
+        );
+        assert_eq!(
+            authwit.message_hash(chain).unwrap(),
+            base(&case["messageHash"]),
             "{name}"
         );
     }

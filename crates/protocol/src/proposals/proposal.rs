@@ -42,6 +42,7 @@ impl Draft {
         chain: ChainInfo,
     ) -> Result<(Proposal, ProposalPayload), Error> {
         let payload = self.request.to_payload()?;
+        self.request.check_authwits(vault.address())?;
         let proposal = Proposal {
             config_version: vault.config().version,
             outer_hash: field(
@@ -49,6 +50,12 @@ impl Draft {
                     .request
                     .outer_hash(vault.address(), chain, self.tx_nonce)?,
             ),
+            authwits: self
+                .request
+                .authwit_hashes(chain)?
+                .iter()
+                .map(field)
+                .collect(),
             created_at: self.created_at,
             expires_at: self.expires_at,
             tx_nonce: field(&self.tx_nonce),
@@ -64,13 +71,14 @@ impl Draft {
 /// Checks a received proposal before a member reviews or signs it, and returns the calls to show them:
 ///
 /// - the payload is the one referenced, and decodes to a valid execution request;
-/// - the calls hash to the proposal's outer hash on this vault and chain;
+/// - the calls hash to the proposal's outer hash on this vault and chain, and the authwits to its authwit hashes;
+/// - every authwit's caller is called by the transaction, and none is consumed by the vault;
 /// - it is for the current config version, its deadline has not passed (`now` is unix seconds), the proposer is a
 ///   member, and the fee method keeps fees off the vault.
 ///
 /// # Errors
-/// [`Error::PayloadMismatch`], [`Error::OuterHashMismatch`], [`Error::StaleConfig`], [`Error::Expired`],
-/// [`Error::UnknownSlot`], [`Error::PublicFeePayment`], or decoding errors.
+/// [`Error::PayloadMismatch`], [`Error::OuterHashMismatch`], [`Error::AuthwitMismatch`], [`Error::InvalidAuthwit`],
+/// [`Error::StaleConfig`], [`Error::Expired`], [`Error::UnknownSlot`], [`Error::PublicFeePayment`], or decoding errors.
 pub fn check_proposal(
     vault: &Vault,
     chain: ChainInfo,
@@ -87,6 +95,15 @@ pub fn check_proposal(
     if outer_hash != parse_field(&proposal.outer_hash)? {
         return Err(Error::OuterHashMismatch);
     }
+    let authwits = proposal
+        .authwits
+        .iter()
+        .map(parse_field)
+        .collect::<Result<Vec<_>, _>>()?;
+    if request.authwit_hashes(chain)? != authwits {
+        return Err(Error::AuthwitMismatch);
+    }
+    request.check_authwits(vault.address())?;
     let current = vault.config().version;
     if proposal.config_version != current {
         return Err(Error::StaleConfig {

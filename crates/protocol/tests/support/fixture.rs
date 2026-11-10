@@ -11,8 +11,8 @@ use ome_crypto::{
 };
 use ome_protocol::{
     membership::Vault,
-    payload::{Call, CallKind, ChainInfo, ExecutionRequest, selector},
-    proposals::{Draft, approval_message_for},
+    payload::{Authwit, Call, CallKind, ChainInfo, ExecutionRequest, selector},
+    proposals::{Draft, approval_messages_for},
     vault::{Committee, Config, SignerSet, rejection_message},
 };
 use ome_wire::{
@@ -188,7 +188,41 @@ pub fn request(amount: u64) -> ExecutionRequest {
                 .map(|a| field(&Base::from(a)))
                 .to_vec(),
         }],
+        authwits: vec![],
         extras: vec![],
+    }
+}
+
+/// A swap: one call to an AMM, which pulls `amount` of the vault's tokens under a private authwit.
+pub fn swap_request(amount: u64) -> ExecutionRequest {
+    let swap = "swap_exact_tokens_for_tokens((Field),(Field),u128,u128,Field)";
+    let transfer = "transfer_to_public((Field),(Field),u128,Field)";
+    let call = |to: u64, signature: &str, args: Vec<u64>| Call {
+        signature: Some(signature.to_owned()),
+        to: field(&Base::from(to)),
+        selector: selector(signature).unwrap(),
+        kind: CallKind::Private,
+        is_static: false,
+        hide_msg_sender: false,
+        args: args.into_iter().map(|a| field(&Base::from(a))).collect(),
+    };
+    ExecutionRequest {
+        calls: vec![call(AMM, swap, vec![0x1001, 0x1002, amount, 1, 9])],
+        authwits: vec![Authwit {
+            caller: field(&Base::from(AMM)),
+            call: call(0x1001, transfer, vec![0x1234, AMM, amount, 9]),
+        }],
+        extras: vec![],
+    }
+}
+
+/// The AMM of [`swap_request`].
+pub const AMM: u64 = 0x5001;
+
+pub fn swap_draft(request: ExecutionRequest) -> Draft {
+    Draft {
+        request,
+        ..draft(0)
     }
 }
 
@@ -207,17 +241,25 @@ pub fn proposed(fixture: &Fixture, amount: u64) -> (Proposal, ProposalPayload) {
     draft(amount).build(&fixture.vault, chain()).unwrap()
 }
 
-/// Member in `slot` approves `proposal`.
+/// Member in `slot` approves `proposal`: the transaction and each authwit.
 pub fn approve(fixture: &mut Fixture, proposal: &Proposal, slot: u32) -> Approval {
-    let message = approval_message_for(&fixture.vault, proposal).unwrap();
-    sign_as(fixture, slot, message, proposal)
+    let messages = approval_messages_for(&fixture.vault, proposal).unwrap();
+    sign_as(fixture, slot, &messages, proposal)
 }
 
-/// Member in `slot` signs an arbitrary `message` and presents it as an approval of `proposal`.
-pub fn sign_as(fixture: &mut Fixture, slot: u32, message: Base, proposal: &Proposal) -> Approval {
+/// Member in `slot` signs arbitrary `messages` and presents them as an approval of `proposal`.
+pub fn sign_as(
+    fixture: &mut Fixture,
+    slot: u32,
+    messages: &[Base],
+    proposal: &Proposal,
+) -> Approval {
     let key = &fixture.signing_keys[usize::try_from(slot).unwrap()];
-    let signature = schnorr::sign(key, message, &mut fixture.rng).unwrap();
-    Approval::new(proposal.id().unwrap(), slot, &signature)
+    let signatures: Vec<_> = messages
+        .iter()
+        .map(|message| schnorr::sign(key, *message, &mut fixture.rng).unwrap())
+        .collect();
+    Approval::new(proposal.id().unwrap(), slot, &signatures)
 }
 
 /// Member in `slot` rejects `proposal`.
