@@ -15,8 +15,8 @@ use crate::{
     error::Result,
     js::{export, from_js, seconds},
     types::{
-        ApprovalInfo, BuiltProposal, ProposalInfo, RefusedVote, RejectionInfo, TallyResult,
-        TallyStatus,
+        ApprovalInfo, AuthwitWitness, BuiltProposal, ProposalInfo, RefusedVote, RejectionInfo,
+        TallyResult, TallyStatus,
     },
 };
 
@@ -33,6 +33,7 @@ pub fn build_proposal(
         let draft = Draft {
             request: ExecutionRequest {
                 calls: draft.calls.into_iter().map(convert::call).collect(),
+                authwits: draft.authwits.into_iter().map(convert::authwit).collect(),
                 extras: draft.extras.0,
             },
             tx_nonce: draft.tx_nonce.to_field()?,
@@ -45,17 +46,20 @@ pub fn build_proposal(
         Ok(BuiltProposal {
             id: proposal.id()?.into(),
             outer_hash: proposal.outer_hash.into(),
-            approval_message: Hex32::from_field(&proposals::approval_message_for(
-                &vault, &proposal,
-            )?),
+            authwits: proposal.authwits.iter().copied().map(Hex32).collect(),
+            approval_messages: proposals::approval_messages_for(&vault, &proposal)?
+                .iter()
+                .map(Hex32::from_field)
+                .collect(),
             proposal: convert::body(&Message::Proposal(proposal))?,
             payload: convert::body(&Message::Payload(payload))?,
         })
     })
 }
 
-/// Checks a received proposal before review: the payload is the one referenced, hashes to the outer hash on this vault
-/// and chain, the config is current, the deadline has not passed and fees stay off the vault. Returns the calls.
+/// Checks a received proposal before review: the payload is the one referenced, hashes to the outer hash and authwit
+/// hashes on this vault and chain, every authwit's caller is called by the transaction, the config is current, the
+/// deadline has not passed and fees stay off the vault. Returns the calls and authwits.
 #[wasm_bindgen(js_name = checkProposal, unchecked_return_type = "ExecutionRequest")]
 pub fn check_proposal(
     #[wasm_bindgen(unchecked_param_type = "VaultInput")] vault: JsValue,
@@ -74,6 +78,7 @@ pub fn check_proposal(
         )?;
         Ok(crate::types::ExecutionRequest {
             calls: request.calls.iter().map(convert::call_out).collect(),
+            authwits: request.authwits.iter().map(convert::authwit_out).collect(),
             extras: HexBytes(request.extras),
         })
     })
@@ -90,6 +95,7 @@ pub fn decode_proposal(
             id: p.id()?.into(),
             config_version: p.config_version,
             outer_hash: p.outer_hash.into(),
+            authwits: p.authwits.iter().copied().map(Hex32).collect(),
             created_at: p.created_at,
             expires_at: p.expires_at,
             tx_nonce: p.tx_nonce.into(),
@@ -112,7 +118,11 @@ pub fn decode_approval(
         Ok(ApprovalInfo {
             proposal: a.proposal.into(),
             slot: a.slot,
-            signature: convert::signature(&a.signature)?,
+            signatures: a
+                .signatures
+                .iter()
+                .map(convert::signature)
+                .collect::<Result<_>>()?,
         })
     })
 }
@@ -133,7 +143,7 @@ pub fn decode_rejection(
     })
 }
 
-/// Throws unless `approval` is for `proposal` and signed by the key in its slot.
+/// Throws unless `approval` is for `proposal` and each of its signatures is by the key in its slot.
 #[wasm_bindgen(js_name = verifyApproval)]
 pub fn verify_approval(
     #[wasm_bindgen(unchecked_param_type = "VaultInput")] vault: JsValue,
@@ -216,6 +226,15 @@ pub fn tally(
             needed: vault.config().threshold,
             refused,
             witness: tally.witness().as_ref().map(witness_fields),
+            authwit_witnesses: tally.authwit_witnesses().map(|witnesses| {
+                witnesses
+                    .iter()
+                    .map(|(hash, witness)| AuthwitWitness {
+                        message_hash: Hex32::from_field(hash),
+                        witness: witness_fields(witness),
+                    })
+                    .collect()
+            }),
         })
     })
 }

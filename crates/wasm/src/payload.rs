@@ -8,7 +8,7 @@ use crate::{
     convert,
     error::{Result, WasmError},
     js::{export, from_js},
-    types::Call,
+    types::{Authwit, Call},
 };
 
 fn calls(calls: JsValue) -> Result<Vec<payload::Call>> {
@@ -29,6 +29,7 @@ pub fn outer_hash(
     export(|| {
         let request = ExecutionRequest {
             calls: self::calls(calls)?,
+            authwits: Vec::new(),
             extras: Vec::new(),
         };
         let chain = convert::chain(from_js(chain)?)?;
@@ -51,6 +52,21 @@ pub fn app_payload_hash(
             &self::calls(calls)?,
             convert::field(tx_nonce)?,
         )?))
+    })
+}
+
+/// The message hash of a private authwit letting `caller` make `call` on the vault's behalf on `chain`, as aztec.js's
+/// `computeAuthWitMessageHash({ caller, call })` computes it.
+#[wasm_bindgen(js_name = authwitHash, unchecked_return_type = "Hex32")]
+pub fn authwit_hash(
+    #[wasm_bindgen(unchecked_param_type = "Authwit")] authwit: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "Chain")] chain: JsValue,
+) -> Result<JsValue, JsValue> {
+    export(|| {
+        let authwit = convert::authwit(from_js::<Authwit>(authwit)?);
+        Ok(Hex32::from_field(
+            &authwit.message_hash(convert::chain(from_js(chain)?)?)?,
+        ))
     })
 }
 

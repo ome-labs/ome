@@ -148,13 +148,31 @@ export type Call = {
 };
 
 /**
- * The calls a payload carries, and the PXE's execution data.
+ * A private authwit the vault grants with a transaction: `caller` may make `call` on the vault's behalf.
+ */
+export type Authwit = {
+  /**
+   * The contract allowed to make the call; one of the transaction's call targets.
+   */
+  caller: Hex32;
+  /**
+   * The private call it may make; its target consumes the authwit.
+   */
+  call: Call;
+};
+
+/**
+ * The calls a payload carries, the authwits granted with them, and the PXE's execution data.
  */
 export type ExecutionRequest = {
   /**
    * At most five calls; none is a cancellation.
    */
   calls: Array<Call>;
+  /**
+   * At most four private authwits, signed with the calls.
+   */
+  authwits: Array<Authwit>;
   /**
    * Execution data the signatures do not cover.
    */
@@ -169,6 +187,10 @@ export type Draft = {
    * The calls.
    */
   calls: Array<Call>;
+  /**
+   * Private authwits granted with the calls.
+   */
+  authwits: Array<Authwit>;
   /**
    * Execution data the signatures do not cover.
    */
@@ -216,9 +238,13 @@ export type BuiltProposal = {
    */
   outerHash: Hex32;
   /**
-   * The message an approval signs.
+   * Each authwit's message hash, in order.
    */
-  approvalMessage: Hex32;
+  authwits: Array<Hex32>;
+  /**
+   * The messages an approval signs: the transaction's, then each authwit's.
+   */
+  approvalMessages: Array<Hex32>;
 };
 
 /**
@@ -237,6 +263,10 @@ export type ProposalInfo = {
    * Outer hash.
    */
   outerHash: Hex32;
+  /**
+   * Message hashes of the authwits it grants.
+   */
+  authwits: Array<Hex32>;
   /**
    * When it was made, Unix seconds.
    */
@@ -284,9 +314,9 @@ export type ApprovalInfo = {
    */
   slot: number;
   /**
-   * Schnorr signature.
+   * Schnorr signatures: the transaction's, then each authwit's.
    */
-  signature: Hex64;
+  signatures: Array<Hex64>;
 };
 
 /**
@@ -335,6 +365,20 @@ export type RefusedVote = {
 };
 
 /**
+ * An authwit's auth witness, for the transaction's auth witnesses.
+ */
+export type AuthwitWitness = {
+  /**
+   * The authwit's message hash.
+   */
+  messageHash: Hex32;
+  /**
+   * The 49-field witness.
+   */
+  witness: Array<Hex32>;
+};
+
+/**
  * The votes on a proposal.
  */
 export type TallyResult = {
@@ -362,6 +406,10 @@ export type TallyResult = {
    * The 49-field auth witness, once approved.
    */
   witness: Array<Hex32> | null;
+  /**
+   * Each authwit's message hash and witness, once approved.
+   */
+  authwitWitnesses: Array<AuthwitWitness> | null;
 };
 
 /**

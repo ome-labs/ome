@@ -9,6 +9,7 @@ import {
   addressContext,
   appPayloadHash,
   approvalMessage,
+  authwitHash,
   committeeCommitment,
   outerHash,
   preaddress,
@@ -53,6 +54,7 @@ interface VectorCall {
 interface PayloadVectors {
   context: { vault: Hex32; chainId: Hex32; version: Hex32 };
   selectors: { signature: string; selector: string }[];
+  authwits: Record<string, { caller: Hex32; call: VectorCall; messageHash: Hex32 }>;
   payloads: Record<
     string,
     { calls: VectorCall[]; txNonce: Hex32; payloadHash: Hex32; outerHash: Hex32 }
@@ -126,6 +128,15 @@ describe("payloads", () => {
       const calls = v.calls.map(call);
       expect(appPayloadHash(calls, v.txNonce)).toBe(v.payloadHash);
       expect(outerHash(vault, { chainId, version }, v.txNonce, calls)).toBe(v.outerHash);
+    }
+  });
+
+  it("matches aztec.js's authwit message hashes", () => {
+    const { chainId, version } = payload.context;
+    for (const v of Object.values(payload.authwits)) {
+      expect(authwitHash({ caller: v.caller, call: call(v.call) }, { chainId, version })).toBe(
+        v.messageHash,
+      );
     }
   });
 });

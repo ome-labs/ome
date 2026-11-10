@@ -100,11 +100,22 @@ pub struct Call {
     pub args: Vec<Hex32>,
 }
 
-/// The calls a payload carries, and the PXE's execution data.
+/// A private authwit the vault grants with a transaction: `caller` may make `call` on the vault's behalf.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Authwit {
+    /// The contract allowed to make the call; one of the transaction's call targets.
+    pub caller: Hex32,
+    /// The private call it may make; its target consumes the authwit.
+    pub call: Call,
+}
+
+/// The calls a payload carries, the authwits granted with them, and the PXE's execution data.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 pub struct ExecutionRequest {
     /// At most five calls; none is a cancellation.
     pub calls: Vec<Call>,
+    /// At most four private authwits, signed with the calls.
+    pub authwits: Vec<Authwit>,
     /// Execution data the signatures do not cover.
     pub extras: HexBytes,
 }
@@ -115,6 +126,8 @@ pub struct ExecutionRequest {
 pub struct Draft {
     /// The calls.
     pub calls: Vec<Call>,
+    /// Private authwits granted with the calls.
+    pub authwits: Vec<Authwit>,
     /// Execution data the signatures do not cover.
     pub extras: HexBytes,
     /// Entrypoint nonce; cancelling burns it.
@@ -141,8 +154,10 @@ pub struct BuiltProposal {
     pub payload: HexBytes,
     /// Outer hash the approvals sign over.
     pub outer_hash: Hex32,
-    /// The message an approval signs.
-    pub approval_message: Hex32,
+    /// Each authwit's message hash, in order.
+    pub authwits: Vec<Hex32>,
+    /// The messages an approval signs: the transaction's, then each authwit's.
+    pub approval_messages: Vec<Hex32>,
 }
 
 /// A decoded proposal.
@@ -155,6 +170,8 @@ pub struct ProposalInfo {
     pub config_version: u32,
     /// Outer hash.
     pub outer_hash: Hex32,
+    /// Message hashes of the authwits it grants.
+    pub authwits: Vec<Hex32>,
     /// When it was made, Unix seconds.
     pub created_at: u64,
     /// Deadline, Unix seconds.
@@ -180,8 +197,8 @@ pub struct ApprovalInfo {
     pub proposal: Hex32,
     /// Signer slot, 0-based.
     pub slot: u32,
-    /// Schnorr signature.
-    pub signature: Hex64,
+    /// Schnorr signatures: the transaction's, then each authwit's.
+    pub signatures: Vec<Hex64>,
 }
 
 /// A decoded rejection.
@@ -224,6 +241,7 @@ pub struct RefusedVote {
 
 /// The votes on a proposal.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 pub struct TallyResult {
     /// Where it stands.
     pub status: TallyStatus,
@@ -237,6 +255,18 @@ pub struct TallyResult {
     pub refused: Vec<RefusedVote>,
     /// The 49-field auth witness, once approved.
     pub witness: Option<Vec<Hex32>>,
+    /// Each authwit's message hash and witness, once approved.
+    pub authwit_witnesses: Option<Vec<AuthwitWitness>>,
+}
+
+/// An authwit's auth witness, for the transaction's auth witnesses.
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthwitWitness {
+    /// The authwit's message hash.
+    pub message_hash: Hex32,
+    /// The 49-field witness.
+    pub witness: Vec<Hex32>,
 }
 
 /// A proposed membership rotation: the new signers, spending threshold and committee from the reshare.

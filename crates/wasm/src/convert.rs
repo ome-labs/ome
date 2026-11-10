@@ -10,7 +10,7 @@ use ome_wire::{
 
 use crate::{
     error::{Result, WasmError},
-    types::{Call, CallKind, Chain, VaultInput},
+    types::{Authwit, Call, CallKind, Chain, VaultInput},
 };
 
 pub(crate) fn points(points: Vec<Point>) -> Result<Vec<ome_crypto::Point>> {
@@ -45,6 +45,20 @@ pub(crate) fn call(call: Call) -> payload::Call {
         is_static: call.is_static,
         hide_msg_sender: call.hide_msg_sender,
         args: call.args.into_iter().map(|arg| arg.0).collect(),
+    }
+}
+
+pub(crate) fn authwit(authwit: Authwit) -> payload::Authwit {
+    payload::Authwit {
+        caller: authwit.caller.0,
+        call: call(authwit.call),
+    }
+}
+
+pub(crate) fn authwit_out(authwit: &payload::Authwit) -> Authwit {
+    Authwit {
+        caller: authwit.caller.into(),
+        call: call_out(&authwit.call),
     }
 }
 

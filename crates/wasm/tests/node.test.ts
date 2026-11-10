@@ -1,10 +1,12 @@
 import {
+  type Authwit,
   type Call,
   type OmeWasmError,
   UnlockedSigner,
   addressContext,
   addressPublicShares,
   approvalMessage,
+  authwitHash,
   buildProposal,
   checkProposal,
   checkRotation,
@@ -56,9 +58,15 @@ const transfer = (): Call => ({
   args: [randomField(), randomField(), `0x${"00".repeat(31)}19`, randomField()],
 });
 
-function proposal(f: ReturnType<typeof fixture>, expiresAt = NOW + 3600) {
+function proposal(
+  f: ReturnType<typeof fixture>,
+  expiresAt = NOW + 3600,
+  calls: Call[] = [transfer()],
+  authwits: Authwit[] = [],
+) {
   return buildProposal(f.vault, chain, {
-    calls: [transfer()],
+    calls,
+    authwits,
     extras: "0x",
     txNonce: randomField(),
     createdAt: Math.min(NOW, expiresAt),
@@ -129,9 +137,9 @@ describe("proposals and votes", () => {
     expect(info.id).toBe(built.id);
     expect(info.feeMethod).toBe(0);
     expect(info.summary).toBe("pay the auditors");
-    expect(built.approvalMessage).toBe(
+    expect(built.approvalMessages).toEqual([
       approvalMessage(f.vault.manifest.vault, built.outerHash, 0, info.expiresAt),
-    );
+    ]);
 
     const request = checkProposal(f.vault, chain, built.proposal, built.payload, NOW);
     expect(request.calls).toHaveLength(1);
@@ -169,6 +177,38 @@ describe("proposals and votes", () => {
     expect(result.refused).toEqual([expect.objectContaining({ index: 2, approval: true })]);
     expect(result.witness).toHaveLength(49);
     expect(tally(f.vault, built.proposal, [first], [], NOW + 7200).status).toBe("expired");
+  });
+
+  it("signs and tallies the authwits a proposal grants", () => {
+    const f = fixture();
+    const amm = transfer();
+    const authwit: Authwit = { caller: amm.to, call: { ...transfer(), to: randomField() } };
+    const built = proposal(f, NOW + 3600, [amm], [authwit]);
+    const messageHash = authwitHash(authwit, chain);
+    expect(built.authwits).toEqual([messageHash]);
+    expect(built.approvalMessages).toEqual([
+      approvalMessage(f.vault.manifest.vault, built.outerHash, 0, NOW + 3600),
+      approvalMessage(f.vault.manifest.vault, messageHash, 0, NOW + 3600),
+    ]);
+    expect(checkProposal(f.vault, chain, built.proposal, built.payload, NOW).authwits).toEqual([
+      authwit,
+    ]);
+
+    const approvals = [0, 1].map((slot) =>
+      at(f.signers, slot).approve(f.vault, chain, built.proposal, built.payload, NOW),
+    );
+    expect(decodeApproval(at(approvals, 0)).signatures).toHaveLength(2);
+    const result = tally(f.vault, built.proposal, approvals, [], NOW);
+    expect(result.status).toBe("approved");
+    expect(result.authwitWitnesses).toEqual([
+      { messageHash, witness: expect.any(Array) as unknown },
+    ]);
+    expect(result.authwitWitnesses?.[0]?.witness).toHaveLength(49);
+
+    // A caller the transaction doesn't call gets no authwit.
+    expect(
+      thrown(() => proposal(f, NOW + 3600, [amm], [{ ...authwit, caller: randomField() }])).message,
+    ).toMatch(/not called by the transaction/u);
   });
 
   it("refuses to sign what fails the checks", () => {
@@ -251,6 +291,7 @@ describe("membership", () => {
     };
     const built = buildProposal(f.vault, chain, {
       calls: [rotationCall(f.vault, swap)],
+      authwits: [],
       extras: "0x",
       txNonce: randomField(),
       createdAt: NOW,

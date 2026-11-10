@@ -7,9 +7,9 @@ use std::fmt::Write as _;
 use ts_rs::{Config, TS};
 
 use crate::types::{
-    AddressContext, ApprovalInfo, BuiltProposal, Call, CallKind, Chain, CombineRequest,
-    CombineResult, DealtCommittee, Draft, ExecutionRequest, ProposalInfo, RefusedVote,
-    RejectionInfo, Rotation, TallyResult, TallyStatus, VaultInput, Warning,
+    AddressContext, ApprovalInfo, Authwit, AuthwitWitness, BuiltProposal, Call, CallKind, Chain,
+    CombineRequest, CombineResult, DealtCommittee, Draft, ExecutionRequest, ProposalInfo,
+    RefusedVote, RejectionInfo, Rotation, TallyResult, TallyStatus, VaultInput, Warning,
 };
 
 /// What the declarations import from `@ome-labs/api`.
@@ -35,6 +35,7 @@ pub fn render() -> String {
     declare::<CombineResult>(&mut out, &cfg);
     declare::<CallKind>(&mut out, &cfg);
     declare::<Call>(&mut out, &cfg);
+    declare::<Authwit>(&mut out, &cfg);
     declare::<ExecutionRequest>(&mut out, &cfg);
     declare::<Draft>(&mut out, &cfg);
     declare::<BuiltProposal>(&mut out, &cfg);
@@ -43,6 +44,7 @@ pub fn render() -> String {
     declare::<RejectionInfo>(&mut out, &cfg);
     declare::<TallyStatus>(&mut out, &cfg);
     declare::<RefusedVote>(&mut out, &cfg);
+    declare::<AuthwitWitness>(&mut out, &cfg);
     declare::<TallyResult>(&mut out, &cfg);
     declare::<Rotation>(&mut out, &cfg);
     declare::<Warning>(&mut out, &cfg);
