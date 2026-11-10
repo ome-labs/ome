@@ -30,6 +30,11 @@ pub const ROTATE_MEMBERSHIP_SELECTOR: u32 = 0xe107_1b7c;
 /// committee polynomial's Feldman commitments.
 pub const ROTATE_MEMBERSHIP_ARGS: usize = 4 * MAX_SIGNERS * POINT_LEN + 3;
 
+/// `set_threshold`'s signature, as Aztec derives it from the contract ABI.
+pub const SET_THRESHOLD_SIGNATURE: &str = "set_threshold(u32)";
+/// `set_threshold`'s selector (checked against Aztec's derivation in `tests/threshold_change.rs`).
+pub const SET_THRESHOLD_SELECTOR: u32 = 0x6993_ec6f;
+
 /// Calls the account entrypoint executes (`ACCOUNT_MAX_CALLS`).
 pub const APP_MAX_CALLS: usize = 5;
 /// Fields per encoded entrypoint call.

@@ -20,8 +20,9 @@ use ome_keeper::{Clock, DeviceReviewRequest, Keeper};
 use ome_net::{Mailbox, MemoryMailbox};
 use ome_protocol::{
     membership::Rotation,
-    payload::{ChainInfo, ExecutionRequest},
+    payload::{Call, CallKind, ChainInfo, ExecutionRequest},
     proposals::Draft,
+    vault::constants::{SET_THRESHOLD_SELECTOR, SET_THRESHOLD_SIGNATURE},
 };
 use ome_wire::{
     Header, KeeperIdentity, Message, SignedMessage, decode, encode,
@@ -398,5 +399,67 @@ async fn keepers_adopt_a_swapped_signer_once_the_chain_holds_it() {
     let info = bob.update_signers(v.address, id).await.unwrap();
     assert_eq!(info.manifest.members[0].signer_key, phone_key);
     assert_eq!(info.manifest.epoch, v.manifest.epoch);
+    assert!(info.serving);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn keepers_adopt_a_new_threshold_once_the_chain_holds_it() {
+    let (v, _, _) = setup().await;
+    let (proposal, payload) = Draft {
+        request: ExecutionRequest {
+            calls: vec![Call {
+                signature: Some(SET_THRESHOLD_SIGNATURE.to_owned()),
+                to: field(&v.protocol().address()),
+                selector: SET_THRESHOLD_SELECTOR,
+                kind: CallKind::Private,
+                is_static: false,
+                hide_msg_sender: false,
+                args: vec![field(&Base::from(3u64))],
+            }],
+            extras: vec![],
+        },
+        tx_nonce: Base::from(98u64),
+        expires_at: 1_800_000_000,
+        summary: "threshold".into(),
+        proposer: 1,
+    }
+    .build(
+        &v.protocol(),
+        ChainInfo {
+            chain_id: Base::from(31_337u64),
+            version: Base::from(1u64),
+        },
+    )
+    .unwrap();
+    let bob = &v.keepers[1].keeper;
+    let mut events = bob.subscribe();
+    v.keepers[0]
+        .keeper
+        .put_payload(v.address, &body(&Message::Payload(payload)))
+        .await
+        .unwrap();
+    v.keepers[0]
+        .keeper
+        .put_proposal(v.address, &body(&Message::Proposal(proposal.clone())))
+        .await
+        .unwrap();
+    wait_for(&mut events, |e| {
+        matches!(e, KeeperEvent::Payload { .. }).then_some(())
+    })
+    .await;
+    let id = proposal.id().unwrap();
+
+    // The chain still holds the old threshold.
+    bob.observe_config(v.address, v.config).await.unwrap();
+    assert!(bob.update_signers(v.address, id).await.is_err());
+
+    let mut raised = v.manifest.clone();
+    raised.threshold = 3;
+    bob.observe_config(v.address, config_of(&raised, v.config.version + 1))
+        .await
+        .unwrap();
+    let info = bob.update_signers(v.address, id).await.unwrap();
+    assert_eq!(info.manifest.threshold, 3);
+    assert_eq!(info.manifest.members, v.manifest.members);
     assert!(info.serving);
 }

@@ -65,6 +65,9 @@ pub enum Error {
     /// A rotation is not a signer swap: it changes more than one signer key.
     #[error("not a signer swap: {0}")]
     NotASignerSwap(&'static str),
+    /// No call of an executed proposal sets this vault's threshold.
+    #[error("no call sets this vault's threshold")]
+    NotAThresholdChange,
     /// More calls than Aztec's account entrypoint executes.
     #[error("{0} calls; an entrypoint executes at most 5")]
     TooManyCalls(usize),

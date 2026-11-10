@@ -6,8 +6,10 @@ pub mod policy;
 mod rotation;
 mod swap;
 mod tagging;
+mod threshold;
 
 pub use manifest::Vault;
 pub use rotation::{Rotation, check_rotation, is_rotation_call, polynomial, verify_shares};
 pub use swap::{check_signer_swap, signer_swap_slot, swapped_manifest};
 pub use tagging::{EPOCH_TAGGING_TAG, epoch_tagging_secret};
+pub use threshold::rethresholded_manifest;

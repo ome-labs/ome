@@ -11,7 +11,11 @@ use ome_crypto::{
     sealing::pairing::{self, pairing_mailbox},
 };
 use ome_net::{Channel, Peer};
-use ome_protocol::{membership::swapped_manifest, payload::ExecutionRequest, vault::Config};
+use ome_protocol::{
+    membership::{rethresholded_manifest, swapped_manifest},
+    payload::ExecutionRequest,
+    vault::Config,
+};
 use ome_wire::{
     Header, IdentityPublic, Message, SignedMessage, decode,
     limits::MAX_REASON_BYTES,
@@ -230,12 +234,13 @@ impl Keeper {
         Ok(u32::try_from(devices.len()).unwrap_or(u32::MAX))
     }
 
-    /// Adopts the signer key an executed signer swap put on chain: the manifest the swap produces
-    /// (`ome_protocol::membership::swapped_manifest`) must match the newest config the daemon observed.
+    /// Adopts what an executed signer swap or threshold change put on chain: the manifest it produces
+    /// (`ome_protocol::membership::swapped_manifest` or `rethresholded_manifest`) must match the newest config the
+    /// daemon observed.
     ///
     /// # Errors
     /// [`Error::UnknownVault`], [`Error::Invalid`] before the config was observed or without the payload, or the
-    /// protocol error that refused the swap.
+    /// protocol error that refused the change.
     pub async fn update_signers(&self, vault: [u8; 32], proposal: [u8; 32]) -> Result<VaultInfo> {
         let stored = self.stored_proposal(vault, &proposal)?;
         let bytes = self
@@ -255,11 +260,11 @@ impl Keeper {
             .get_mut(&vault)
             .filter(|v| v.status == ManifestStatus::Active)
             .ok_or(Error::UnknownVault)?;
-        let next = Committee::new(swapped_manifest(
-            &current.committee.manifest,
-            &config,
-            &request.calls,
-        )?)?;
+        let manifest = &current.committee.manifest;
+        let next = Committee::new(
+            swapped_manifest(manifest, &config, &request.calls)
+                .or_else(|_| rethresholded_manifest(manifest, &config, &request.calls))?,
+        )?;
         self.0
             .store
             .put_manifest(&next.manifest, ManifestStatus::Active, self.now())?;

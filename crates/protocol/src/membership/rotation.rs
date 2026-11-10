@@ -154,7 +154,7 @@ fn points(fields: &[Base], count: u32) -> Result<Vec<Point>, Error> {
 }
 
 /// A `u32` argument.
-fn small(value: Base) -> Result<u32, Error> {
+pub(super) fn small(value: Base) -> Result<u32, Error> {
     let bytes = field(&value);
     if bytes[..28].iter().any(|b| *b != 0) {
         return Err(Error::InvalidRotationCall("count or threshold above u32"));
