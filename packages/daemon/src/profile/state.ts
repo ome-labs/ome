@@ -21,6 +21,15 @@ export interface ProfileFile {
   defaultVault: Hex32 | null;
   tokens: Record<Hex32, TokenInfo[]>;
   contracts: Record<Hex32, RegisteredContract>;
+  /** Apps allowed to use a vault, by origin. */
+  apps: Record<string, AppRecord>;
+}
+
+/** An app the member allowed (`apps.allow`). */
+export interface AppRecord {
+  vault: Hex32;
+  name: string | null;
+  allowedAt: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,6 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
   remoteKeeper: null,
   aztecWalletDir: null,
   aztecWalletSync: false,
+  appsEnabled: false,
 };
 
 /** The profile file, read once and written on every change. */
@@ -52,8 +62,10 @@ export class ProfileState {
       defaultVault: null,
       tokens: {},
       contracts: {},
+      apps: {},
     });
     file.contracts ??= {};
+    file.apps ??= {};
     file.settings = { ...DEFAULT_SETTINGS, ...file.settings, ...settings };
     return new ProfileState(path, file);
   }

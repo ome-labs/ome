@@ -25,6 +25,7 @@ import {
 } from "@ome-labs/api";
 import { KeeperClient, OmeWallet } from "@ome-labs/wallet";
 
+import { AppService } from "./apps/service.ts";
 import { accountAddresses, addressNames, walletDir } from "./aztec/aliases.ts";
 import type { Context } from "./context.ts";
 import { ContractRegistry } from "./contracts/registry.ts";
@@ -98,6 +99,7 @@ export class Daemon implements Context {
   readonly proposals: ProposalService;
   readonly membership: MembershipService;
   readonly devices: DeviceService;
+  readonly apps: AppService;
   readonly #proposalEvents: ProposalEvents;
   readonly #received: ReceivedWatcher;
   readonly #options: DaemonOptions;
@@ -132,6 +134,7 @@ export class Daemon implements Context {
     this.proposals = new ProposalService(this);
     this.membership = new MembershipService(this);
     this.devices = new DeviceService(this, this.proposals, this.membership);
+    this.apps = new AppService(this, this.proposals);
     this.proposals.rotationApprover = (vault, stored, tx, secret) =>
       this.membership.approve(vault, stored, tx, secret);
     this.#proposalEvents = new ProposalEvents(

@@ -78,6 +78,8 @@ export async function payloadOf(
       const call = await vaultCall(context, vault, "invalidate_pending", []);
       return mergeExecutionPayloads([fee, call]);
     }
+    case "app":
+      throw new DaemonError("invalid", "an app's transaction is proposed through its connection");
     default:
       throw new DaemonError("invalid", "unknown intent");
   }

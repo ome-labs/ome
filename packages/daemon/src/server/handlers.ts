@@ -35,6 +35,13 @@ const lower = (hex: Hex32): Hex32 => {
 
 /** Every daemon method of `@ome-labs/api`, by name. */
 export const handlers: Handlers = {
+  "apps.list": async (d) => d.apps.list(),
+  "apps.allow": async (d, p) => d.apps.allow(p),
+  "apps.revoke": async (d, p) => {
+    await d.apps.revoke(p.origin);
+    return null;
+  },
+  "apps.call": async (d, p) => d.apps.call(p),
   "daemon.info": async (d) => d.info(),
   "daemon.stop": async (d) => {
     setImmediate(() => void d.stop().then(() => process.emit("SIGTERM")));
@@ -61,6 +68,7 @@ export const handlers: Handlers = {
       if (p.feePayerSalt !== undefined) file.settings.feePayerSalt = lower(p.feePayerSalt);
       if (p.aztecWalletDir !== undefined) file.settings.aztecWalletDir = p.aztecWalletDir || null;
       if (p.aztecWalletSync !== undefined) file.settings.aztecWalletSync = p.aztecWalletSync;
+      if (p.appsEnabled !== undefined) file.settings.appsEnabled = p.appsEnabled;
     });
     if (p.feePayerSalt !== undefined) await d.setFeePayer(d.state.file.settings.feePayerSalt);
     return d.state.file.settings;

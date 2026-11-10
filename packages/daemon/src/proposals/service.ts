@@ -1,5 +1,6 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254";
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
+import { ExecutionPayload, mergeExecutionPayloads } from "@aztec-labs/stdlib/tx";
 import type {
   ApproveParams,
   ExecuteParams,
@@ -15,7 +16,7 @@ import type {
   ReviewError,
   Secret,
 } from "@ome-labs/api";
-import { type VaultTx, payloadContracts } from "@ome-labs/wallet";
+import { type VaultAuthwit, type VaultTx, payloadContracts } from "@ome-labs/wallet";
 import {
   checkProposal,
   decodeProposal,
@@ -93,14 +94,31 @@ export class ProposalService {
    * calls included, so the other members can fetch them before simulating; the artifacts are offered to the keeper.
    */
   async #prepare(params: ProposeParams, txNonce?: Fr, share = false): Promise<VaultTx> {
+    await this.#ready(params);
+    const vault = this.#context.vaults.address(params.vault);
+    const payload = await payloadOf(this.#context, params.intent, vault);
+    const authwits = await authwitsOf(this.#context, params.intent);
+    return this.#build(params, payload, authwits, txNonce, share);
+  }
+
+  /** Refuses a validity outside the limits, and brings the vault's config up to date. */
+  async #ready(params: ProposeParams): Promise<void> {
     const { minExpiryHours: min, maxExpiryHours: max } = LIMITS;
     require(params.expiresInHours >= min &&
       params.expiresInHours <= max, `a proposal lasts ${min} to ${max} hours`);
     await this.#context.vaults.ensureCurrent(params.vault);
+  }
+
+  /** The transaction of `payload` and `authwits` under `params`' terms; see {@link #prepare} for `share`. */
+  async #build(
+    params: ProposeParams,
+    payload: ExecutionPayload,
+    authwits: VaultAuthwit[],
+    txNonce: Fr | undefined,
+    share: boolean,
+  ): Promise<VaultTx> {
     const wallet = this.#context.wallet();
     const vault = this.#context.vaults.address(params.vault);
-    const payload = await payloadOf(this.#context, params.intent, vault);
-    const authwits = await authwitsOf(this.#context, params.intent);
     const terms = {
       expiresAt: (await wallet.chainTime()) + params.expiresInHours * 3600,
       summary: summaryOf(params.intent),
@@ -119,6 +137,37 @@ export class ProposalService {
       );
     const contracts = await this.#context.contracts.forProposal([...targets, ...reached]);
     return wallet.prepareVaultTx(vault, payload, { ...terms, txNonce: tx.txNonce, contracts });
+  }
+
+  /**
+   * The transaction an app's `payload` and `authwits` describe, with this member's trusted fee payer: the app's own fee
+   * payer is dropped (the vault never pays, and the member chooses who does), and the fee call comes first, as for every
+   * proposal. `share` as for {@link #prepare}.
+   */
+  async appTx(
+    params: ProposeParams,
+    payload: ExecutionPayload,
+    authwits: VaultAuthwit[],
+    share = false,
+  ): Promise<VaultTx> {
+    await this.#ready(params);
+    const fee = await this.#context.fee().paymentMethod.getExecutionPayload();
+    const own = new ExecutionPayload(
+      payload.calls,
+      payload.authWitnesses,
+      payload.capsules,
+      payload.extraHashedArgs,
+    );
+    return this.#build(params, mergeExecutionPayloads([fee, own]), authwits, undefined, share);
+  }
+
+  /** Makes a proposal of an app's transaction (see {@link appTx}) and stores it with the keeper. */
+  async createFromApp(
+    params: ProposeParams,
+    payload: ExecutionPayload,
+    authwits: VaultAuthwit[],
+  ): Promise<ProposalView> {
+    return this.#store(params.vault, await this.appTx(params, payload, authwits, true));
   }
 
   /**
@@ -246,11 +295,15 @@ export class ProposalService {
   async create(params: ProposeParams, txNonce?: Fr): Promise<ProposalView> {
     if (params.intent.kind === "transfer")
       await requireBalance(this.#context, params.vault, params.intent.token, params.intent.amount);
-    const tx = await this.#prepare(params, txNonce, true);
+    return this.#store(params.vault, await this.#prepare(params, txNonce, true));
+  }
+
+  /** Stores `tx`'s payload and proposal with the keeper, which replicates them to every member. */
+  async #store(vault: Hex32, tx: VaultTx): Promise<ProposalView> {
     const keeper = this.#context.keeper.client;
-    await keeper.call("payloads.put", { vault: params.vault, body: tx.payloadBody });
-    await keeper.call("proposals.put", { vault: params.vault, body: tx.proposal });
-    return this.get({ vault: params.vault, id: tx.id });
+    await keeper.call("payloads.put", { vault, body: tx.payloadBody });
+    await keeper.call("proposals.put", { vault, body: tx.proposal });
+    return this.get({ vault, id: tx.id });
   }
 
   /** Proposes cancelling `ref`: a fee-only proposal under its nonce, which burns the nonce when it runs. */
@@ -544,6 +597,8 @@ function actionOf(proposal: ProposalView): string {
       return `need ${intent.threshold} approvals to spend`;
     case "invalidatePending":
       return "void every approval collected so far";
+    case "app":
+      return `${proposal.calls.length} call(s) from ${intent.name ?? intent.origin}`;
     case "calls":
       return proposal.authwits.length > 0
         ? `${proposal.calls.length} call(s), granting ${proposal.authwits.length} authwit(s)`

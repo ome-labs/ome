@@ -42,5 +42,7 @@ export function summaryLine(view: ProposalView): string {
       return `Need ${intent.threshold} ${intent.threshold === 1 ? "approval" : "approvals"} to spend`;
     case "invalidatePending":
       return "Void every approval collected so far";
+    case "app":
+      return `A transaction from ${intent.name ?? intent.origin}`;
   }
 }
