@@ -149,6 +149,9 @@ on chain. `Rotation::from_call` refuses a call whose polynomial is not the share
   calls must be a signer swap of the manifest (its current keys the manifest's, its committee and thresholds
   unchanged), and the manifest with that key replaced must pass `Vault::from_manifest` against the config read after
   it ran. The epoch stays: the committee did not change.
+- `rethresholded_manifest(manifest, config, calls)` is how a keeper adopts a new spending threshold: one call must be
+  `set_threshold(k)` on the manifest's vault (`SET_THRESHOLD_SELECTOR`, pinned against its signature), and the
+  manifest with that `k` must pass `Vault::from_manifest` against the config read after it ran.
 
 `policy::warnings(k, t_v, n)` reports configurations the contract allows but members should choose knowingly:
 

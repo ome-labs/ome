@@ -29,6 +29,7 @@ VAULTS      vault create|join|list|show|use|alias|members|peers|health|audit|rec
             token add|list|remove|deploy-test
             contract add <artifact> <address>|list|remove|functions <contract> [--utility]
 PROPOSALS   propose transfer <amount> <token> <to> | call <fn> -ca <contract> --args … | cancel <proposal>
+            | threshold <k> | invalidate
             (call arguments: text, or JSON for lists, structs and booleans: [1,2] {"x":1} true)
             (each with --memo, --expires 24h, --dry-run)
             proposals [--status open|ready|done|all] · proposal list|show|review|approve|reject|execute
@@ -105,15 +106,19 @@ form; anything else is passed as typed.
 `ome approve` and `ome reject` show the review the daemon rebuilt on this device (`proposals.review`,
 `src/ui/review.rs`):
 
-1. what happens if it executes (who is paid, how much, the memo, who pays the fee: never the vault in public);
+1. what happens if it executes (who is paid, how much, the memo, who pays the fee: never the vault in public), the
+   vault's balance of each tracked token before and after, and a warning when it may change balances the daemon can't
+   value; for a threshold change, the before and after and the risks of the new shape;
 2. the calls, as rebuilt;
 3. the checks: the calls hash to the outer hash, the config is current, the deadline, the simulation, and a warning
    when the recipient's name is the member's own `aztec-wallet` alias, or when it has none;
 4. the votes so far;
 5. the exact message signed and its formula.
 
-A failed check refuses the approval (rejecting stays possible); a failed simulation is a warning. `--yes` skips only
-the final question.
+A failed check refuses the approval (rejecting stays possible); a failed simulation is a warning that says why (the
+vault holds too little of a token, a contract wants an authwit, the nonce is spent, or the contract's own message).
+`--yes` skips only the final question. `ome propose` shows the same simulation, failures and balances before the
+proposal is made.
 
 Thresholds that can strand the funds for good (every keeper needed to read, or every key needed to spend: see
 `architecture/recovery.md`) are shown when a vault is created or its members change, and need a deliberate yes

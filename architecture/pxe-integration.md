@@ -145,6 +145,13 @@ transaction. The request is built as for Aztec's stub account, whose entrypoint 
 itself (`rotate_membership`, `set_threshold`) run the vault's real checks, so a rotation the contract would refuse is
 caught at review. The preview class is never deployed; its test pins its selectors to the vault's.
 
+**Effects.** `simulationFacts(pxe, vault, result)` (`packages/wallet/src/vault/effects.ts`) reads a simulation's
+private call tree. A call's nullifiers, siloed with its contract, are matched against the vault's notes in the PXE
+(`debug.getNotes` with `siloedNullifier`): those are the notes it spends. aztec-nr v6 hashes a note as
+`poseidon2([storage_slot, ...note, owner, randomness], NOTE_HASH)`; recomputed with the vault as owner, a new note
+whose hash the call emitted is the vault's. It also returns the payload's private and public return values and the
+counts of note hashes and nullifiers. Nothing is proved.
+
 **Fees.** The vault never pays its own fees. The entrypoint always runs with the `EXTERNAL` fee method; another
 method throws. A sponsored fee payer is paid by a call in the payload, so rotation approvals take the fee payers the
 member's configuration trusts (`architecture/signer.md`).

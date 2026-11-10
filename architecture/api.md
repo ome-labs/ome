@@ -104,7 +104,7 @@ The keeper maps its errors to kinds as follows:
 |           | `vault.observeConfig`                                                        | `{ vault, config: VaultConfig }` → `{ observation }`                                                          |
 |           | `vault.observeTx`                                                            | `{ vault, txHash }` → `{ known }` (an unknown spend raises `unexpectedSpend`)                                 |
 |           | `vault.sync`, `peers.status`                                                 | `{ vault }` → `null`; `Reachability[]`                                                                        |
-|           | `vault.updateSigners`                                                        | `{ vault, proposal }` (an executed signer swap) → `Vault`                                                     |
+|           | `vault.updateSigners`                                                        | `{ vault, proposal }` (an executed signer swap or threshold change) → `Vault`                                 |
 | ECDH      | `ecdh.batch`                                                                 | `{ vault, epoch, purpose, points }` → `{ epoch, responses: MemberPartials[] }`                                |
 | ceremony  | `ceremony.dkg`, `ceremony.reshare`, `ceremony.status`                        | `DkgParams`, `ReshareParams` → `null`; `{ session }` → `Ceremony`                                             |
 | spending  | `proposals.put` / `get` / `list`, `payloads.put` / `get`                     | `{ vault, body }` → `{ id }` or `{ hash }`; bodies as `HexBytes`                                              |
@@ -156,7 +156,27 @@ Times are Unix seconds, and hex values are typed.
   - `transfer { token, to, amount, memo }`;
   - `calls { calls: [{ to, fn, args }], memo }`, 1 to `limits.maxCalls` calls; `args` are `AbiValue`s, one per
     parameter;
-  - `cancel { cancels, memo }`.
+  - `cancel { cancels, memo }`;
+  - `setThreshold { threshold, memo }`: the vault's `set_threshold`, from 1 to the member count and not the current
+    value;
+  - `invalidatePending { memo }`: the vault's `invalidate_pending`, which bumps the config version so every approval
+    collected so far stops counting.
+- **Reviews and dry runs** (`architecture/daemon.md`, Proposals): `proposals.preview` returns `{ ok, calls, gas,
+  error, effects }`; `proposals.review` returns the checks, the simulation (`{ ok, gas, error, effects }`) and, for a
+  policy change, `change`.
+  - `Effects { balances, returns, notes, complete }`: each tracked token whose vault balance changes, as
+    `BalanceChange { token, before, after, visibility }`; each call's decoded return values (`CallResult { call,
+    returns: DecodedArg[] }`); the note hashes and nullifiers it emits (`notes { created, nullified }`). `complete:
+    false` means a note of the vault changed that the daemon can't value (an untracked contract's, or another shape),
+    so other balances may change.
+  - `ReviewError { failure, message }`, `failure.kind` one of `payloadMismatch`, `configChanged { made, current }`,
+    `expired { at }`, `artifactMissing { classId }`, `notMember`, `feeOnVault`, `invalid`.
+  - `SimulationError { failure, message }`, `failure.kind` one of `insufficientBalance { token, contract }`,
+    `authwitRequired { contract }`, `nonceUsed`, `reverted { contract, function }` (the message is the contract's own),
+    `unavailable` (node, keepers or prover not ready).
+  - `GovernanceChange`: `threshold { before, after, members, warnings }`, the warnings being the policy warnings of the
+    new shape (`single-signer`, `no-spare-signer`, `two-can-read`, `no-spare-viewer`), or `invalidatePending { version
+    }`.
 - **Contracts and typed calls** (`architecture/daemon.md`, Contracts):
   - `contracts.functions { contract, includeUtility? }` → `ContractFunction { name, selector, kind, isStatic, params,
     returns }`, each parameter with its full `AbiType`: `field`, `boolean`, `integer { signed, width }`,

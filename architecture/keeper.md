@@ -242,7 +242,8 @@ votes. The flows and the trust boundary are in `architecture/mobile.md`.
 **Signer swaps.** Keepers check votes against the manifest's signer keys, so after a swap each keeper adopts the new
 key with `vault.updateSigners(vault, proposal)`: the executed proposal's own `rotate_membership` call, through
 `ome_protocol::membership::swapped_manifest`, must match the newest config the daemon observed. The committee, its
-epoch and the share stay.
+epoch and the share stay. The same method adopts a threshold change: an executed `set_threshold`, through
+`rethresholded_manifest`.
 
 ## RPC
 

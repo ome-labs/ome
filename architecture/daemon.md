@@ -124,12 +124,19 @@ payer the signer trusts in rotations and the one paired devices are told about.
 
 ## Proposals
 
-- **`proposals.create`**: turns an intent into an Aztec payload, with the fee payer's call merged in.
+- **`proposals.create`**: turns an intent into an Aztec payload, with the fee payer's call merged in first: the fee
+  payer ends Aztec's setup phase, and a public call enqueued before it would run as setup, which only allow-listed
+  functions may.
   - A transfer is the token's private `transfer`.
   - `calls` are built from the contract's artifact: each `AbiValue` is checked against its parameter's type, then
     Aztec's encoder encodes it. The payload's extras list the classes the calls run and the instances the node
     doesn't publish (`PayloadContracts`), and the daemon offers those artifacts to its keeper.
   - A cancellation is the fee call alone, under the cancelled proposal's nonce.
+  - `setThreshold` and `invalidatePending` call the vault itself; a threshold outside 1 to the member count, or equal
+    to the current one, is refused before anything is built. Once a threshold change runs, each member's keeper adopts
+    the new threshold into its manifest (`vault.updateSigners`, as for a signer swap). Before building or rebuilding
+    any proposal, and right after executing one, the daemon checks the config on chain against the manifest and
+    observes it when the signers or threshold differ, so no member acts on a stale policy until the next sync.
 
   The wallet builds the proposal, and the daemon stores the payload and the proposal with the keeper, which
   replicates them. The proposal's summary is the intent as JSON.
@@ -144,6 +151,15 @@ payer the signer trusts in rotations and the one paired devices are told about.
   outer hash. Review then simulates the transaction with the vault's class overridden by `OmeVaultPreview` (the vault's
   storage and functions, an entrypoint that needs no approvals; `pxe-integration.md`), so calls to the vault itself
   run the contract's own checks, and shows what an approval and a rejection would sign.
+  - **Effects** (`src/proposals/effects.ts`): the wallet's `simulationFacts` reads the simulation without proving:
+    the vault's notes it spends (its nullifiers matched against the vault's notes in the PXE) and the notes it creates
+    for the vault (note hashes recomputed with the vault as owner). Notes of a tracked token's single-value shape give
+    each token's balance after, from its balance before; anything else sets `complete: false`.
+  - **Failures** (`src/proposals/failures.ts`): check failures and simulation errors are mapped to kinds a client acts
+    on (`architecture/api.md`); a failure that matches no rule keeps its own message.
+  - A threshold change carries the before, the after and the policy warnings of the new shape (`@ome-labs/wasm`).
+- **`proposals.preview`** builds and simulates an intent the same way before it is proposed, so the proposer sees the
+  same effects and failures; an intent that can't be built (a bad argument) is refused, not reported.
 - **`approve`** / **`reject`**: sign with the signer, then store the vote with the keeper.
 - **`execute`**: tallies the votes into the witness, sends the transaction, stores the receipt, and reports
   `execution` progress.
@@ -276,6 +292,7 @@ Every 15 seconds, for each vault, the daemon reads the config note and hands it 
 | -------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `src/server/server.test.ts`      | the socket: authentication, refused tokens, error kinds and codes, events, `0600`                      |
 | `src/proposals/review.test.ts`   | a payload that rebuilds to another outer hash is reported, and approval refuses it                     |
+| `src/proposals/failures.test.ts` | check and simulation failures map to their kinds, and unknown ones keep their message                  |
 | `src/membership/plan.test.ts`    | plans the rules refuse report why, dealers are members who stay, and a member with no part can't begin |
 | `test/e2e/daemons.test.ts`       | the local-network suite, below                                                                         |
 | `test/e2e/device.test.ts`        | a member's phone on the local network with a real relay, below                                         |
