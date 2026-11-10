@@ -92,7 +92,6 @@ fn read_file(path: &PathBuf) -> Result<Zeroizing<String>> {
 }
 
 /// The passphrase: from the file, else asked for.
-#[cfg(target_os = "macos")]
 pub(crate) fn passphrase(ctx: &Ctx) -> Result<Zeroizing<String>> {
     match passphrase_file() {
         Some(file) => read_file(&file),
