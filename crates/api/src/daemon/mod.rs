@@ -1,5 +1,6 @@
 //! The daemon's API: what the CLI and apps call on a member's `omed`.
 
+mod apps;
 mod contracts;
 mod devices;
 mod events;
@@ -12,6 +13,7 @@ mod review;
 mod status;
 mod vaults;
 
+pub use apps::{AppAllowParams, AppCallParams, AppCallResult, AppParams, AppView};
 pub use contracts::{
     AbiField, AbiType, AbiValue, ContractFunction, ContractFunctionsParams, ContractInstanceInput,
     ContractRegisterParams, ContractSource, ContractView, DecodedArg, FunctionKind, FunctionParam,
@@ -291,4 +293,13 @@ methods! {
     DevicesEnroll = "devices.enroll" (EnrollParams) -> ProposalView;
     /// Sends a proposal to the paired device that holds this member's key, now.
     DevicesForward = "devices.forward" (ProposalRef) -> DeviceReviewSent;
+    /// The apps allowed to use a vault.
+    AppsList = "apps.list" (Empty) -> Vec<AppView>;
+    /// Allows an app (by origin) to use a vault; app connections must be on (`config.set { appsEnabled }`).
+    AppsAllow = "apps.allow" (AppAllowParams) -> AppView;
+    /// Stops an app from using any vault.
+    AppsRevoke = "apps.revoke" (AppParams) -> ();
+    /// One wallet call from an allowed app: reads and simulations are answered, a transaction becomes a proposal and
+    /// the call returns once it executes.
+    AppsCall = "apps.call" (AppCallParams) -> AppCallResult;
 }

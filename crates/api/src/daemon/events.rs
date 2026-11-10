@@ -111,6 +111,20 @@ pub enum DaemonEvent {
         /// Its state.
         founding: FoundingState,
     },
+    /// An app the member hasn't allowed asked to connect (`apps.allow` lets it).
+    AppConnect {
+        /// The app's origin.
+        origin: String,
+    },
+    /// An app sent a transaction: it is a proposal now, waiting for the members.
+    AppRequest {
+        /// The app's origin.
+        origin: String,
+        /// Vault.
+        vault: Hex32,
+        /// The proposal.
+        proposal: Hex32,
+    },
     /// A proposal arrived: made here, or replicated from a member.
     ProposalCreated {
         /// Vault.
@@ -315,7 +329,8 @@ impl DaemonEvent {
             | Self::MemberChanged { vault }
             | Self::HandshakeAdvised { vault, .. }
             | Self::VaultRenamed { vault, .. }
-            | Self::MemberRenamed { vault, .. } => Some(vault),
+            | Self::MemberRenamed { vault, .. }
+            | Self::AppRequest { vault, .. } => Some(vault),
             Self::Execution { execution } => Some(&execution.vault),
             Self::Keeper { .. }
             | Self::KeeperEvent { .. }
@@ -324,7 +339,8 @@ impl DaemonEvent {
             | Self::Node { .. }
             | Self::Lobby { .. }
             | Self::Founding { .. }
-            | Self::Rotation { .. } => None,
+            | Self::Rotation { .. }
+            | Self::AppConnect { .. } => None,
         }
     }
 }

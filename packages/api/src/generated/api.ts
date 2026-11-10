@@ -2086,6 +2086,10 @@ export type Settings = {
    * Also write vault aliases into `aztec-wallet`'s store (`accounts:<alias>`), so it can pay a vault by name.
    */
   aztecWalletSync: boolean;
+  /**
+   * Answer app connections (`apps.*`); off by default.
+   */
+  appsEnabled: boolean;
 };
 
 /**
@@ -2116,6 +2120,10 @@ export type SettingsPatch = {
    * Write vault aliases into `aztec-wallet`'s store.
    */
   aztecWalletSync?: boolean;
+  /**
+   * Answer app connections.
+   */
+  appsEnabled?: boolean;
 };
 
 /**
@@ -3158,6 +3166,21 @@ export type Intent =
        * Note.
        */
       memo: string | null;
+    }
+  | {
+      kind: "app";
+      /**
+       * The app's origin.
+       */
+      origin: string;
+      /**
+       * The app's name, as the member allowed it.
+       */
+      name: string | null;
+      /**
+       * Note.
+       */
+      memo: string | null;
     };
 
 /**
@@ -3964,6 +3987,84 @@ export type Limits = {
 };
 
 /**
+ * An app the member allowed to use a vault.
+ */
+export type AppView = {
+  /**
+   * The app's web origin, `https://app.example` (scheme, host and port).
+   */
+  origin: string;
+  /**
+   * The vault it sees as its only account.
+   */
+  vault: Hex32;
+  /**
+   * A name the member gave it.
+   */
+  name: string | null;
+  /**
+   * Unix seconds it was allowed.
+   */
+  allowedAt: number;
+};
+
+/**
+ * Params of `apps.allow`.
+ */
+export type AppAllowParams = {
+  /**
+   * The app's origin.
+   */
+  origin: string;
+  /**
+   * The vault it may use.
+   */
+  vault: Hex32;
+  /**
+   * A name for it, at most 64 bytes.
+   */
+  name?: string;
+};
+
+/**
+ * Params naming an app.
+ */
+export type AppParams = {
+  /**
+   * The app's origin.
+   */
+  origin: string;
+};
+
+/**
+ * Params of `apps.call`: one wallet call from an allowed app.
+ */
+export type AppCallParams = {
+  /**
+   * The app's origin.
+   */
+  origin: string;
+  /**
+   * The `Wallet` method, e.g. `simulateTx`.
+   */
+  method: string;
+  /**
+   * Its arguments as aztec.js encodes them (`jsonStringify` of the argument list).
+   */
+  args: string;
+};
+
+/**
+ * The result of `apps.call`, as aztec.js encodes it (`jsonStringify`).
+ */
+export type AppCallResult = {
+  /**
+   * The method's result.
+   */
+  result: string;
+};
+
+/**
  * Whether a balance is private (notes) or public (storage).
  */
 export type Visibility = "private" | "public";
@@ -4554,6 +4655,28 @@ export type DaemonEvent =
        * Its state.
        */
       founding: FoundingState;
+    }
+  | {
+      type: "appConnect";
+      /**
+       * The app's origin.
+       */
+      origin: string;
+    }
+  | {
+      type: "appRequest";
+      /**
+       * The app's origin.
+       */
+      origin: string;
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * The proposal.
+       */
+      proposal: Hex32;
     }
   | {
       type: "proposalCreated";
@@ -5572,6 +5695,10 @@ export interface DaemonMethods {
   "devices.revoke": { params: DeviceParams; result: null };
   "devices.enroll": { params: EnrollParams; result: ProposalView };
   "devices.forward": { params: ProposalRef; result: DeviceReviewSent };
+  "apps.list": { params: Empty; result: Array<AppView> };
+  "apps.allow": { params: AppAllowParams; result: AppView };
+  "apps.revoke": { params: AppParams; result: null };
+  "apps.call": { params: AppCallParams; result: AppCallResult };
 }
 
 /** JSON-RPC error code of each kind. */

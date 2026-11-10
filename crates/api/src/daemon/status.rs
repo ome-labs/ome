@@ -49,6 +49,8 @@ pub struct Settings {
     pub aztec_wallet_dir: Option<String>,
     /// Also write vault aliases into `aztec-wallet`'s store (`accounts:<alias>`), so it can pay a vault by name.
     pub aztec_wallet_sync: bool,
+    /// Answer app connections (`apps.*`); off by default.
+    pub apps_enabled: bool,
 }
 
 /// Params of `config.set`: the settings to change.
@@ -79,6 +81,10 @@ pub struct SettingsPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub aztec_wallet_sync: Option<bool>,
+    /// Answer app connections.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub apps_enabled: Option<bool>,
 }
 
 /// Params of `relays.set`.

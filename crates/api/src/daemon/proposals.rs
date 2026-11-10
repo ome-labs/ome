@@ -77,6 +77,15 @@ pub enum Intent {
         /// Note.
         memo: Option<String>,
     },
+    /// A transaction an app sent through its connection: the calls are the payload's, as the app built them.
+    App {
+        /// The app's origin.
+        origin: String,
+        /// The app's name, as the member allowed it.
+        name: Option<String>,
+        /// Note.
+        memo: Option<String>,
+    },
 }
 
 /// Where a proposal is.
