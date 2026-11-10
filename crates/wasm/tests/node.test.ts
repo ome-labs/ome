@@ -61,6 +61,7 @@ function proposal(f: ReturnType<typeof fixture>, expiresAt = NOW + 3600) {
     calls: [transfer()],
     extras: "0x",
     txNonce: randomField(),
+    createdAt: Math.min(NOW, expiresAt),
     expiresAt,
     summary: "pay the auditors",
     proposer: 1,
@@ -175,11 +176,11 @@ describe("proposals and votes", () => {
     const built = proposal(f, NOW - 1);
     expect(
       thrown(() => checkProposal(f.vault, chain, built.proposal, built.payload, NOW)).kind,
-    ).toBe("invalid");
+    ).toBe("expired");
     expect(
       thrown(() => at(f.signers, 0).approve(f.vault, chain, built.proposal, built.payload, NOW))
         .kind,
-    ).toBe("invalid");
+    ).toBe("expired");
     const fresh = proposal(f);
     const tampered = proposal(f);
     expect(
@@ -252,6 +253,7 @@ describe("membership", () => {
       calls: [rotationCall(f.vault, swap)],
       extras: "0x",
       txNonce: randomField(),
+      createdAt: NOW,
       expiresAt: NOW + 3600,
       summary: "move member 3 to a phone",
       proposer: 1,
