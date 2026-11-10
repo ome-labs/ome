@@ -82,6 +82,8 @@ equivocated.
 A `Proposal` carries:
 
 - `config_version`, `outer_hash`, `expires_at`, `tx_nonce`, `fee_method`;
+- `authwits`: the message hashes of the private authwits the vault grants with the transaction, at most four
+  (`architecture/protocol.md`);
 - a summary and the proposer;
 - a `PayloadRef { hash, len }`.
 
@@ -99,10 +101,12 @@ This split has three benefits:
 - `len` lets a receiver refuse an oversized payload before fetching it.
 
 The proposal id covers the payload reference, so an approval is bound to one payload. Before signing, a member's
-daemon fetches the payload, checks `PayloadRef::matches`, and recomputes `outer_hash` from it.
+daemon fetches the payload, checks `PayloadRef::matches`, and recomputes `outer_hash` and `authwits` from it.
 
-Approvals and rejections carry the Schnorr signature as the contract's four limbs (`WireSignature`). Checking them
-needs the approval message, a protocol rule, so that check lives in `ome-protocol`.
+Rejections carry one Schnorr signature as the contract's four limbs (`WireSignature`). An `Approval` carries
+`signatures`: one for the transaction's outer hash, then one per authwit in the proposal's order, so between one and
+five. Checking them needs the approval message, a protocol rule, so that check lives in `ome-protocol` (and in the
+keeper, which verifies every signature of an approval before storing it).
 
 A proposal carries `created_at`, the proposer's time on the clock `expires_at` uses; it is part of the id, so every
 member shows the same time, and a proposal made after its own deadline is malformed.
@@ -194,6 +198,7 @@ envelope id = SHA-256("ome.mailbox.envelope.v0" ‖ canonical(envelope))
 | echoed frame                                                | 64 KiB              |
 | ECDH points per request                                     | 4,096               |
 | proposal payload                                            | 256 KiB             |
+| authwits per proposal / signatures per approval             | 4 / 1 to 5          |
 | payloads per request                                        | 64                  |
 | proposal summary / rejection reason                         | 4 KiB / 280 B       |
 | artifact chunk / chunks per artifact / chunks per request   | 256 KiB / 128 / 16  |

@@ -121,14 +121,17 @@ The phone **verifies itself**:
 
 - the manifest against the config (`Vault::from_manifest`): signer set, thresholds and committee agree;
 - the proposal (`check_proposal`): the payload is the one referenced, the calls hash to the outer hash on this vault
-  and chain, the config version is current, the deadline has not passed, fees stay off the vault;
+  and chain and its authwits to their hashes (each caller one of the calls), the config version is current, the
+  deadline has not passed, fees stay off the vault. The review lists each authwit (`AuthwitView`: the caller and the
+  call it may make), and the approval signs every one;
 - every call's function signature against its selector, and the arguments decoded by the signature's types
   (`payload::arguments`);
 - that the phone's signing key holds a slot in the vault;
 - its local policy: contracts it allows, per-token limits (the first `u128` argument of a call to that token), and
-  whether every contract must carry a label pinned on the phone;
-- for a rotation: the reshared committee holds the vault's key and its shares are fresh (`check_rotation`); for a
-  signer swap: only one key changes (`check_signer_swap`).
+  whether every contract must carry a label pinned on the phone. An authwit's call counts like a call: the tokens a
+  contract may pull from the vault count against the limits;
+- for a rotation: the reshared committee holds the vault's key and its shares are fresh (`check_rotation`), and it
+  grants no authwit; for a signer swap: only one key changes (`check_signer_swap`).
 
 The phone **trusts the member's own keeper and daemon** for:
 

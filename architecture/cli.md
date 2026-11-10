@@ -29,9 +29,11 @@ VAULTS      vault create|join|list|show|use|alias|rename|members|peers|health|au
             balance [token] · activity [--follow] · counterparties · request [amount] [token] [--memo]
             token add|list|remove|deploy-test
             contract add <artifact> <address>|list|remove|functions <contract> [--utility]
-PROPOSALS   propose transfer <amount> <token> <to> | call <fn> -ca <contract> --args … | cancel <proposal>
-            | threshold <k> | invalidate
+PROPOSALS   propose transfer <amount> <token> <to> | call <fn> -ca <contract> [--authwit "<contract> <fn> <args…>"]
+            --args … | cancel <proposal> | threshold <k> | invalidate
             (call arguments: text, or JSON for lists, structs and booleans: [1,2] {"x":1} true)
+            (--authwit: the called contract may make that private call for the vault in this transaction; repeat
+             for each, before --args, which takes everything after it)
             (each with --memo, --expires 24h, --dry-run)
             proposals [--status open|ready|needs-me|done|all] · proposal list|show|review|approve|reject|execute
             approve <proposal> · reject <proposal> [--reason] · execute <proposal> [--no-wait] [--force]
@@ -87,8 +89,9 @@ One resolver (`src/refs.rs`) takes every address argument:
 
 A bare name that matches several things is asked about in a terminal, and otherwise fails naming the typed forms
 (`vault:treasury, accounts:treasury`). Ome keeps no address book: name people with
-`aztec-wallet alias accounts bob 0x…`, and reviews say the name is that alias, which nobody verified. The arguments of `propose call` are resolved the same way when they use a typed
-form; anything else is passed as typed.
+`aztec-wallet alias accounts bob 0x…`, and reviews say the name is that alias, which nobody verified. The arguments of `propose call` and of each `--authwit` are resolved the same way when
+they use a typed form; anything else is passed as typed. A review of a proposal that grants authwits lists them under
+"What the vault lets a contract do", and "You sign" lists the message an approval signs for each.
 
 ## Output
 

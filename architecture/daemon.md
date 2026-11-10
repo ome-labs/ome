@@ -152,6 +152,12 @@ exits.
   - `calls` are built from the contract's artifact: each `AbiValue` is checked against its parameter's type, then
     Aztec's encoder encodes it. The payload's extras list the classes the calls run and the instances the node
     doesn't publish (`PayloadContracts`), and the daemon offers those artifacts to its keeper.
+  - A `calls` intent may grant `authwits`: `{ caller, call }`, at most `limits.maxAuthwits` (4). Each call is built
+    the same way and must be private, and each caller must be one of the intent's own call targets; the wallet
+    signs their hashes with the transaction (`architecture/protocol.md`). Views, previews and reviews decode each
+    authwit from the payload (a call without a function name decodes by its selector), name its caller as the call
+    it is, and show the hash and the message an approval signs for it. The daemon rebuilds nothing else for them:
+    execution adds each approved authwit's witness through the wallet.
   - A cancellation is the fee call alone, under the cancelled proposal's nonce.
   - `setThreshold` and `invalidatePending` call the vault itself; a threshold outside 1 to the member count, or equal
     to the current one, is refused before anything is built. Once a threshold change runs, each member's keeper adopts

@@ -51,7 +51,7 @@ values. `tests/payload.rs` checks every step against `tests/vectors/payload.json
 with `@aztec-labs/entrypoints` 6.0.0. The checks cover selectors, args and calldata hashes, the 31 fields, the
 payload hash and the outer hash, for 0, 1, 3 and 5 calls.
 
-A proposal payload is `canonical(ExecutionRequest { calls, extras })`. Each `Call` carries:
+A proposal payload is `canonical(ExecutionRequest { calls, authwits, extras })`. Each `Call` carries:
 
 - the target;
 - the selector;
@@ -72,28 +72,55 @@ Calls the entrypoint would mishandle are refused:
 - non-canonical fields;
 - more than five calls.
 
+### Authwits granted with a transaction
+
+A contract that moves the vault's tokens on its behalf (an AMM pulling the input of a swap) asks the vault, through
+`verify_private_authwit`, whether its caller may. The vault answers with the same `k`-of-`n` check as its entrypoint,
+over the authwit's message hash instead of the transaction's. So the vault grants an authwit only with a proposal:
+`authwits` lists up to four `Authwit { caller, call }`, and members sign each one's hash beside the transaction's.
+
+```text
+inner hash   = Poseidon2(AUTHWIT_INNER, [caller, selector, varargs_hash(args)])   (0 args hash without arguments)
+message hash = Poseidon2(AUTHWIT_OUTER, [call.to, chain_id, rollup_version, inner hash])
+```
+
+This is aztec.js's `computeAuthWitMessageHash({ caller, call })`; `tests/payload.rs` checks it against
+`tests/vectors/payload.json`, computed with `@aztec-labs/aztec.js` 6.0.0. An authwit is refused when:
+
+- its caller is zero, or is not the target of one of the transaction's calls (so it is usable only inside the flow
+  the members approve);
+- its caller is the vault (the vault's own calls need no authwit);
+- its call is public (a public authwit lives in the auth registry, set by a call of the transaction itself) or its
+  consumer is the vault;
+- there are more than four.
+
+The witness of each authwit is built from the same `k` approvals and added to the transaction's auth witnesses, where
+the PXE finds it when the consumer asks.
+
 `extras` holds the PXE's execution data that the signature does not cover: auth witnesses, capsules and extra hashed
 arguments. It cannot change which calls run or with what arguments. Contracts must constrain any hint they read
 from it.
 
 ## Proposals (`proposals`)
 
-`Draft::build` produces the wire `Proposal` and its `ProposalPayload`, with the outer hash computed from the calls.
+`Draft::build` produces the wire `Proposal` and its `ProposalPayload`, with the outer hash computed from the calls and
+the authwit hashes from the authwits.
 
 `check_proposal` runs before a member reviews or signs anything. It returns the decoded calls to show the member,
 after checking that:
 
 1. the payload is the one the proposal references, and it decodes;
-2. the calls hash to the proposal's `outer_hash` on this vault and chain;
+2. the calls hash to the proposal's `outer_hash` on this vault and chain, and the authwits to its `authwits`, each
+   passing the authwit rules above;
 3. the proposal is for the current config version;
 4. its deadline has not passed;
 5. the proposer is a member;
 6. the fee method is `EXTERNAL`. The vault's other fee methods would make it the public fee payer, which breaks the
    invariant that fees are never paid from the vault in public.
 
-`verify_approval` checks that an approval is for this proposal's id and that it is a valid Schnorr signature by the
-key in its slot. The signature covers the approval message, which binds the vault, outer hash, config version and
-deadline. An approval copied to another proposal, vault, version, deadline or slot fails. `verify_rejection` does the
+`verify_approval` checks that an approval is for this proposal's id and that each of its signatures is a valid
+Schnorr signature by the key in its slot. There is one signature per approval message (`approval_messages_for`): the
+transaction's, then each authwit's, each binding the vault, the hash, the config version and the deadline. An approval copied to another proposal, vault, version, deadline or slot fails. `verify_rejection` does the
 same with the rejection message.
 
 `Tally` records the first valid vote from each slot and ignores later ones. Its status is checked in this order:
@@ -103,8 +130,8 @@ same with the rejection message.
 3. `Blocked` with more than `n − k` rejections (`k` can no longer be reached);
 4. otherwise `Pending`.
 
-Once approved, `witness()` builds the auth witness from the `k` lowest-slot approvals. The result is identical
-whichever member builds it.
+Once approved, `witness()` builds the auth witness from the `k` lowest-slot approvals, and `authwit_witnesses()` one
+per authwit from the same approvals. The result is identical whichever member builds it.
 
 ## Membership (`membership`)
 

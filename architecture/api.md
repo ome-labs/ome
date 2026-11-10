@@ -154,8 +154,9 @@ Times are Unix seconds, and hex values are typed.
   call.
 - An `Intent` is one of:
   - `transfer { token, to, amount, memo }`;
-  - `calls { calls: [{ to, fn, args }], memo }`, 1 to `limits.maxCalls` calls; `args` are `AbiValue`s, one per
-    parameter;
+  - `calls { calls: [{ to, fn, args }], authwits?: [{ caller, call: { to, fn, args } }], memo }`, 1 to
+    `limits.maxCalls` calls; `args` are `AbiValue`s, one per parameter. Each authwit lets `caller`, one of the calls'
+    targets, make its private `call` on the vault's behalf inside this transaction, at most `limits.maxAuthwits`;
   - `cancel { cancels, memo }`;
   - `setThreshold { threshold, memo }`: the vault's `set_threshold`, from 1 to the member count and not the current
     value;
@@ -216,7 +217,9 @@ Times are Unix seconds, and hex values are typed.
   - `DecodedCall { to, toLabel, fn, selector, kind, args: DecodedArg[], isStatic, decoded }`, with
     `DecodedArg { name, type, value, display }`; `decoded: false` means the arguments are raw fields because this
     member doesn't have the contract's code yet.
-  - `daemon.info.limits` reports what the daemon accepts: `maxCalls` (4), `maxSummaryBytes` (4,096),
+  - `ProposalView.authwits` and `ProposalPreview.authwits` list
+    `DecodedAuthwit { caller, callerLabel, call: DecodedCall, messageHash, approvalMessage }`.
+  - `daemon.info.limits` reports what the daemon accepts: `maxCalls` (4), `maxAuthwits` (4), `maxSummaryBytes` (4,096),
     `maxArtifactBytes` (32 MiB), `memoChars` (280), `minExpiryHours` (1) and `maxExpiryHours` (720).
 - **Membership** (`architecture/daemon.md`):
   1. a newcomer's daemon produces a join request (`membership.request`), signed by the newcomer's keeper;

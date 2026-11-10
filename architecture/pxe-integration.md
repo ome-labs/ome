@@ -122,19 +122,25 @@ A vault transaction is an Ome proposal.
      so members who lack them can fetch the artifacts (`architecture/daemon.md`, Contracts) and register them after
      checking each class id and address.
 
-   `@ome-labs/wasm` builds the proposal and payload, and computes the outer hash in Rust. The wallet also computes
-   it with Aztec's own `DefaultAccountEntrypoint` and refuses if the two differ.
+   `terms.authwits` lists the private authwits granted with the calls (`{ caller, call }`, the caller one of the
+   calls' targets; `architecture/protocol.md`). They are signed, not extras.
+
+   `@ome-labs/wasm` builds the proposal and payload, and computes the outer hash and the authwit hashes in Rust. The
+   wallet also computes them with Aztec's own `DefaultAccountEntrypoint` and `computeAuthWitMessageHash`, and refuses
+   if they differ.
 
 2. **Replicate.** The proposer stores the payload and proposal with its keeper (`payloads.put`, `proposals.put`).
    Other members' keepers receive the proposal and fetch the payload by hash.
 3. **Check and approve.** Another member's wallet rebuilds the transaction with `vaultTxOf(vault, proposal,
-   payload)`. This runs `checkProposal` (the payload is the one referenced and hashes to the outer hash, the config is
-   current, the deadline hasn't passed, fees stay off the vault) and Aztec's hash again. The member's
+   payload)`. This runs `checkProposal` (the payload is the one referenced and hashes to the outer hash and authwit
+   hashes, every authwit's caller is called, the config is current, the deadline hasn't passed, fees stay off the
+   vault) and Aztec's hashes again. The member's
    `UnlockedSigner` approves; the signer runs the same checks itself.
 4. **Execute.** `executeVaultTx(tx, approvals)` steps:
    1. refuse approvals collected under an older config version;
    2. tally the approvals with `@ome-labs/wasm`;
-   3. once `k` approve, serve the 49-field witness for the outer hash;
+   3. once `k` approve, serve the 49-field witness for the outer hash, and add one witness per authwit to the
+      transaction's auth witnesses, where the PXE answers the consumer's `verify_private_authwit` from them;
    4. send through the vault's entrypoint, with the proposal's nonce pinned and `cancellable` set, so reusing the
       nonce cancels.
 
@@ -221,6 +227,8 @@ metadata leak stays (`architecture/daemon.md`).
   with an auth witness and a fee payer) identically, and the payload round-trips. Utility calls are refused.
 - **Witness:** approvals tally in slot order with the empty slot zeroed. The witness provider serves only approved
   hashes.
+- **Authwits:** a proposal's authwit hashes equal aztec.js's `computeAuthWitMessageHash`, and the authwits round-trip
+  through the checked request.
 
 **End to end:** `pnpm --filter @ome-labs/wallet test:e2e`, against `aztec start --local-network`. Three real
 `ome-keeper` processes run the DKG, and two members' wallets each use their own keeper. The suite checks that:
@@ -229,6 +237,8 @@ metadata leak stays (`architecture/daemon.md`).
 - both find the vault's notes through threshold ECDH;
 - a transfer previews, and so does a `rotate_membership` proposal (daemon suite);
 - a proposal travels between keepers, is checked in the other wallet, and pays with two approvals;
+- the vault swaps through Aztec's AMM: the AMM pulls the input under an authwit both members sign with the swap,
+  checked in the other wallet, and the output arrives as a private note the vault finds;
 - one approval, a late proposal and a cancelled nonce are refused;
 - a reshare and a `rotate_membership` proposal (which pays its sponsored fee) take member 3 out:
   - the new committee activates on all three of its keepers;
@@ -237,4 +247,5 @@ metadata leak stays (`architecture/daemon.md`).
   - the newcomer's approval counts;
   - both wallets keep reading the vault in the new epoch.
 
-Measured on Apple Silicon with fake proofs: 8 tests in 33 s, setup included. `OME_E2E_PROVE=1` proves client-side.
+Measured on Apple Silicon with fake proofs: 9 tests in 63 s, setup included (the AMM's deployment and liquidity
+take most of the added time). `OME_E2E_PROVE=1` proves client-side.
