@@ -1,9 +1,12 @@
-//! Errors every Ome API method can return, as a kind a client acts on plus a human message.
+//! Errors every Ome API method can return, as a kind a client acts on plus a human message. A failure the member can
+//! fix gets its own kind, with the numbers needed to fix it in [`ErrorDetails`]; `failed` is for bugs and unknowns.
 
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
+
+use crate::ErrorDetails;
 
 /// What went wrong, in terms a client can act on. The CLI maps kinds to exit codes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -29,6 +32,22 @@ pub enum ErrorKind {
     Auth,
     /// The keeper refuses to act until a person looks: an unverifiable config or an unexpected spend.
     Alarm,
+    /// The vault, or the fee payer, holds less than the transaction needs.
+    InsufficientFunds,
+    /// The proposal's deadline has passed.
+    Expired,
+    /// The proposal was made under a config the vault has since changed.
+    Stale,
+    /// Another member is already doing this (executing the same proposal).
+    Conflict,
+    /// The lobby has as many members as it takes.
+    Full,
+    /// Too few keepers answered to read the vault's private state.
+    Unreadable,
+    /// The contract is not registered with this member.
+    UnknownContract,
+    /// The invite, token or vault belongs to another network than this profile's.
+    Network,
     /// Anything else, including a kind this version does not know.
     #[serde(other)]
     Failed,
@@ -36,7 +55,7 @@ pub enum ErrorKind {
 
 impl ErrorKind {
     /// Every kind, in declaration order.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 19] = [
         Self::Parse,
         Self::InvalidRequest,
         Self::MethodNotFound,
@@ -47,6 +66,14 @@ impl ErrorKind {
         Self::Locked,
         Self::Auth,
         Self::Alarm,
+        Self::InsufficientFunds,
+        Self::Expired,
+        Self::Stale,
+        Self::Conflict,
+        Self::Full,
+        Self::Unreadable,
+        Self::UnknownContract,
+        Self::Network,
         Self::Failed,
     ];
 
@@ -64,6 +91,14 @@ impl ErrorKind {
             Self::Locked => "locked",
             Self::Auth => "auth",
             Self::Alarm => "alarm",
+            Self::InsufficientFunds => "insufficient-funds",
+            Self::Expired => "expired",
+            Self::Stale => "stale",
+            Self::Conflict => "conflict",
+            Self::Full => "full",
+            Self::Unreadable => "unreadable",
+            Self::UnknownContract => "unknown-contract",
+            Self::Network => "network",
             Self::Failed => "failed",
         }
     }
@@ -83,6 +118,14 @@ impl ErrorKind {
             Self::Auth => -32_012,
             Self::Alarm => -32_013,
             Self::NotFound => -32_014,
+            Self::InsufficientFunds => -32_015,
+            Self::Expired => -32_016,
+            Self::Stale => -32_017,
+            Self::Conflict => -32_018,
+            Self::Full => -32_019,
+            Self::Unreadable => -32_020,
+            Self::UnknownContract => -32_021,
+            Self::Network => -32_022,
         }
     }
 
@@ -101,6 +144,22 @@ impl ErrorKind {
 pub struct ErrorData {
     /// What went wrong.
     pub kind: ErrorKind,
+    /// The numbers needed to fix it, for kinds that have them. Details a client doesn't understand read as absent.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "lenient_details"
+    )]
+    #[ts(optional)]
+    pub details: Option<Box<ErrorDetails>>,
+}
+
+/// Details from a later version, or malformed ones, are dropped rather than failing the whole reply.
+fn lenient_details<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Box<ErrorDetails>>, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|value| serde_json::from_value(value).ok().map(Box::new)))
 }
 
 /// A JSON-RPC error object.
@@ -123,8 +182,31 @@ impl RpcError {
         Self {
             code: kind.code(),
             message: message.into(),
-            data: Some(ErrorData { kind }),
+            data: Some(ErrorData {
+                kind,
+                details: None,
+            }),
         }
+    }
+
+    /// An error of the kind `details` belong to, carrying them.
+    #[must_use]
+    pub fn detailed(details: ErrorDetails, message: impl Into<String>) -> Self {
+        let kind = details.kind();
+        Self {
+            code: kind.code(),
+            message: message.into(),
+            data: Some(ErrorData {
+                kind,
+                details: Some(Box::new(details)),
+            }),
+        }
+    }
+
+    /// The details, when the server sent ones this version understands.
+    #[must_use]
+    pub fn details(&self) -> Option<&ErrorDetails> {
+        self.data.as_ref().and_then(|data| data.details.as_deref())
     }
 
     /// The kind, from `data` or else from the code.

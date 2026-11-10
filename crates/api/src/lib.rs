@@ -12,6 +12,7 @@ mod amount;
 pub mod core;
 pub mod daemon;
 mod error;
+mod error_details;
 mod hex;
 pub mod jsonrpc;
 pub mod keeper;
@@ -19,6 +20,7 @@ pub mod typescript;
 
 pub use amount::Amount;
 pub use error::{ErrorData, ErrorKind, RpcError};
+pub use error_details::{ErrorDetails, Funds, NotReadyReason};
 pub use hex::{Hex16, Hex32, Hex64, HexBytes, HexError, Point};
 pub use jsonrpc::{AuthParams, Empty, Method, MethodInfo};
 

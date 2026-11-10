@@ -4,8 +4,8 @@
 use std::collections::HashSet;
 
 use ome_api::{
-    Amount, ErrorKind, Hex16, Hex32, HexBytes, RpcError, daemon, jsonrpc::Request, keeper,
-    typescript,
+    Amount, ErrorDetails, ErrorKind, Hex16, Hex32, HexBytes, NotReadyReason, RpcError, daemon,
+    jsonrpc::Request, keeper, typescript,
 };
 use serde_json::json;
 
@@ -47,6 +47,80 @@ fn error_codes_are_distinct_and_round_trip() {
     assert_eq!(
         serde_json::to_value(RpcError::new(ErrorKind::NotReady, "starting")).unwrap(),
         json!({ "code": -32010, "message": "starting", "data": { "kind": "not-ready" } })
+    );
+}
+
+#[test]
+fn details_carry_their_kind_and_unknown_ones_are_dropped() {
+    let error = RpcError::detailed(
+        ErrorDetails::Unreadable {
+            answered: 1,
+            needed: 2,
+        },
+        "only 1 of 2 keepers answered",
+    );
+    assert_eq!(error.kind(), ErrorKind::Unreadable);
+    assert_eq!(
+        serde_json::to_value(&error).unwrap(),
+        json!({
+            "code": -32020,
+            "message": "only 1 of 2 keepers answered",
+            "data": { "kind": "unreadable", "details": { "kind": "unreadable", "answered": 1, "needed": 2 } },
+        })
+    );
+    assert_eq!(
+        serde_json::from_value::<RpcError>(serde_json::to_value(&error).unwrap()).unwrap(),
+        error
+    );
+    let ready = RpcError::detailed(
+        ErrorDetails::NotReady {
+            reason: NotReadyReason::Signer,
+        },
+        "unlock the signer first",
+    );
+    assert_eq!(
+        serde_json::to_value(&ready).unwrap()["data"]["details"],
+        json!({ "kind": "not-ready", "reason": "signer" })
+    );
+    // Details from a later version are dropped; the kind still reads.
+    let error: RpcError = serde_json::from_value(json!({
+        "code": -32020, "message": "later", "data": { "kind": "unreadable", "details": { "kind": "quota", "x": 1 } },
+    }))
+    .unwrap();
+    assert_eq!(error.kind(), ErrorKind::Unreadable);
+    assert_eq!(error.details(), None);
+}
+
+#[test]
+fn details_belong_to_one_kind_each() {
+    let kinds = [
+        ErrorDetails::Expired { at: 1 }.kind(),
+        ErrorDetails::Stale {
+            made: 1,
+            current: 2,
+        }
+        .kind(),
+        ErrorDetails::Full { members: 3 }.kind(),
+        ErrorDetails::UnknownContract {
+            address: Hex32([1; 32]),
+            class_id: None,
+        }
+        .kind(),
+        ErrorDetails::Network {
+            expected: "a".into(),
+            actual: "b".into(),
+        }
+        .kind(),
+    ];
+    assert_eq!(
+        kinds,
+        [
+            ErrorKind::Expired,
+            ErrorKind::Stale,
+            ErrorKind::Full,
+            ErrorKind::UnknownContract,
+            ErrorKind::Network
+        ]
     );
 }
 
@@ -113,6 +187,29 @@ fn events_are_tagged_by_type() {
     let value = serde_json::to_value(&event).unwrap();
     assert_eq!(value["type"], "keeperEvent");
     assert_eq!(value["event"]["type"], "unexpectedSpend");
+}
+
+#[test]
+fn daemon_events_arrive_numbered_and_name_their_vault() {
+    let vault = Hex32([7; 32]);
+    let envelope = daemon::EventEnvelope {
+        seq: daemon::EventSeq { epoch: 9, n: 3 },
+        at: 100,
+        event: daemon::DaemonEvent::BalanceChanged {
+            vault,
+            token: Hex32([8; 32]),
+        },
+    };
+    let value = serde_json::to_value(&envelope).unwrap();
+    assert_eq!(value["seq"], json!({ "epoch": 9, "n": 3 }));
+    assert_eq!(value["event"]["type"], "balanceChanged");
+    assert_eq!(
+        serde_json::from_value::<daemon::EventEnvelope>(value).unwrap(),
+        envelope
+    );
+    assert_eq!(envelope.event.vault(), Some(&vault));
+    let subscribe: daemon::SubscribeParams = serde_json::from_value(json!({})).unwrap();
+    assert_eq!(subscribe.since, None);
 }
 
 #[test]

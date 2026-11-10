@@ -194,6 +194,15 @@ pub struct AuditView {
     pub outcome: String,
 }
 
+/// A member of a vault, by slot and name.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct MemberRef {
+    /// Member index, from 1.
+    pub index: u32,
+    /// Name.
+    pub name: String,
+}
+
 /// A token the member knows.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct TokenInfo {

@@ -1,13 +1,54 @@
-//! Events the daemon streams to its clients after `events.subscribe`.
+//! Events the daemon streams to its clients after `events.subscribe`. Each says exactly what changed, so a client
+//! refreshes one view; each arrives numbered, so a client that reconnects can ask for what it missed.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{
-    ExecutionProgress, FoundingState, KeeperState, LobbyView, NodeStatus, RotationState,
-    SignerStatus,
+    ExecutionProgress, FoundingState, KeeperState, LobbyView, MemberRef, NodeStatus, RotationState,
+    SignerStatus, TokenInfo,
 };
-use crate::{Hex32, keeper::KeeperEvent};
+use crate::{Amount, Hex32, keeper::KeeperEvent};
+
+/// Where an event sits in the daemon's stream: `epoch` changes each time the daemon starts, `n` counts up from 1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct EventSeq {
+    /// The daemon start this stream belongs to.
+    pub epoch: u64,
+    /// The event's number in that stream.
+    pub n: u64,
+}
+
+/// An event as it is sent: numbered and timed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct EventEnvelope {
+    /// Its place in the stream.
+    pub seq: EventSeq,
+    /// Unix seconds it happened.
+    pub at: u64,
+    /// What happened.
+    pub event: DaemonEvent,
+}
+
+/// Params of `events.subscribe`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct SubscribeParams {
+    /// The last event the client saw, to receive the ones after it first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub since: Option<EventSeq>,
+}
+
+/// What `events.subscribe` answers before the stream starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Subscription {
+    /// The current stream.
+    pub epoch: u64,
+    /// The last event sent so far in it (0 before the first).
+    pub latest: u64,
+    /// The events after `since` can't be replayed (another epoch, or too old): refetch everything once.
+    pub reset: bool,
+}
 
 /// Something a client should redraw.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -22,7 +63,7 @@ pub enum DaemonEvent {
         /// New state.
         keeper: KeeperState,
     },
-    /// The keeper reported something; forwarded as is.
+    /// The keeper reported something; forwarded as is, for views that follow the keeper itself.
     KeeperEvent {
         /// The keeper's event.
         event: KeeperEvent,
@@ -47,15 +88,116 @@ pub enum DaemonEvent {
         /// Its state.
         founding: FoundingState,
     },
-    /// A vault's proposals, votes or balances changed.
-    VaultActivity {
+    /// A proposal arrived: made here, or replicated from a member.
+    ProposalCreated {
         /// Vault.
         vault: Hex32,
+        /// Proposal id.
+        proposal: Hex32,
+        /// One line: "Transfer 40 OMET to 0xf941…12b3".
+        summary: String,
+        /// Who proposed it.
+        by: MemberRef,
+    },
+    /// A member approved or rejected a proposal.
+    ProposalVoted {
+        /// Vault.
+        vault: Hex32,
+        /// Proposal id.
+        proposal: Hex32,
+        /// One line.
+        summary: String,
+        /// Who voted.
+        by: MemberRef,
+        /// Approved, or rejected.
+        approve: bool,
+        /// The rejection's reason.
+        reason: Option<String>,
+    },
+    /// A proposal has its approvals and can be executed.
+    ProposalReady {
+        /// Vault.
+        vault: Hex32,
+        /// Proposal id.
+        proposal: Hex32,
+        /// One line.
+        summary: String,
+    },
+    /// Enough members rejected a proposal that it can't pass.
+    ProposalBlocked {
+        /// Vault.
+        vault: Hex32,
+        /// Proposal id.
+        proposal: Hex32,
+        /// One line.
+        summary: String,
+    },
+    /// A proposal's transaction was mined.
+    ProposalExecuted {
+        /// Vault.
+        vault: Hex32,
+        /// Proposal id.
+        proposal: Hex32,
+        /// One line.
+        summary: String,
+        /// Transaction.
+        tx_hash: Hex32,
     },
     /// An execution on this device advanced.
     Execution {
         /// Progress.
         execution: ExecutionProgress,
+    },
+    /// The vault received a transfer.
+    Received {
+        /// Vault.
+        vault: Hex32,
+        /// Token.
+        token: TokenInfo,
+        /// Amount, in base units.
+        amount: Amount,
+        /// Sender.
+        from: Hex32,
+        /// Transaction.
+        tx_hash: Hex32,
+    },
+    /// A token's balance in the vault may have changed.
+    BalanceChanged {
+        /// Vault.
+        vault: Hex32,
+        /// Token contract.
+        token: Hex32,
+    },
+    /// The vault started tracking a token.
+    TokenAdded {
+        /// Vault.
+        vault: Hex32,
+        /// Token.
+        token: TokenInfo,
+    },
+    /// The vault stopped tracking a token.
+    TokenRemoved {
+        /// Vault.
+        vault: Hex32,
+        /// Token contract.
+        token: Hex32,
+    },
+    /// The member's own record of a vault changed: its alias, whether it is the default, its status.
+    VaultUpdated {
+        /// Vault.
+        vault: Hex32,
+    },
+    /// The vault's on-chain config changed: thresholds, signers or committee.
+    ConfigChanged {
+        /// Vault.
+        vault: Hex32,
+        /// The config version now.
+        version: u32,
+    },
+    /// The vault's members or this member's place among them changed.
+    MemberChanged {
+        /// Vault.
+        vault: Hex32,
     },
     /// A rotation advanced.
     Rotation {
@@ -70,4 +212,34 @@ pub enum DaemonEvent {
         /// Exposed counterparties.
         counterparties: u32,
     },
+}
+
+impl DaemonEvent {
+    /// The vault the event is about, if it is about one.
+    #[must_use]
+    pub const fn vault(&self) -> Option<&Hex32> {
+        match self {
+            Self::ProposalCreated { vault, .. }
+            | Self::ProposalVoted { vault, .. }
+            | Self::ProposalReady { vault, .. }
+            | Self::ProposalBlocked { vault, .. }
+            | Self::ProposalExecuted { vault, .. }
+            | Self::Received { vault, .. }
+            | Self::BalanceChanged { vault, .. }
+            | Self::TokenAdded { vault, .. }
+            | Self::TokenRemoved { vault, .. }
+            | Self::VaultUpdated { vault }
+            | Self::ConfigChanged { vault, .. }
+            | Self::MemberChanged { vault }
+            | Self::HandshakeAdvised { vault, .. } => Some(vault),
+            Self::Execution { execution } => Some(&execution.vault),
+            Self::Keeper { .. }
+            | Self::KeeperEvent { .. }
+            | Self::Signer { .. }
+            | Self::Node { .. }
+            | Self::Lobby { .. }
+            | Self::Founding { .. }
+            | Self::Rotation { .. } => None,
+        }
+    }
 }

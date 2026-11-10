@@ -9,7 +9,7 @@ mod status;
 mod vaults;
 
 pub use devices::{DeviceView, EnrollParams, SwapSignerParams};
-pub use events::DaemonEvent;
+pub use events::{DaemonEvent, EventEnvelope, EventSeq, SubscribeParams, Subscription};
 pub use founding::{
     FoundingError, FoundingState, FoundingStep, FoundingStepId, InviteHost, InvitePreview,
     LobbyCreateParams, LobbyView, LobbyViewMember, StartLobbyParams, StepStatus,
@@ -33,7 +33,7 @@ pub use status::{
 use ts_rs::TS;
 pub use vaults::{
     ActivityEntry, AuditView, CommitteeMember, CommitteeView, ConfigView, ContractInfo,
-    Counterparty, FoundingInfo, MemberReachability, NamedKey, TokenBalance, TokenInfo,
+    Counterparty, FoundingInfo, MemberReachability, MemberRef, NamedKey, TokenBalance, TokenInfo,
     VaultDetails, VaultSummary,
 };
 
@@ -125,8 +125,8 @@ methods! {
     METHODS: DaemonMethod;
     /// Presents the session token. Must be the first call.
     SessionAuth = "session.auth" (AuthParams) -> ();
-    /// Streams [`DaemonEvent`]s on this session.
-    EventsSubscribe = "events.subscribe" (Empty) -> ();
+    /// Streams [`EventEnvelope`]s on this session, first replaying those after `since` when the daemon still has them.
+    EventsSubscribe = "events.subscribe" (SubscribeParams) -> Subscription;
     /// Who this daemon is.
     DaemonInfoGet = "daemon.info" (Empty) -> DaemonInfo;
     /// Stops the daemon and its keeper.

@@ -68,7 +68,148 @@ export type ErrorKind =
   | "locked"
   | "auth"
   | "alarm"
+  | "insufficient-funds"
+  | "expired"
+  | "stale"
+  | "conflict"
+  | "full"
+  | "unreadable"
+  | "unknown-contract"
+  | "network"
   | "failed";
+
+/**
+ * What a `not-ready` call waits for.
+ */
+export type NotReadyReason =
+  | "starting"
+  | "profile"
+  | "signer"
+  | "node"
+  | "keeper"
+  | "sync"
+  | "vault"
+  | "payload"
+  | "reshare";
+
+/**
+ * What a transaction is short of.
+ */
+export type Funds =
+  | {
+      type: "token";
+      /**
+       * The token.
+       */
+      token: TokenInfo;
+    }
+  | {
+      type: "feeJuice";
+      /**
+       * The fee payer.
+       */
+      payer: Hex32;
+    };
+
+/**
+ * The details of an error, one variant per kind that has them.
+ */
+export type ErrorDetails =
+  | {
+      kind: "not-ready";
+      /**
+       * What isn't ready.
+       */
+      reason: NotReadyReason;
+    }
+  | {
+      kind: "insufficient-funds";
+      /**
+       * What is short.
+       */
+      funds: Funds;
+      /**
+       * What the transaction needs, in base units.
+       */
+      needed: Amount;
+      /**
+       * What is held, in base units.
+       */
+      held: Amount;
+    }
+  | {
+      kind: "expired";
+      /**
+       * Unix seconds.
+       */
+      at: number;
+    }
+  | {
+      kind: "stale";
+      /**
+       * Config version in the proposal.
+       */
+      made: number;
+      /**
+       * The vault's current config version.
+       */
+      current: number;
+    }
+  | {
+      kind: "conflict";
+      /**
+       * The member.
+       */
+      member: MemberRef;
+      /**
+       * How far they are.
+       */
+      phase: ExecutionPhase;
+      /**
+       * Unix seconds they started.
+       */
+      since: number;
+    }
+  | {
+      kind: "full";
+      /**
+       * Members it takes.
+       */
+      members: number;
+    }
+  | {
+      kind: "unreadable";
+      /**
+       * Keepers that answered with valid partials.
+       */
+      answered: number;
+      /**
+       * The vault's viewing threshold.
+       */
+      needed: number;
+    }
+  | {
+      kind: "unknown-contract";
+      /**
+       * Its address.
+       */
+      address: Hex32;
+      /**
+       * Its class, when the node knows the instance.
+       */
+      classId?: Hex32;
+    }
+  | {
+      kind: "network";
+      /**
+       * Where it belongs, e.g. `aztec:11155111:679261766`.
+       */
+      expected: string;
+      /**
+       * This profile's network.
+       */
+      actual: string;
+    };
 
 /**
  * The `data` member of an error response.
@@ -78,6 +219,10 @@ export type ErrorData = {
    * What went wrong.
    */
   kind: ErrorKind;
+  /**
+   * The numbers needed to fix it, for kinds that have them. Details a client doesn't understand read as absent.
+   */
+  details?: ErrorDetails;
 };
 
 /**
@@ -2168,6 +2313,20 @@ export type AuditView = {
 };
 
 /**
+ * A member of a vault, by slot and name.
+ */
+export type MemberRef = {
+  /**
+   * Member index, from 1.
+   */
+  index: number;
+  /**
+   * Name.
+   */
+  name: string;
+};
+
+/**
  * A token the member knows.
  */
 export type TokenInfo = {
@@ -3288,11 +3447,99 @@ export type DaemonEvent =
       founding: FoundingState;
     }
   | {
-      type: "vaultActivity";
+      type: "proposalCreated";
       /**
        * Vault.
        */
       vault: Hex32;
+      /**
+       * Proposal id.
+       */
+      proposal: Hex32;
+      /**
+       * One line: "Transfer 40 OMET to 0xf941…12b3".
+       */
+      summary: string;
+      /**
+       * Who proposed it.
+       */
+      by: MemberRef;
+    }
+  | {
+      type: "proposalVoted";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Proposal id.
+       */
+      proposal: Hex32;
+      /**
+       * One line.
+       */
+      summary: string;
+      /**
+       * Who voted.
+       */
+      by: MemberRef;
+      /**
+       * Approved, or rejected.
+       */
+      approve: boolean;
+      /**
+       * The rejection's reason.
+       */
+      reason: string | null;
+    }
+  | {
+      type: "proposalReady";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Proposal id.
+       */
+      proposal: Hex32;
+      /**
+       * One line.
+       */
+      summary: string;
+    }
+  | {
+      type: "proposalBlocked";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Proposal id.
+       */
+      proposal: Hex32;
+      /**
+       * One line.
+       */
+      summary: string;
+    }
+  | {
+      type: "proposalExecuted";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Proposal id.
+       */
+      proposal: Hex32;
+      /**
+       * One line.
+       */
+      summary: string;
+      /**
+       * Transaction.
+       */
+      txHash: Hex32;
     }
   | {
       type: "execution";
@@ -3300,6 +3547,87 @@ export type DaemonEvent =
        * Progress.
        */
       execution: ExecutionProgress;
+    }
+  | {
+      type: "received";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Token.
+       */
+      token: TokenInfo;
+      /**
+       * Amount, in base units.
+       */
+      amount: Amount;
+      /**
+       * Sender.
+       */
+      from: Hex32;
+      /**
+       * Transaction.
+       */
+      txHash: Hex32;
+    }
+  | {
+      type: "balanceChanged";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Token contract.
+       */
+      token: Hex32;
+    }
+  | {
+      type: "tokenAdded";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Token.
+       */
+      token: TokenInfo;
+    }
+  | {
+      type: "tokenRemoved";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * Token contract.
+       */
+      token: Hex32;
+    }
+  | {
+      type: "vaultUpdated";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+    }
+  | {
+      type: "configChanged";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * The config version now.
+       */
+      version: number;
+    }
+  | {
+      type: "memberChanged";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
     }
   | {
       type: "rotation";
@@ -3319,6 +3647,66 @@ export type DaemonEvent =
        */
       counterparties: number;
     };
+
+/**
+ * Where an event sits in the daemon's stream: `epoch` changes each time the daemon starts, `n` counts up from 1.
+ */
+export type EventSeq = {
+  /**
+   * The daemon start this stream belongs to.
+   */
+  epoch: number;
+  /**
+   * The event's number in that stream.
+   */
+  n: number;
+};
+
+/**
+ * An event as it is sent: numbered and timed.
+ */
+export type EventEnvelope = {
+  /**
+   * Its place in the stream.
+   */
+  seq: EventSeq;
+  /**
+   * Unix seconds it happened.
+   */
+  at: number;
+  /**
+   * What happened.
+   */
+  event: DaemonEvent;
+};
+
+/**
+ * Params of `events.subscribe`.
+ */
+export type SubscribeParams = {
+  /**
+   * The last event the client saw, to receive the ones after it first.
+   */
+  since?: EventSeq;
+};
+
+/**
+ * What `events.subscribe` answers before the stream starts.
+ */
+export type Subscription = {
+  /**
+   * The current stream.
+   */
+  epoch: number;
+  /**
+   * The last event sent so far in it (0 before the first).
+   */
+  latest: number;
+  /**
+   * The events after `since` can't be replayed (another epoch, or too old): refetch everything once.
+   */
+  reset: boolean;
+};
 
 /**
  * Params of `vault.audit`.
@@ -3619,7 +4007,7 @@ export interface KeeperMethods {
 /** Every daemon method: what it takes and returns. */
 export interface DaemonMethods {
   "session.auth": { params: AuthParams; result: null };
-  "events.subscribe": { params: Empty; result: null };
+  "events.subscribe": { params: SubscribeParams; result: Subscription };
   "daemon.info": { params: Empty; result: DaemonInfo };
   "daemon.stop": { params: Empty; result: null };
   status: { params: Empty; result: Status };
@@ -3692,6 +4080,14 @@ export const ERROR_CODES = {
   locked: -32011,
   auth: -32012,
   alarm: -32013,
+  "insufficient-funds": -32015,
+  expired: -32016,
+  stale: -32017,
+  conflict: -32018,
+  full: -32019,
+  unreadable: -32020,
+  "unknown-contract": -32021,
+  network: -32022,
   failed: -32000,
 } as const satisfies Record<ErrorKind, number>;
 
