@@ -12,7 +12,7 @@ use std::{
 };
 
 use ome_api::{
-    AuthParams, Empty, Method,
+    AuthParams, Method,
     jsonrpc::{EVENT, Request, Response},
 };
 use serde::de::DeserializeOwned;
@@ -128,13 +128,11 @@ impl Session {
             .map_err(|e| ClientError::Protocol(format!("{} result: {e}", M::NAME)))
     }
 
-    /// A stream of the service's events. Asks the service to send them on first use.
-    pub(crate) async fn subscribe<E>(&self) -> Result<Events<E>> {
+    /// A stream of the service's events. Asks the service to send them (method `M`) on first use.
+    pub(crate) async fn subscribe<M: Method, E>(&self, params: &M::Params) -> Result<Events<E>> {
         let receiver = self.events.resubscribe();
         if !self.subscribed.swap(true, Ordering::AcqRel)
-            && let Err(error) = self
-                .call::<ome_api::keeper::EventsSubscribe>(&Empty {})
-                .await
+            && let Err(error) = self.call::<M>(params).await
         {
             self.subscribed.store(false, Ordering::Release);
             return Err(error);
@@ -143,6 +141,24 @@ impl Session {
             receiver,
             event: PhantomData,
         })
+    }
+
+    /// Like [`Session::subscribe`], but always asks, and returns the service's answer: a subscription that replays
+    /// missed events sends them right after it, so the stream is opened before asking.
+    pub(crate) async fn subscribe_answered<M: Method, E>(
+        &self,
+        params: &M::Params,
+    ) -> Result<(M::Result, Events<E>)> {
+        let receiver = self.events.resubscribe();
+        let answer = self.call::<M>(params).await?;
+        self.subscribed.store(true, Ordering::Release);
+        Ok((
+            answer,
+            Events {
+                receiver,
+                event: PhantomData,
+            },
+        ))
     }
 }
 

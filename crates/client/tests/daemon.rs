@@ -8,7 +8,8 @@ use std::{ffi::OsString, os::unix::fs::PermissionsExt, path::Path, time::Duratio
 use ome_api::{
     API_VERSION, ErrorKind, Method, RpcError,
     daemon::{
-        DaemonEvent, DaemonInfo, DaemonInfoGet, Secret, SignerStatus, SignerUnlock, UnlockParams,
+        DaemonEvent, DaemonInfo, DaemonInfoGet, EventEnvelope, EventSeq, Secret, SignerStatus,
+        SignerUnlock, UnlockParams,
     },
     jsonrpc::{Notification, Request, Response},
 };
@@ -82,11 +83,18 @@ fn fake_daemon(socket: &Path) {
                             RpcError::new(ErrorKind::Unauthorized, "invalid token")
                         ))),
                         "events.subscribe" => {
-                            out.push(json!(Response::ok(id, Value::Null)));
-                            let event = DaemonEvent::Signer {
-                                signer: SignerStatus {
-                                    locked: true,
-                                    unlocked_until: None,
+                            out.push(json!(Response::ok(
+                                id,
+                                json!({ "epoch": 1, "latest": 0, "reset": false })
+                            )));
+                            let event = EventEnvelope {
+                                seq: EventSeq { epoch: 1, n: 1 },
+                                at: 0,
+                                event: DaemonEvent::Signer {
+                                    signer: SignerStatus {
+                                        locked: true,
+                                        unlocked_until: None,
+                                    },
                                 },
                             };
                             out.push(json!(Notification::event(event)));
@@ -164,8 +172,12 @@ async fn a_client_discovers_the_daemon_and_calls_it() {
         .unwrap();
     assert!(matches!(
         event,
-        Some(Ok(DaemonEvent::Signer {
-            signer: SignerStatus { locked: true, .. }
+        Some(Ok(EventEnvelope {
+            seq: EventSeq { epoch: 1, n: 1 },
+            event: DaemonEvent::Signer {
+                signer: SignerStatus { locked: true, .. }
+            },
+            ..
         }))
     ));
 }

@@ -36,6 +36,8 @@ impl KeeperClient {
     /// # Errors
     /// A connection failure.
     pub async fn events(&self) -> Result<Events<KeeperEvent>> {
-        self.session.subscribe().await
+        self.session
+            .subscribe::<ome_api::keeper::EventsSubscribe, _>(&ome_api::Empty {})
+            .await
     }
 }
