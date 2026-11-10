@@ -72,6 +72,7 @@ signature     = Ed25519(keeper identity, "ome.wire.v0" ‖ canonical(version, he
 | `lobby`     | `LobbyJoin`, `LobbyState`, `LobbyPlan`, `LobbyLeave`; `Invite` (string form, not a message)                                                                                                             | founding a vault                                      |
 | `mailbox`   | `MailboxRequest`, `MailboxResponse`, `RelayEnvelope`, `StoredEnvelope` (unsigned)                                                                                                                       | store-and-forward through an untrusted relay          |
 | `device`    | `DevicePair`, `DevicePaired`, `DeviceReview`, `DeviceVote` (`Ballot`), `DeviceVoted`, `DeviceUnpair`; `PairOffer` (string form, not a message)                                                          | a member's paired signing device                      |
+| `artifacts` | `ArtifactRequest`, `ArtifactManifest`, `ArtifactChunk`                                                                                                                                                  | contract artifacts a proposal's calls need            |
 
 `Echo` forwards a dealer's signed broadcast verbatim. If a dealer signed two different broadcasts, that proves it
 equivocated.
@@ -102,6 +103,20 @@ daemon fetches the payload, checks `PayloadRef::matches`, and recomputes `outer_
 
 Approvals and rejections carry the Schnorr signature as the contract's four limbs (`WireSignature`). Checking them
 needs the approval message, a protocol rule, so that check lives in `ome-protocol`.
+
+### Artifacts
+
+A contract artifact (the gzip-compressed JSON, often megabytes) is larger than one message, so it travels in chunks
+of at most 256 KiB:
+
+- `ArtifactRequest { class_id, chunks }` asks a member's keeper for the manifest (`chunks` empty) or for up to 16
+  chunks;
+- `ArtifactManifest { class_id, chunks }` lists each chunk's hash, `SHA-256("ome.artifact.chunk.v0" ‖ bytes)`;
+- `ArtifactChunk { class_id, index, bytes }` is one chunk.
+
+A keeper keeps a chunk only if it matches the manifest's hash. Neither the manifest nor the sender is trusted for
+the artifact itself: the daemon recomputes the class id from the reassembled artifact before using it. The messages
+travel on the sync lane, like payloads.
 
 ### Invites
 
@@ -147,6 +162,7 @@ envelope id = SHA-256("ome.mailbox.envelope.v0" ‖ canonical(envelope))
 | proposal payload                                            | 256 KiB             |
 | payloads per request                                        | 64                  |
 | proposal summary / rejection reason                         | 4 KiB / 280 B       |
+| artifact chunk / chunks per artifact / chunks per request   | 256 KiB / 128 / 16  |
 | sync records per kind                                       | 4,096               |
 | names                                                       | 64 B                |
 | invite string                                               | 4,096 characters    |
@@ -162,6 +178,7 @@ envelope id = SHA-256("ome.mailbox.envelope.v0" ‖ canonical(envelope))
 | `ome.wire.v0`             | signed-message signatures |
 | `ome.proposal.v0`         | proposal ids              |
 | `ome.proposal.payload.v0` | payload hashes            |
+| `ome.artifact.chunk.v0`   | artifact chunk hashes     |
 | `ome.mailbox.envelope.v0` | relay envelope ids        |
 | `ome-invite-v0:`          | invite string prefix      |
 | `ome-pair-v0:`            | pairing offer prefix      |

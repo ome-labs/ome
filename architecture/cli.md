@@ -27,7 +27,9 @@ SIGNER      unlock [--for 15m] [--touch-id] · lock · signer status|touch-id on
 VAULTS      vault create|join|list|show|use|alias|members|peers|health|audit|receive|balance|retire
             balance [token] · activity [--follow] · counterparties
             token add|list|remove|deploy-test
+            contract add <artifact> <address>|list|remove|functions <contract> [--utility]
 PROPOSALS   propose transfer <amount> <token> <to> | call <fn> -ca <contract> --args … | cancel <proposal>
+            (call arguments: text, or JSON for lists, structs and booleans: [1,2] {"x":1} true)
             (each with --memo, --expires 24h, --dry-run)
             proposals [--status open|ready|done|all] · proposal list|show|review|approve|reject|execute
             approve <proposal> · reject <proposal> [--reason] · execute <proposal> [--no-wait]

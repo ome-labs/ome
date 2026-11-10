@@ -126,7 +126,9 @@ payer the signer trusts in rotations and the one paired devices are told about.
 
 - **`proposals.create`**: turns an intent into an Aztec payload, with the fee payer's call merged in.
   - A transfer is the token's private `transfer`.
-  - `calls` are built from the registered contracts' artifacts.
+  - `calls` are built from the contract's artifact: each `AbiValue` is checked against its parameter's type, then
+    Aztec's encoder encodes it. The payload's extras list the classes the calls run and the instances the node
+    doesn't publish (`PayloadContracts`), and the daemon offers those artifacts to its keeper.
   - A cancellation is the fee call alone, under the cancelled proposal's nonce.
 
   The wallet builds the proposal, and the daemon stores the payload and the proposal with the keeper, which
@@ -136,7 +138,8 @@ payer the signer trusts in rotations and the one paired devices are told about.
   - Votes are verified against the signer set.
   - The status comes from the tally at chain time, the receipts, nonces spent by other executed proposals, and the
     config version.
-  - Calls come from the checked payload.
+  - Calls come from the checked payload, decoded with the contract's artifact when this member has it (named and typed
+    arguments, labels for the vault, its tokens and aliases, token amounts in whole tokens).
 - **`proposals.review`**: rebuilds the transaction on this device. `vaultTxOf` runs the wasm checks and Aztec's own
   outer hash. Review then simulates the transaction with the vault's class overridden by `OmeVaultPreview` (the vault's
   storage and functions, an entrypoint that needs no approvals; `pxe-integration.md`), so calls to the vault itself
@@ -144,6 +147,20 @@ payer the signer trusts in rotations and the one paired devices are told about.
 - **`approve`** / **`reject`**: sign with the signer, then store the vote with the keeper.
 - **`execute`**: tallies the votes into the witness, sends the transaction, stores the receipt, and reports
   `execution` progress.
+
+## Contracts
+
+- **Registering** (`contracts.register`): the daemon computes the artifact's class id and refuses it unless the
+  contract at the address runs that class: the instance the node publishes (its current or original class), or one
+  derived from the given deployment, which must derive the address. The artifact is kept gzip-compressed in the
+  profile's `contracts/` directory, registered again at every start, and offered to the keeper.
+- **A proposal's contracts**: approving needs no artifact (members sign the payload's calls as they are), but decoding,
+  simulating and executing do. When a proposal arrives, and before a review or an execution, the daemon makes its
+  contracts usable: each class this PXE lacks is fetched through the keeper, recomputed and refused if it doesn't
+  match, then registered; each target's instance comes from the node or from the payload's extras, checked against its
+  address. A class still on its way is announced with `contractAvailable` once it arrives; until then the review's
+  calls are marked `decoded: false`.
+- **Limits** are in `src/limits.ts` and reported by `daemon.info`.
 
 ## Tokens and activity
 

@@ -96,26 +96,28 @@ The keeper maps its errors to kinds as follows:
 
 ## Keeper methods
 
-| Area      | Method                                                                       | Params → result                                                                |
-| --------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| session   | `session.auth`, `events.subscribe`                                           | `{ token }` → `null`; `{}` → `null`                                            |
-| keeper    | `keeper.info`, `keeper.joinRequest` (a signed `ome-join-v0:` string)         | → `KeeperInfo { apiVersion, version, identity, transport, peerId, addresses }` |
-| vaults    | `vault.list`, `vault.status`, `vault.register`, `vault.retire`               | → `Vault { manifest, status, index, serving }`                                 |
-|           | `vault.observeConfig`                                                        | `{ vault, config: VaultConfig }` → `{ observation }`                           |
-|           | `vault.observeTx`                                                            | `{ vault, txHash }` → `{ known }` (an unknown spend raises `unexpectedSpend`)  |
-|           | `vault.sync`, `peers.status`                                                 | `{ vault }` → `null`; `Reachability[]`                                         |
-|           | `vault.updateSigners`                                                        | `{ vault, proposal }` (an executed signer swap) → `Vault`                      |
-| ECDH      | `ecdh.batch`                                                                 | `{ vault, epoch, purpose, points }` → `{ epoch, responses: MemberPartials[] }` |
-| ceremony  | `ceremony.dkg`, `ceremony.reshare`, `ceremony.status`                        | `DkgParams`, `ReshareParams` → `null`; `{ session }` → `Ceremony`              |
-| spending  | `proposals.put` / `get` / `list`, `payloads.put` / `get`                     | `{ vault, body }` → `{ id }` or `{ hash }`; bodies as `HexBytes`               |
-|           | `approvals.put` / `list`, `rejections.put` / `list`, `receipts.put` / `list` | votes as `HexBytes`; `Receipt { proposal, txHash, at }`                        |
-| audit     | `audit.list`                                                                 | `{ vault, limit? }` (100 by default, at most 10,000) → `AuditEntry[]`          |
-| lobbies   | `lobby.open`, `lobby.join`, `lobby.inspect`                                  | → `{ lobby, invite }`, `{ lobby }`, `Invite`                                   |
-|           | `lobby.status`, `lobby.list`, `lobby.start`, `lobby.close`, `lobby.leave`    | → `Lobby` (with its `plan` once started)                                       |
-| mailboxes | `mailbox.poll`                                                               | → `{ delivered }`                                                              |
-| devices   | `devices.offer`                                                              | `{ member, network, feePayers }` → `{ offer, expiresAt }` (`ome-pair-v0:`)     |
-|           | `devices.list`, `devices.revoke`                                             | → `Device[]`; `{ identity }` → `null`                                          |
-|           | `devices.review`                                                             | `DeviceReviewParams` → `{ devices }`                                           |
+| Area      | Method                                                                       | Params → result                                                                                               |
+| --------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| session   | `session.auth`, `events.subscribe`                                           | `{ token }` → `null`; `{}` → `null`                                                                           |
+| keeper    | `keeper.info`, `keeper.joinRequest` (a signed `ome-join-v0:` string)         | → `KeeperInfo { apiVersion, version, identity, transport, peerId, addresses }`                                |
+| vaults    | `vault.list`, `vault.status`, `vault.register`, `vault.retire`               | → `Vault { manifest, status, index, serving }`                                                                |
+|           | `vault.observeConfig`                                                        | `{ vault, config: VaultConfig }` → `{ observation }`                                                          |
+|           | `vault.observeTx`                                                            | `{ vault, txHash }` → `{ known }` (an unknown spend raises `unexpectedSpend`)                                 |
+|           | `vault.sync`, `peers.status`                                                 | `{ vault }` → `null`; `Reachability[]`                                                                        |
+|           | `vault.updateSigners`                                                        | `{ vault, proposal }` (an executed signer swap) → `Vault`                                                     |
+| ECDH      | `ecdh.batch`                                                                 | `{ vault, epoch, purpose, points }` → `{ epoch, responses: MemberPartials[] }`                                |
+| ceremony  | `ceremony.dkg`, `ceremony.reshare`, `ceremony.status`                        | `DkgParams`, `ReshareParams` → `null`; `{ session }` → `Ceremony`                                             |
+| spending  | `proposals.put` / `get` / `list`, `payloads.put` / `get`                     | `{ vault, body }` → `{ id }` or `{ hash }`; bodies as `HexBytes`                                              |
+|           | `approvals.put` / `list`, `rejections.put` / `list`, `receipts.put` / `list` | votes as `HexBytes`; `Receipt { proposal, txHash, at }`                                                       |
+| artifacts | `artifacts.put`                                                              | `{ classId, index, count, bytes }` (one gzip chunk) → `ArtifactStatus`                                        |
+|           | `artifacts.get`, `artifacts.status`, `artifacts.fetch`                       | `{ classId, index }` → `{ count, bytes }?`; `{ vault, classId }` → `ArtifactStatus { complete, have, count }` |
+| audit     | `audit.list`                                                                 | `{ vault, limit? }` (100 by default, at most 10,000) → `AuditEntry[]`                                         |
+| lobbies   | `lobby.open`, `lobby.join`, `lobby.inspect`                                  | → `{ lobby, invite }`, `{ lobby }`, `Invite`                                                                  |
+|           | `lobby.status`, `lobby.list`, `lobby.start`, `lobby.close`, `lobby.leave`    | → `Lobby` (with its `plan` once started)                                                                      |
+| mailboxes | `mailbox.poll`                                                               | → `{ delivered }`                                                                                             |
+| devices   | `devices.offer`                                                              | `{ member, network, feePayers }` → `{ offer, expiresAt }` (`ome-pair-v0:`)                                    |
+|           | `devices.list`, `devices.revoke`                                             | → `Device[]`; `{ identity }` → `null`                                                                         |
+|           | `devices.review`                                                             | `DeviceReviewParams` → `{ devices }`                                                                          |
 
 `KeeperEvent` types:
 
@@ -143,7 +145,7 @@ Times are Unix seconds, and hex values are typed.
 | vaults     | `vault.list`, `vault.details`, `vault.peers`, `vault.audit`, `vault.activity`, `vault.counterparties`, `vault.alias`, `vault.use`, `vault.retire` |
 | tokens     | `tokens.list`, `tokens.add`, `tokens.remove`, `tokens.deployTest` (local network only)                                                            |
 | proposals  | `proposals.list`, `get`, `preview`, `create`, `review`, `approve`, `reject`, `execute`, `cancel`                                                  |
-| contracts  | `contracts.functions`                                                                                                                             |
+| contracts  | `contracts.functions`, `contracts.register`, `contracts.list`, `contracts.remove`                                                                 |
 | aztec      | `aztec.aliases`, `aztec.alias`: `aztec-wallet`'s aliases, the only names for addresses (Ome keeps no address book)                                |
 | membership | `membership.request`, `membership.plan`, `membership.begin`, `membership.get`, `membership.list`, `membership.swapSigner`                         |
 | devices    | `devices.pair`, `devices.list`, `devices.revoke`, `devices.enroll`, `devices.forward`                                                             |
@@ -152,8 +154,25 @@ Times are Unix seconds, and hex values are typed.
   call.
 - An `Intent` is one of:
   - `transfer { token, to, amount, memo }`;
-  - `calls { calls: [{ to, fn, args }], memo }`;
+  - `calls { calls: [{ to, fn, args }], memo }`, 1 to `limits.maxCalls` calls; `args` are `AbiValue`s, one per
+    parameter;
   - `cancel { cancels, memo }`.
+- **Contracts and typed calls** (`architecture/daemon.md`, Contracts):
+  - `contracts.functions { contract, includeUtility? }` → `ContractFunction { name, selector, kind, isStatic, params,
+    returns }`, each parameter with its full `AbiType`: `field`, `boolean`, `integer { signed, width }`,
+    `array { length, item }`, `string { length }`, `struct { path, fields, known? }` and `tuple { items }`. `known` marks
+    a struct people read as one value: `aztecAddress`, `ethAddress`, `functionSelector`.
+  - An `AbiValue` is text (fields and integers in decimal or `0x` hex, addresses, strings), a boolean, a list (arrays,
+    tuples) or an object (structs by field name). The daemon checks each against its type before Aztec encodes it, and
+    a refusal names the parameter's path (`swap.order.amount: u128 is from 0 to …`).
+  - `contracts.register { artifact, address, instance? }` → `ContractView { address, name, classId, source,
+    functions }`. `instance` (`salt`, `deployer`, `initializationHash`, `immutablesHash`, `publicKeys`) is only for a
+    contract the node doesn't publish. `contracts.list` adds the tracked tokens and the vaults (`source`).
+  - `DecodedCall { to, toLabel, fn, selector, kind, args: DecodedArg[], isStatic, decoded }`, with
+    `DecodedArg { name, type, value, display }`; `decoded: false` means the arguments are raw fields because this
+    member doesn't have the contract's code yet.
+  - `daemon.info.limits` reports what the daemon accepts: `maxCalls` (4), `maxSummaryBytes` (4,096),
+    `maxArtifactBytes` (32 MiB), `memoChars` (280), `minExpiryHours` (1) and `maxExpiryHours` (720).
 - **Membership** (`architecture/daemon.md`):
   1. a newcomer's daemon produces a join request (`membership.request`), signed by the newcomer's keeper;
   2. a member plans the change (`membership.plan`, taking the requests) and hands the plan string

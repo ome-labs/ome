@@ -117,7 +117,10 @@ A vault transaction is an Ome proposal.
    - function names and return types;
    - auth witnesses and capsules;
    - extra hashed args;
-   - the fee payer.
+   - the fee payer;
+   - the contracts the calls need (`PayloadContracts`): their class ids, and the instances the node doesn't publish,
+     so members who lack them can fetch the artifacts (`architecture/daemon.md`, Contracts) and register them after
+     checking each class id and address.
 
    `@ome-labs/wasm` builds the proposal and payload, and computes the outer hash in Rust. The wallet also computes
    it with Aztec's own `DefaultAccountEntrypoint` and refuses if the two differ.

@@ -60,6 +60,7 @@ SQLite in WAL mode with `secure_delete` on. It holds only public, non-secret sta
 - the ECDH audit log;
 - every config observation in full;
 - proposals, payloads by hash, approvals, rejections and receipts;
+- contract artifacts by class, in chunks, with their manifest once known;
 - lobbies: the public roster and plan. The invite secret lives in custody.
 
 Migrations are append-only and tracked by `user_version`.
@@ -165,6 +166,13 @@ reading in the keeper, so it is deferred.
   accepted. A payload therefore never reaches a member that doesn't know why it exists, and the proposer needn't be
   online.
 - **Unexpected spends**: `vault.observeTx` raises `UnexpectedSpend` for a vault transaction that matches no receipt.
+- **Artifacts** are stored by contract class and, like payloads, **never pushed**. The daemon puts the artifacts its
+  proposals call (`artifacts.put`, one gzip chunk per call; the manifest is the chunks' hashes once the last one is
+  in). When a member's daemon needs one (`artifacts.fetch { vault, classId }`), its keeper asks the vault's other
+  members for the manifest, adopts the first one that answers, and asks that member for the chunks, 16 at a time,
+  keeping each only if it matches the manifest's hash. The `artifact` event reports the end: complete, or given up
+  with a reason. A fetch that heard nothing for 60 seconds may start again. The store refuses new artifacts past
+  512 MiB. Whether the artifact is the code of its class is the daemon's check.
 
 Replicated records skip the replay window: they are idempotent, verified on their own, and may arrive days late
 through a mailbox. Everything else must be fresh and unseen.
