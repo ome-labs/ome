@@ -63,7 +63,10 @@ SQLite in WAL mode with `secure_delete` on. It holds only public, non-secret sta
 - contract artifacts by class, in chunks, with their manifest once known;
 - lobbies: the public roster and plan. The invite secret lives in custody.
 
-Migrations are append-only and tracked by `user_version`.
+Migrations are append-only and tracked by `user_version`; a store whose schema is past the release's migrations is
+refused (`NewerStore`: "written by a newer Ome: update"). Each stored record keeps the protocol version it was written
+in (`version` columns); reads go through the SQLite function `ome_body(version, body)`, which converts an older record
+to the current encoding, so the stored bytes never change (`architecture/compatibility.md`).
 
 ## Ceremonies
 
@@ -240,6 +243,18 @@ through a mailbox. Everything else must be fresh and unseen.
 when its signature checks and its signer is in the vault's committee. Every rename is kept (`names` table); the newest
 per subject, by time then signer, is the name `names.list` returns and `KeeperEvent::Name` announces. A sync answer
 always carries the current names.
+
+## Capabilities and protocol versions
+
+On its periodic round the keeper signs a `Capabilities` record for each active vault when its own (protocol range,
+release) changed, stores it and pushes it to the members; replicated records are kept from committee members only,
+the newest per member counting, and every sync answer carries them. The vault's messages are then signed in the
+newest version every current member speaks (cached per vault, refreshed on each record and round); a member with no
+record counts as the first version. `vault.protocol` returns the version and each member's release and range, and
+`require_protocol(vault, version, feature)` refuses a feature that needs a newer version, naming who is behind.
+Frames to a paired device go out in the newest version both the vault and its app speak (`DevicePair.versions`,
+stored with the device); an app too old for the vault is told to update. `keeper.info` lists the keeper's
+`capabilities` (`lobbies`, `proposals`, `devices`, `artifacts`, `names`, `capabilities`, `store-versions`).
 
 ## Paired devices
 

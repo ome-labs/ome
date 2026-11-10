@@ -29,9 +29,11 @@ reordered or removed.
 ## Signed messages
 
 ```text
-SignedMessage = { version: u16, header: Header, body: Message, signer: IdentityPublic, signature: Bytes64 }
+SignedMessage = { version: u16, header: Header, body: Message, extensions: Extensions, signer: IdentityPublic,
+                  signature: Bytes64 }
 Header        = { scope: [u8; 32], epoch: u32, id: [u8; 16], created_at: u64 }
-signature     = Ed25519(keeper identity, "ome.wire.v0" ‖ canonical(version, header, body, signer))
+signature     = Ed25519(keeper identity, "ome.wire.v0" ‖ version ‖ header ‖ body ‖ extensions ‖ signer)
+                (each in the message's own protocol version)
 ```
 
 - `scope` is the vault address, or the session or lobby id before the vault exists.
@@ -51,15 +53,28 @@ signature     = Ed25519(keeper identity, "ome.wire.v0" ‖ canonical(version, he
 
 ## Versions
 
-- Every signed message carries its protocol version. `decode` accepts any version in `version::SUPPORTED`, which is
-  `0..=0` today.
+- Every signed message carries its protocol version, first. `decode` reads it and parses the body with that
+  version's encoding (`encoding.rs`), converting it to the one model; `encode` writes a message in its version. Any
+  version in `version::SUPPORTED`, `0..=0` today, is accepted. `encode_body_in` / `decode_body_in` do the same for
+  an unsigned body a keeper stores.
+- **Extensions:** the envelope and every record stored or re-sent on its own end with `extensions`
+  (`{ id, critical, bytes }`, ids strictly increasing, at most 16 of 4 KiB), inside their signed bytes. An unknown
+  non-critical one is ignored; an unknown critical one refuses the record (`UnknownCriticalExtension`). None is
+  defined yet: they let a later release add a field without a new version.
 - A keeper advertises the versions it speaks in its `KeeperContact` (`versions: VersionRange`).
 - When a vault is founded, `version::negotiate` picks the newest version every founder's keeper speaks. The
   `LobbyPlan` records it, and the plan is refused unless every member's range contains it.
 - The vault's `Manifest` pins that `protocol_version`. Members sign with the manifest's version, not their newest.
+- **A vault's version** after founding follows `Capabilities { vault, versions, release, at, by }` records: each
+  member's keeper signs one and replicates it like a rename, and the vault writes in the newest version every current
+  member speaks (`version::vault_version`; a member with no record counts as the first version).
+  `version::holding_back` names the members keeping a newer version back. A paired device's `DevicePair` carries the
+  versions its app reads.
 - **Upgrade path:** a release that changes a wire format or domain tag adds a version and keeps speaking the old
-  one. A vault moves to the new version only once every member supports it. A mismatch fails before a ceremony
-  starts, and the error names the version.
+  one; each vault moves by itself once every member supports it (`architecture/compatibility.md`). A mismatch fails
+  before a ceremony starts, and the error names the version.
+- **Pasted strings** carry their format in the prefix (`ome-invite-v0:`); `version::strip_prefix` refuses a newer
+  format as `NewerFormat` ("this invite needs a newer release of Ome"), not as malformed.
 
 ## Messages
 

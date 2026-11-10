@@ -303,8 +303,20 @@ after a start only learns what it already received.
   - making a param required;
   - changing a field's type.
 
-Clients should check `apiVersion` before relying on a shape. The daemon refuses a keeper that speaks another version
-when it connects; `ome-client` leaves the check to its caller.
+Clients should check `apiVersion` before relying on a shape, and `capabilities` (in `daemon.info` and `keeper.info`)
+before relying on a feature. The daemon refuses a keeper that speaks another version when it connects; `ome-client`
+leaves the check to its caller.
+
+A value a newer release sends parses as its enum's `unknown` case: an intent kind, a proposal status, a simulation
+failure kind (`{ kind: "unknown" }`, its message saying what) and an event type (`{ type: "unknown" }`, ignored).
+
+**Deprecation:** a field or method to remove is marked deprecated in its doc (and so in the generated types) in one
+release, keeps working through that `apiVersion`, and goes only with the next `apiVersion`; while apps depend on it
+the daemon serves both versions for one release.
+
+Additions of this release: `keeper.vault.protocol` (`VaultProtocol { version, members: [{ member, release,
+versions }] }`), `CommitteeView.protocolVersion` and `CommitteeMember.release`, `Settings.updateCheck`,
+`Status.newerRelease`.
 
 ## TypeScript
 

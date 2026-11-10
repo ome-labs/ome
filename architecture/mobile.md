@@ -115,6 +115,11 @@ Device messages are ordinary `ome-wire` signed messages (new `Message` variants,
   scope: it needs a credentialed sender, close to a central server. If added, it would carry content-free wake-ups,
   opt in per member.
 
+**Versions:** the pairing names the protocol versions the app reads (`DevicePair.versions`); its keeper writes to it in
+the newest one both the vault and the app speak, and tells the member to update the app when the vault has moved
+past it. The core keeps each file in a `{ schema, value }` envelope, migrated as it is read; a file a newer app wrote
+is refused with an update message.
+
 ## Reviewing on the phone
 
 The phone **verifies itself**:

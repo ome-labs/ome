@@ -21,7 +21,8 @@ signer stays sealed in the daemon, and viewing shares stay in the keeper.
 ## The command tree
 
 ```text
-SET UP      init · status · fees · doctor · config get|set|unset (apps on|off, …) · profile list|show|use|rename|remove
+SET UP      init · status · fees · doctor · update · config get|set|unset (apps on|off, update-check on|off, …)
+            profile list|show|use|rename|remove
             daemon start|stop|restart|logs · keeper status|connect|use-local|logs · completions <shell>
 SIGNER      unlock [--for 15m] [--touch-id] · lock · signer status|touch-id on|off|passphrase
 VAULTS      vault create|join|list|show|use|alias|rename|members|peers|health|audit|receive|balance|retire
@@ -106,6 +107,15 @@ they use a typed form; anything else is passed as typed. A review of a proposal 
 - Tables (`comfy-table`) have no borders and dim headers; `--plain` prints their rows tab-separated without headers.
 - After a change of state, the next command is printed (`next: ome execute 4f2a`), with `--profile` when one was
   named.
+
+## Updates
+
+`ome update` updates Ome the way it was installed (`npm install -g @ome-labs/ome@latest`, `brew upgrade ome`, or the
+install script) and restarts the profile's daemon from the new release; a checkout or an unknown install is told the
+command instead. `ome status` and `ome doctor` say when a newer release is out (the daemon's daily check of GitHub's
+releases; `ome config set update-check off`). `ome vault members` shows the release each member's keeper runs, and
+says when they differ which protocol version the vault speaks. Nothing else is asked of a member after an update:
+local files upgrade on start, and each vault moves to a newer protocol by itself (`architecture/compatibility.md`).
 
 ## Clear signing and safety
 

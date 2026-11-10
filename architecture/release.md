@@ -18,6 +18,9 @@ How Ome is versioned, built, published and installed, and how to check that what
   pasted strings, and every member of a vault upgrades together (0.2.0 did not read 0.1.0's proposals or votes). The
   launch release freezes `v0`; from then on, wire formats, the contract and sealed files change only with a new
   protocol version or a migration that needs nothing from members.
+- **Before each release:** `pnpm compat:freeze <version>` freezes the protocol vectors and writes the release's
+  fixtures (`compat/`); the launch release also sets `compat/MODE` to `enforce`, after which the compatibility guards
+  fail CI instead of reporting ([compatibility.md](compatibility.md)).
 
 ## What a release publishes
 

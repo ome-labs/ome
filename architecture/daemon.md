@@ -35,6 +35,16 @@ The Ome home is `OME_HOME`, or `~/.ome`. Each profile is `profiles/<name>/`. The
 The socket is `daemon.sock` in the profile, unless that path is longer than 100 bytes; it then lives in the temporary
 directory under a hash of the path.
 
+`profile.json`, each vault record and each rotation file carry `schema` and upgrade themselves on load: an older file is
+migrated step by step (`src/profile/schema.ts`) and written back, the previous one kept as `<file>.bak-<schema>`; a
+file a newer release wrote is refused with an update message, and so is a sealed file of a newer format
+(`architecture/compatibility.md`).
+
+**Updates.** On start and once a day the daemon reads GitHub's latest release (`updateCheck`, on by default; nothing
+else is sent), and `status.newerRelease` names a release newer than the daemon. `daemon.info.capabilities` lists what
+this daemon can do, for clients to check instead of its version. Vault details carry the vault's protocol version and
+each member's release, from the keeper (`vault.protocol`).
+
 ## Networks
 
 This release runs on the local network and on Testnet (`src/node/networks.ts`), recognised by the node's L1 chain and

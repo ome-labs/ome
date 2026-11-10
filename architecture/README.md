@@ -30,6 +30,7 @@ the verified design of each component: one page per component.
 | `packages/ome`          | `@ome-labs/ome`: the npm launcher of `ome`, `omed` and `ome-keeper` ([release.md](release.md))                                                                                                           |
 | `packages/api`          | `@ome-labs/api`: the API's TypeScript declarations, generated from `crates/api`                                                                                                                          |
 | `tools/vectors`         | `@ome-labs/vectors`: golden vectors computed with Aztec 6.0.0's own packages                                                                                                                             |
+| `compat/`               | Frozen protocol vectors and release fixtures that later releases must keep reading ([compatibility.md](compatibility.md))                                                                                |
 | `scripts/`              | Repository scripts: guarded cargo runs, the WebAssembly build check, the contract's failure-message check, gate flamegraphs, `install.sh` and release packaging (`packaging/`, [release.md](release.md)) |
 
 ## The vault contract
