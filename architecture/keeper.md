@@ -165,6 +165,14 @@ reading in the keeper, so it is deferred.
   whoever sent the proposal (`PayloadRequest`), and only payloads that a known proposal of that vault references are
   accepted. A payload therefore never reaches a member that doesn't know why it exists, and the proposer needn't be
   online.
+- **Receipts**: `receipts.put { vault, proposal, txHash, block }` signs the receipt with this keeper's identity, so
+  it names its member as executor; a replicated receipt is stored only if its executor's signature checks for this
+  vault. `receipts.list` resolves each executor to a member index. A receipt ends the claims on its proposal.
+- **Execution claims**: `claims.put { vault, proposal, phase, startedAt }` records that this keeper's member is
+  executing a proposal and pushes it to the members (`KeeperEvent::Claim`); `claims.list { vault }` returns the live
+  ones with member indexes. Claims live in memory, end with `mined`, `failed` or the receipt, and lapse
+  `CLAIM_TTL_SECS` (600) after their last update.
+- **Vote times**: `approvals.list` and `rejections.list` return each body with when this keeper stored it.
 - **Unexpected spends**: `vault.observeTx` raises `UnexpectedSpend` for a vault transaction that matches no receipt.
 - **Artifacts** are stored by contract class and, like payloads, **never pushed**. The daemon puts the artifacts its
   proposals call (`artifacts.put`, one gzip chunk per call; the manifest is the chunks' hashes once the last one is
@@ -261,16 +269,16 @@ The keeper serves the keeper API of `ome-api` (`architecture/api.md`):
 `src/rpc/methods.rs` has one typed route per method, and `src/rpc/convert.rs` converts between the keeper's own types
 and the API shapes. Points are checked to be on the curve on the way in. Events are `ome-api`'s `KeeperEvent`.
 
-| Area      | Methods                                                                                                                                        |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| keeper    | `keeper.info`, `peers.status`, `audit.list`, `events.subscribe`                                                                                |
-| vaults    | `vault.register`, `vault.observeConfig` (the whole config note), `vault.observeTx`, `vault.status`, `vault.list`, `vault.sync`, `vault.retire` |
-| ceremony  | `ceremony.dkg`, `ceremony.reshare`, `ceremony.status`                                                                                          |
-| ECDH      | `ecdh.batch`                                                                                                                                   |
-| spending  | `proposals.put` / `get` / `list`, `payloads.put` / `get`, `approvals.put` / `list`, `rejections.put` / `list`, `receipts.put` / `list`         |
-| lobbies   | `lobby.open`, `lobby.join`, `lobby.status`, `lobby.inspect`, `lobby.start`, `lobby.leave`, `lobby.close`, `lobby.list`                         |
-| mailboxes | `mailbox.poll`                                                                                                                                 |
-| devices   | `devices.offer`, `devices.list`, `devices.revoke`, `devices.review`, `vault.updateSigners`                                                     |
+| Area      | Methods                                                                                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| keeper    | `keeper.info`, `peers.status`, `audit.list`, `events.subscribe`                                                                                               |
+| vaults    | `vault.register`, `vault.observeConfig` (the whole config note), `vault.observeTx`, `vault.status`, `vault.list`, `vault.sync`, `vault.retire`                |
+| ceremony  | `ceremony.dkg`, `ceremony.reshare`, `ceremony.status`                                                                                                         |
+| ECDH      | `ecdh.batch`                                                                                                                                                  |
+| spending  | `proposals.put` / `get` / `list`, `payloads.put` / `get`, `approvals.put` / `list`, `rejections.put` / `list`, `receipts.put` / `list`, `claims.put` / `list` |
+| lobbies   | `lobby.open`, `lobby.join`, `lobby.status`, `lobby.inspect`, `lobby.start`, `lobby.leave`, `lobby.close`, `lobby.list`                                        |
+| mailboxes | `mailbox.poll`                                                                                                                                                |
+| devices   | `devices.offer`, `devices.list`, `devices.revoke`, `devices.review`, `vault.updateSigners`                                                                    |
 
 ## Binary
 
@@ -303,7 +311,8 @@ These are streamed to the daemon:
 - `Removed`;
 - `ConfigMismatch` (vault, version and reason);
 - `PendingExpired`;
-- `Proposal`, `Payload`, `Approval`, `Rejection` and `Receipt` as records arrive;
+- `Proposal`, `Payload`, `Approval`, `Rejection` and `Receipt` (with its executor) as records arrive, and `Claim` as a
+  member starts, advances or ends an execution;
 - `UnexpectedSpend`;
 - `Lobby` (status and roster size);
 - `Retired`;

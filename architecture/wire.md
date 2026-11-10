@@ -67,7 +67,7 @@ signature     = Ed25519(keeper identity, "ome.wire.v0" ‖ canonical(version, he
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | `ceremony`  | `Manifest`, `DkgRound1`, `DkgRound2`/`ReshareSubShare` (`SealedShare`), `DkgConfirm`/`ReshareConfirm`, `ReshareDeal`, `ReshareSecrets` (`SealedSecrets`), `Complaint`, `Justification`, `Abort`, `Echo` | the committee, creating and resharing the viewing key |
 | `ecdh`      | `EcdhRequest`, `EcdhResponse` (`WirePartial` with DLEQ proof)                                                                                                                                           | threshold decryption                                  |
-| `proposals` | `Proposal`, `PayloadRequest`, `Payload` (`ProposalPayload`), `Approval`, `Rejection`, `ExecutionReceipt`                                                                                                | spending                                              |
+| `proposals` | `Proposal`, `PayloadRequest`, `Payload` (`ProposalPayload`), `Approval`, `Rejection`, `ExecutionReceipt`, `ExecutionClaim`                                                                              | spending                                              |
 | `sync`      | `SyncRequest` (`VoteRef`)                                                                                                                                                                               | catching up after being offline                       |
 | `lobby`     | `LobbyJoin`, `LobbyState`, `LobbyPlan`, `LobbyLeave`; `Invite` (string form, not a message)                                                                                                             | founding a vault                                      |
 | `mailbox`   | `MailboxRequest`, `MailboxResponse`, `RelayEnvelope`, `StoredEnvelope` (unsigned)                                                                                                                       | store-and-forward through an untrusted relay          |
@@ -103,6 +103,17 @@ daemon fetches the payload, checks `PayloadRef::matches`, and recomputes `outer_
 
 Approvals and rejections carry the Schnorr signature as the contract's four limbs (`WireSignature`). Checking them
 needs the approval message, a protocol rule, so that check lives in `ome-protocol`.
+
+A proposal carries `created_at`, the proposer's time on the clock `expires_at` uses; it is part of the id, so every
+member shows the same time, and a proposal made after its own deadline is malformed.
+
+An `ExecutionReceipt { proposal, tx_hash, block, executor, signature }` is signed by the executing member's keeper
+(Ed25519 over `"ome.receipt.v0"`, the vault, and the fields). Sync re-sends other members' receipts under its own
+frames, so the frame's signer can't name the executor; the receipt does, however it travels.
+
+An `ExecutionClaim { proposal, phase, started_at }` says a member is executing a proposal: `Rebuilding`, `Proving`,
+`Sending`, then `Mined` or `Failed`, which end it. Claims are not replicated records: they pass the freshness window,
+are never synced, and a keeper drops one ten minutes after its last update.
 
 ### Artifacts
 

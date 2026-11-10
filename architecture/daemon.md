@@ -161,8 +161,17 @@ payer the signer trusts in rotations and the one paired devices are told about.
 - **`proposals.preview`** builds and simulates an intent the same way before it is proposed, so the proposer sees the
   same effects and failures; an intent that can't be built (a bad argument) is refused, not reported.
 - **`approve`** / **`reject`**: sign with the signer, then store the vote with the keeper.
-- **`execute`**: tallies the votes into the witness, sends the transaction, stores the receipt, and reports
-  `execution` progress.
+- **`execute`**: refuses with `conflict` while another member's claim is live (unless `force`), then claims the
+  proposal with the keeper at each phase (rebuilding, proving, sending, then mined or failed), so every member sees
+  who is executing and how far. Before proving, it checks the fee payer: a healthy sponsored payer is trusted, the
+  member's own payer is checked against the transaction's simulated fee. It then tallies the votes into the
+  witness, sends the transaction, and stores the receipt with its block; the keeper signs it as this member's.
+- **Lifecycle events** (`src/proposals/events.ts`): from the keeper's events, `proposalExecuting` (claims),
+  `proposalExecuted` with who executed it, and `proposalCancelled` when a cancellation runs; every sync interval
+  (15 s), `proposalExpiring` an hour before an open proposal's deadline and `proposalExpired` after it, once each per
+  daemon run.
+- **Fees** (`src/fees.ts`): `fees.status` reads the fee payer's Fee Juice from the node; the daemon keeps the last read
+  for `status` and refreshes it every sync interval and after each execution.
 
 ## Contracts
 

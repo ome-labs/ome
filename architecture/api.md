@@ -161,6 +161,16 @@ Times are Unix seconds, and hex values are typed.
     value;
   - `invalidatePending { memo }`: the vault's `invalidate_pending`, which bumps the config version so every approval
     collected so far stops counting.
+- **Proposal lifecycle** (`architecture/daemon.md`, Proposals):
+  - `ProposalView` has `createdAt` (from the proposal itself), `votes: Vote[]` (approvals then valid rejections, each
+    `{ slot, index, name, approve, valid, reason, at }`, `at` being when this member's keeper stored it), `execution {
+    txHash, at, executor, block }` and `executing { member, phase, since, mine }` while a member executes it.
+  - `proposals.execute { vault, id, force? }` refuses with `conflict { member, phase, since }` while another member
+    executes it, unless `force`.
+  - `fees.status` → `FeesStatus { payer, kind: sponsored | own, feeJuice, healthy }`; `status.fees` carries the last
+    read. Previews and review simulations carry `fee: FeeEstimate { gas, fee, maxFee, payer }`: the simulated gas at
+    the node's current minimum fees, and with Aztec's 50% padding. `execute` refuses with `insufficient-funds`
+    (`funds: feeJuice`) before proving when the payer can't cover `fee`.
 - **Reviews and dry runs** (`architecture/daemon.md`, Proposals): `proposals.preview` returns `{ ok, calls, gas,
   error, effects }`; `proposals.review` returns the checks, the simulation (`{ ok, gas, error, effects }`) and, for a
   policy change, `change`.
@@ -220,25 +230,28 @@ changes on every restart); `n` counts up from 1 within it. The daemon keeps the 
 
 `DaemonEvent` types, and the results each makes stale (a client refetches exactly these):
 
-| Event                                      | What changed                                                 | Stale results                                                   |
-| ------------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------------- |
-| `keeper`                                   | the keeper's service state                                   | `status`                                                        |
-| `keeperEvent`                              | a raw `KeeperEvent`, for views that follow the keeper itself | none (the scoped events below cover what it changes)            |
-| `signer`, `node`                           | the signer's lock, the node check                            | `status`, `signer.status`, `node.status`                        |
-| `lobby`, `founding`                        | a lobby or founding                                          | `lobby.get`, `lobby.list`, `founding.get`                       |
-| `proposalCreated { by }`                   | a proposal arrived, made here or replicated                  | `proposals.list` of the vault; `vault.activity`                 |
-| `proposalVoted { by, approve, reason }`    | a member approved or rejected                                | `proposals.get` and `proposals.review` of it; `proposals.list`  |
-| `proposalReady`, `proposalBlocked`         | it has its approvals, or can no longer pass (once each)      | `proposals.get` of it; `proposals.list`                         |
-| `proposalExecuted { txHash }`              | its transaction was mined                                    | `proposals.get` of it; `proposals.list`; `vault.activity`       |
-| `execution`                                | an execution on this device advanced                         | `proposals.get` of it                                           |
-| `received { token, amount, from, txHash }` | a transfer into the vault was found                          | `vault.activity`, `vault.counterparties`                        |
-| `balanceChanged { token }`                 | a token's balance may have changed                           | `tokens.list` of the vault                                      |
-| `tokenAdded`, `tokenRemoved`               | the tracked tokens                                           | `tokens.list` of the vault                                      |
-| `vaultUpdated`                             | the member's record: alias, default, status                  | `status`, `vault.list`, `vault.details`                         |
-| `configChanged { version }`                | the on-chain config                                          | `vault.details`; `proposals.list` and every review of the vault |
-| `memberChanged`                            | who is in the vault                                          | `vault.details`, `vault.peers`, `status`                        |
-| `rotation`                                 | a rotation advanced                                          | `membership.get`, `membership.list`                             |
-| `handshakeAdvised`                         | counterparties should handshake again                        | `vault.counterparties`                                          |
+| Event                                        | What changed                                                 | Stale results                                                   |
+| -------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------- |
+| `keeper`                                     | the keeper's service state                                   | `status`                                                        |
+| `keeperEvent`                                | a raw `KeeperEvent`, for views that follow the keeper itself | none (the scoped events below cover what it changes)            |
+| `signer`, `node`                             | the signer's lock, the node check                            | `status`, `signer.status`, `node.status`                        |
+| `lobby`, `founding`                          | a lobby or founding                                          | `lobby.get`, `lobby.list`, `founding.get`                       |
+| `proposalCreated { by }`                     | a proposal arrived, made here or replicated                  | `proposals.list` of the vault; `vault.activity`                 |
+| `proposalVoted { by, approve, reason }`      | a member approved or rejected                                | `proposals.get` and `proposals.review` of it; `proposals.list`  |
+| `proposalReady`, `proposalBlocked`           | it has its approvals, or can no longer pass (once each)      | `proposals.get` of it; `proposals.list`                         |
+| `proposalExecuting { by, phase }`            | a member started, advanced or ended an execution             | `proposals.get` of it                                           |
+| `proposalExecuted { txHash, by }`            | its transaction was mined                                    | `proposals.get` of it; `proposals.list`; `vault.activity`       |
+| `proposalCancelled { byProposal }`           | a cancellation spent its nonce                               | `proposals.get` of it; `proposals.list`                         |
+| `proposalExpiring { at }`, `proposalExpired` | within the hour of its deadline, and past it (once each)     | `proposals.list`                                                |
+| `execution`                                  | an execution on this device advanced                         | `proposals.get` of it                                           |
+| `received { token, amount, from, txHash }`   | a transfer into the vault was found                          | `vault.activity`, `vault.counterparties`                        |
+| `balanceChanged { token }`                   | a token's balance may have changed                           | `tokens.list` of the vault                                      |
+| `tokenAdded`, `tokenRemoved`                 | the tracked tokens                                           | `tokens.list` of the vault                                      |
+| `vaultUpdated`                               | the member's record: alias, default, status                  | `status`, `vault.list`, `vault.details`                         |
+| `configChanged { version }`                  | the on-chain config                                          | `vault.details`; `proposals.list` and every review of the vault |
+| `memberChanged`                              | who is in the vault                                          | `vault.details`, `vault.peers`, `status`                        |
+| `rotation`                                   | a rotation advanced                                          | `membership.get`, `membership.list`                             |
+| `handshakeAdvised`                           | counterparties should handshake again                        | `vault.counterparties`                                          |
 
 Proposal events come from the keeper's `proposal`, `payload`, `approval`, `rejection` and `receipt` events, which the
 keeper raises for what this member stores and for what members' keepers replicate alike. A proposal whose payload

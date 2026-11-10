@@ -33,7 +33,8 @@ PROPOSALS   propose transfer <amount> <token> <to> | call <fn> -ca <contract> --
             (call arguments: text, or JSON for lists, structs and booleans: [1,2] {"x":1} true)
             (each with --memo, --expires 24h, --dry-run)
             proposals [--status open|ready|done|all] · proposal list|show|review|approve|reject|execute
-            approve <proposal> · reject <proposal> [--reason] · execute <proposal> [--no-wait]
+            approve <proposal> · reject <proposal> [--reason] · execute <proposal> [--no-wait] [--force]
+            fees
 MEMBERS     member request|change|join|status|swap-key
 DEVICES     device pair|list|enroll|forward|revoke
 LIVE        watch
@@ -119,6 +120,11 @@ A failed check refuses the approval (rejecting stays possible); a failed simulat
 vault holds too little of a token, a contract wants an authwit, the nonce is spent, or the contract's own message).
 `--yes` skips only the final question. `ome propose` shows the same simulation, failures and balances before the
 proposal is made.
+
+`ome proposal show` says when the proposal was made, lists the votes in the order they arrived with their times, and
+names who executed it and in which block, or who is executing it right now. `ome execute` refuses while another
+member executes the proposal (exit 4, naming them); `--force` proves it anyway, and only one transaction can land.
+Previews and reviews show the expected fee; `ome fees` and `ome status` show the fee payer and its Fee Juice.
 
 Thresholds that can strand the funds for good (every keeper needed to read, or every key needed to spend: see
 `architecture/recovery.md`) are shown when a vault is created or its members change, and need a deliberate yes
