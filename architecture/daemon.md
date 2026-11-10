@@ -107,6 +107,27 @@ payer the signer trusts in rotations and the one paired devices are told about.
 
 ## Founding
 
+Lobbies have a size (`lobby.create { members }`); the host can remove a joiner (`lobby.remove`, which rotates the
+invite) or change the size and thresholds (`lobby.update`) before starting. `lobby` events carry what changed. Each
+member's Aztec account comes with the roster and is kept in the vault record beside the names (`accounts`); rotation
+plans carry joiners' accounts from their join requests. Reviews and decoded calls name a member's account as
+`<name> (member)`, ahead of `aztec-wallet` aliases.
+
+**Names.** `vault.rename` and `profile.rename` go through the keeper's signed renames (`names.put`), so every member
+sees them; the daemon applies them from `name` keeper events and on each sync (`names.list`), and emits `vaultRenamed`
+and `memberRenamed`. A rename is metadata, not policy: it needs no proposal, any member can rename the vault, and only
+a member can rename themselves. The history stays in each keeper.
+
+**Passphrase.** `signer.changePassphrase { current, next }` re-seals the signer and, when a sealed file holds the
+keeper's master key (no OS keychain), that file too, under the new sealing key. Both new files are written beside the
+old ones (`.next`) before either replaces its original, and the daemon finishes an interrupted swap at start, so the
+passphrase never opens one and not the other. It emits `sealingKeyChanged`; a client that kept the sealing key (Touch
+ID) fetches it again.
+
+**Deleting a profile.** `profile.delete { confirm }` refuses while the profile is in a vault that isn't `removed`
+(its viewing share and signer would be lost); otherwise the daemon stops, deletes its keychain entry and directory, and
+exits.
+
 1. The host's `lobby.create` opens a lobby through the keeper. The invite carries the network label
    `aztec:<l1 chain id>:<rollup version>`, and `lobby.join` refuses an invite for another network.
 2. `lobby.start` fixes the thresholds, a fresh salt and fresh protocol secrets. The keeper seals the secrets to each

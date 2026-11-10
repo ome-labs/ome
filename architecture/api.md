@@ -161,6 +161,12 @@ Times are Unix seconds, and hex values are typed.
     value;
   - `invalidatePending { memo }`: the vault's `invalidate_pending`, which bumps the config version so every approval
     collected so far stops counting.
+- **Members, lobbies and profiles** (`architecture/daemon.md`, Founding): `LobbyCreateParams.members`,
+  `LobbyView { expected, removed, members[].account }`, `lobby.remove { lobby, identity }`, `lobby.update { lobby,
+  members?, threshold?, viewingThreshold? }`; `CommitteeMember.account` and `MemberReachability.account`;
+  `vault.rename { vault, name }`, `profile.rename { name }`, `profile.delete { confirm }`, `signer.changePassphrase {
+  current, next }`; events `lobby { lobby, change }`, `vaultRenamed { name, by }`, `memberRenamed { member }`,
+  `sealingKeyChanged`. Keeper: `names.put`, `names.list`, `lobby.remove`, `lobby.update`, `KeeperEvent::Name`.
 - **Balances, receiving and paging** (`architecture/daemon.md`, Tokens and activity):
   - `TokenBalance { token, private, public }`, each a `BalanceState`: `known { amount }`, `unreadable { answered,
     needed }` (too few keepers), or `failed { message }`. `TokenInfo.standard` is false for a token with its own code.

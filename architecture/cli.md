@@ -21,10 +21,11 @@ signer stays sealed in the daemon, and viewing shares stay in the keeper.
 ## The command tree
 
 ```text
-SET UP      init · status · doctor · config get|set|unset · profile list|show|use|remove
+SET UP      init · status · fees · doctor · config get|set|unset · profile list|show|use|rename|remove
             daemon start|stop|restart|logs · keeper status|connect|use-local|logs · completions <shell>
-SIGNER      unlock [--for 15m] [--touch-id] · lock · signer status|touch-id on|off
-VAULTS      vault create|join|list|show|use|alias|members|peers|health|audit|receive|balance|retire
+SIGNER      unlock [--for 15m] [--touch-id] · lock · signer status|touch-id on|off|passphrase
+VAULTS      vault create|join|list|show|use|alias|rename|members|peers|health|audit|receive|balance|retire
+            vault lobby show|remove <member>|update [--members] [-k] [-t]
             balance [token] · activity [--follow] · counterparties · request [amount] [token] [--memo]
             token add|list|remove|deploy-test
             contract add <artifact> <address>|list|remove|functions <contract> [--utility]
@@ -133,6 +134,9 @@ what payments the vault finds; `ome request` prints an `ome-pay:` link and QR co
 Thresholds that can strand the funds for good (every keeper needed to read, or every key needed to spend: see
 `architecture/recovery.md`) are shown when a vault is created or its members change, and need a deliberate yes
 (`--yes` in scripts); the other policy warnings are shown only.
+
+`ome profile remove` asks the profile's own daemon to delete it, which refuses while the profile is in a vault. `ome
+signer passphrase` changes the passphrase (`OME_NEW_PASSPHRASE_FILE` in scripts) and re-enrols Touch ID when it is on.
 
 Irreversible actions ask the member to type the vault's (or profile's) name, and take `--confirm <name>` in scripts:
 `vault retire`, `member change` with a removal, `device enroll`, `profile remove`. `--yes` does not satisfy them.

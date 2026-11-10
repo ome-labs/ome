@@ -19,7 +19,10 @@ The keeper's Ed25519 identity and the viewing shares are not handled here: they 
    - browser: IndexedDB.
 3. **Open to sign.** `SealedKey::open(secret)` returns the `SigningKey`. The caller decides how long to keep it open,
    for example an unlock window in the daemon. The crate has no clock.
-4. **Never export.** `SigningKey` has no `Clone`, `Debug` or `Serialize` and no accessor for the scalar. The only way
+4. **Re-seal.** `SealedKey::reseal(current, next, rng)` opens the key with the current secret and seals the same key
+   under the new passphrase, with a fresh salt and nonce. The public key is unchanged; the sealing key is not, so a
+   platform that kept it fetches it again.
+5. **Never export.** `SigningKey` has no `Clone`, `Debug` or `Serialize` and no accessor for the scalar. The only way
    out of memory is sealing.
 
 The secret that unlocks a sealed key is a `Secret`:

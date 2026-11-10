@@ -222,6 +222,24 @@ through a mailbox. Everything else must be fresh and unseen.
 - **No automatic DKG**: a keeper never starts the DKG itself. Each member's daemon reads the plan and calls
   `ceremony.dkg`, so a person has agreed to found the vault.
 - **Leaving**: guests can leave, and hosts can close.
+- **Size**: the invite and the roster carry the planned size (2 to 8). Joins past it are refused (`full`), and
+  `start_lobby` requires exactly that many (`Incomplete`, `not-ready` with reason `members`).
+- **Removal**: `remove_from_lobby` (host, before start) drops a joiner, sends it `LobbyRemoved` (it records the lobby
+  as closed and `removed`), and rotates the invite secret: the old invite's proofs no longer verify, and the host's
+  lobby info carries the new invite.
+- **Update**: `update_lobby` (host, before start) changes the size (never below the roster) or the thresholds, and
+  sends the new roster.
+- **Events**: `KeeperEvent::Lobby` carries a `change` (`opened`, `joined`, `left`, `removed`, `updated`, `started`,
+  `closed`) and the member it was about.
+- **Accounts**: each `LobbyMember` carries the member's Aztec account, inside the frames its keeper signs.
+
+## Names
+
+`names.put { vault, subject, name }` signs a `NameChange` with this keeper's identity, for the vault's name
+(`vault`) or this member's own (`member`), stores it and pushes it to the members. A replicated rename is stored only
+when its signature checks and its signer is in the vault's committee. Every rename is kept (`names` table); the newest
+per subject, by time then signer, is the name `names.list` returns and `KeeperEvent::Name` announces. A sync answer
+always carries the current names.
 
 ## Paired devices
 

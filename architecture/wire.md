@@ -129,6 +129,16 @@ A keeper keeps a chunk only if it matches the manifest's hash. Neither the manif
 the artifact itself: the daemon recomputes the class id from the reassembled artifact before using it. The messages
 travel on the sync lane, like payloads.
 
+### Members, lobbies and names
+
+- `LobbyMember` carries the member's Aztec `account`. It travels in the lobby join, the roster, the plan and the
+  newcomer's `JoinRequest`, all signed by the member's keeper. Members see it; it never goes on chain.
+- An `Invite` and a `LobbyState` carry the lobby's planned size (`members`, `expected`).
+- `LobbyRemoved { lobby }`, from the host, tells a guest it was removed.
+- `NameChange { vault, subject, name, at, by, signature }` renames the vault or the signing member (`subject` is
+  `Vault` or `Member`). `by` signs it (Ed25519 over `"ome.name.v0"` and the fields), so it names its author however it
+  travels. It is a replicated record; the newest per subject wins (`supersedes`: later `at`, then larger `by`).
+
 ### Payment requests
 
 A payment request is a link a member hands a payer (`vault.request`, `ome request`):
