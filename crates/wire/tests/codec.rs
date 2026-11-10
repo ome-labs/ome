@@ -75,12 +75,12 @@ fn rejects_an_unknown_variant() {
 #[test]
 fn rejects_an_unsupported_version() {
     let mut message = signed(samples().remove(3).1);
+    // The version comes first, and each version has its own encoding: neither side handles one it doesn't speak.
+    let mut bytes = encode(&message).unwrap();
+    bytes[0] = 1;
+    assert_eq!(decode(&bytes), Err(Error::UnsupportedVersion(1)));
     message.version = 1;
-
-    assert_eq!(
-        decode(&encode(&message).unwrap()),
-        Err(Error::UnsupportedVersion(1))
-    );
+    assert_eq!(encode(&message), Err(Error::UnsupportedVersion(1)));
 }
 
 #[test]

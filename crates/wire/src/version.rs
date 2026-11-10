@@ -12,10 +12,10 @@ use crate::Error;
 /// The version this build writes when nothing else is agreed.
 pub const PROTOCOL_VERSION: u16 = 0;
 
-/// Every version this build reads and writes.
+/// Every version this build reads and writes. The crate's own tests add a test-only version 1 (`encoding`).
 pub const SUPPORTED: VersionRange = VersionRange {
     min: 0,
-    max: PROTOCOL_VERSION,
+    max: if cfg!(test) { 1 } else { PROTOCOL_VERSION },
 };
 
 /// An inclusive range of protocol versions a keeper speaks.

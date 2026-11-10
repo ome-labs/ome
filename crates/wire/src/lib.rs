@@ -7,6 +7,7 @@
 //! `architecture/wire.md`.
 
 pub mod codec;
+mod encoding;
 mod error;
 pub mod extensions;
 mod identity;
@@ -17,7 +18,7 @@ mod signed;
 pub mod types;
 pub mod version;
 
-pub use codec::{decode, decode_body, encode, encode_body};
+pub use codec::{decode, decode_body, decode_body_in, encode, encode_body, encode_body_in};
 pub use error::Error;
 pub use extensions::{Extension, Extensions};
 pub use identity::{IdentityPublic, KeeperIdentity};

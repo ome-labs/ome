@@ -1,11 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error, Extensions, IdentityPublic, KeeperIdentity, Message,
-    codec::{canonical, to_canonical},
-    limits::MAX_MESSAGE_BYTES,
-    types::Bytes64,
-    version,
+    Error, Extensions, IdentityPublic, KeeperIdentity, Message, encoding, types::Bytes64, version,
 };
 
 /// Routing and replay metadata of every message. All of it is signed, so a relay cannot move a message to another
@@ -36,7 +32,8 @@ pub struct SignedMessage {
     pub extensions: Extensions,
     /// The sending keeper.
     pub signer: IdentityPublic,
-    /// Ed25519 signature over `"ome.wire.v0" ‖ canonical(version, header, body, extensions, signer)`.
+    /// Ed25519 signature over `"ome.wire.v0" ‖ version ‖ header ‖ body ‖ extensions ‖ signer`, each in the message's
+    /// own version (`encoding`).
     pub signature: Bytes64,
 }
 
@@ -56,13 +53,13 @@ impl SignedMessage {
         body.validate()?;
         let extensions = Extensions::none();
         let signer = identity.public();
-        let signature = identity.sign(&canonical(&(
+        let signature = identity.sign(&encoding::signing_bytes(
             version,
             &header,
             &body,
             &extensions,
             &signer,
-        ))?);
+        )?);
         let message = Self {
             version,
             header,
@@ -71,7 +68,7 @@ impl SignedMessage {
             signer,
             signature,
         };
-        to_canonical(&message, MAX_MESSAGE_BYTES)?;
+        encoding::encode_frame(&message)?;
         Ok(message)
     }
 
@@ -80,13 +77,13 @@ impl SignedMessage {
     /// # Errors
     /// [`Error::InvalidSignature`].
     pub fn verify(&self) -> Result<(), Error> {
-        let payload = canonical(&(
+        let payload = encoding::signing_bytes(
             self.version,
             &self.header,
             &self.body,
             &self.extensions,
             &self.signer,
-        ))?;
+        )?;
         self.signer.verify(&payload, &self.signature)
     }
 

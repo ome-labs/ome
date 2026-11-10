@@ -4,14 +4,14 @@
 
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::{Error, Message, SignedMessage, limits::MAX_MESSAGE_BYTES, version};
+use crate::{Error, Message, SignedMessage, encoding, limits::MAX_MESSAGE_BYTES, version};
 
 /// Encodes a signed message.
 ///
 /// # Errors
 /// [`Error::TooLarge`] above [`MAX_MESSAGE_BYTES`].
 pub fn encode(message: &SignedMessage) -> Result<Vec<u8>, Error> {
-    to_canonical(message, MAX_MESSAGE_BYTES)
+    encoding::encode_frame(message)
 }
 
 /// Decodes and bounds-checks a signed message. Does **not** verify the signature: call [`SignedMessage::verify`] or
@@ -21,7 +21,7 @@ pub fn encode(message: &SignedMessage) -> Result<Vec<u8>, Error> {
 /// [`Error::TooLarge`], [`Error::Malformed`] (including non-canonical bytes), [`Error::UnsupportedVersion`] or
 /// [`Error::OutOfBounds`].
 pub fn decode(bytes: &[u8]) -> Result<SignedMessage, Error> {
-    let message: SignedMessage = from_canonical(bytes, MAX_MESSAGE_BYTES)?;
+    let message = encoding::decode_frame(bytes)?;
     version::require_supported(message.version)?;
     message.extensions.validate()?;
     message.body.validate()?;
@@ -35,6 +35,25 @@ pub fn decode(bytes: &[u8]) -> Result<SignedMessage, Error> {
 pub fn encode_body(body: &Message) -> Result<Vec<u8>, Error> {
     body.validate()?;
     to_canonical(body, MAX_MESSAGE_BYTES)
+}
+
+/// Encodes an unsigned body in protocol `version`, as a keeper stores a record of a vault speaking it.
+///
+/// # Errors
+/// As [`encode_body`], and [`Error::UnsupportedVersion`] or [`Error::Malformed`] when `version` can't express it.
+pub fn encode_body_in(version: u16, body: &Message) -> Result<Vec<u8>, Error> {
+    body.validate()?;
+    encoding::encode_body_in(version, body)
+}
+
+/// Decodes and bounds-checks an unsigned body stored in protocol `version`.
+///
+/// # Errors
+/// As [`decode_body`], and [`Error::UnsupportedVersion`].
+pub fn decode_body_in(version: u16, bytes: &[u8]) -> Result<Message, Error> {
+    let body = encoding::decode_body_in(version, bytes)?;
+    body.validate()?;
+    Ok(body)
 }
 
 /// Decodes and bounds-checks an unsigned body.
