@@ -13,6 +13,8 @@ use crate::{Hex32, Point, keeper::KeeperContact};
 pub struct Joiner {
     /// Name.
     pub name: String,
+    /// The newcomer's own Aztec account.
+    pub account: Hex32,
     /// Approval signing key.
     pub signer_key: Point,
     /// Their keeper.

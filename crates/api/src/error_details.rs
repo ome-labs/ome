@@ -122,6 +122,8 @@ pub enum NotReadyReason {
     Payload,
     /// A rotation's reshare hasn't finished.
     Reshare,
+    /// A lobby hasn't been joined by every member it plans for.
+    Members,
 }
 
 /// What a transaction is short of.

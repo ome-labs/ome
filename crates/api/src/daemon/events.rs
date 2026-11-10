@@ -8,7 +8,10 @@ use super::{
     ExecutionPhase, ExecutionProgress, FoundingState, KeeperState, LobbyView, MemberRef,
     NodeStatus, RotationState, SignerStatus, TokenInfo,
 };
-use crate::{Amount, Hex32, keeper::KeeperEvent};
+use crate::{
+    Amount, Hex32,
+    keeper::{KeeperEvent, LobbyChange},
+};
 
 /// Where an event sits in the daemon's stream: `epoch` changes each time the daemon starts, `n` counts up from 1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -82,7 +85,27 @@ pub enum DaemonEvent {
     Lobby {
         /// The lobby.
         lobby: LobbyView,
+        /// What changed, when it was one member or step.
+        change: Option<LobbyChange>,
     },
+    /// A member renamed the vault.
+    VaultRenamed {
+        /// Vault.
+        vault: Hex32,
+        /// The new name.
+        name: String,
+        /// Who renamed it.
+        by: MemberRef,
+    },
+    /// A member renamed themselves.
+    MemberRenamed {
+        /// Vault.
+        vault: Hex32,
+        /// The member, under the new name.
+        member: MemberRef,
+    },
+    /// The passphrase changed, so the sealing key did: a client that keeps it (for Touch ID) fetches it again.
+    SealingKeyChanged,
     /// A founding advanced.
     Founding {
         /// Its state.
@@ -290,11 +313,14 @@ impl DaemonEvent {
             | Self::VaultUpdated { vault }
             | Self::ConfigChanged { vault, .. }
             | Self::MemberChanged { vault }
-            | Self::HandshakeAdvised { vault, .. } => Some(vault),
+            | Self::HandshakeAdvised { vault, .. }
+            | Self::VaultRenamed { vault, .. }
+            | Self::MemberRenamed { vault, .. } => Some(vault),
             Self::Execution { execution } => Some(&execution.vault),
             Self::Keeper { .. }
             | Self::KeeperEvent { .. }
             | Self::Signer { .. }
+            | Self::SealingKeyChanged
             | Self::Node { .. }
             | Self::Lobby { .. }
             | Self::Founding { .. }

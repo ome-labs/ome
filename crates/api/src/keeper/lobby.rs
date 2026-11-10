@@ -12,6 +12,8 @@ use crate::{Hex16, Hex32, HexBytes, Point};
 pub struct LobbyMemberParams {
     /// Display name.
     pub name: String,
+    /// The member's own Aztec account, shown to the other members.
+    pub account: Hex32,
     /// Approval signing key.
     pub signer_key: Point,
 }
@@ -26,6 +28,8 @@ pub struct LobbyOpenParams {
     pub threshold: u8,
     /// Proposed viewing threshold.
     pub viewing_threshold: u8,
+    /// How many members the vault will have, host included (2 to 8).
+    pub members: u8,
     /// Network the vault will live on, as the daemon names it.
     pub network: String,
     /// The host member.
@@ -85,6 +89,8 @@ pub struct Invite {
     pub threshold: u8,
     /// Proposed viewing threshold.
     pub viewing_threshold: u8,
+    /// How many members the vault will have, host included.
+    pub members: u8,
     /// Network.
     pub network: String,
     /// The host's keeper.
@@ -144,6 +150,8 @@ pub struct LobbyMember {
     pub index: u32,
     /// Display name.
     pub name: String,
+    /// The member's own Aztec account.
+    pub account: Hex32,
     /// Approval signing key.
     pub signer_key: Point,
     /// Keeper identity.
@@ -154,6 +162,64 @@ pub struct LobbyMember {
     pub addresses: Vec<String>,
     /// Whether the member is this keeper's.
     pub you: bool,
+}
+
+/// Params of `lobby.remove`: the host drops a joiner before starting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct LobbyRemoveParams {
+    /// Lobby id.
+    pub lobby: Hex16,
+    /// The joiner's keeper identity.
+    pub identity: Hex32,
+}
+
+/// Params of `lobby.update`: the host changes the plan before starting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct LobbyUpdateParams {
+    /// Lobby id.
+    pub lobby: Hex16,
+    /// How many members the vault will have.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub members: Option<u8>,
+    /// Spending threshold.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub threshold: Option<u8>,
+    /// Viewing threshold.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub viewing_threshold: Option<u8>,
+}
+
+/// What changed in a lobby.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum LobbyChangeKind {
+    /// Opened, or this keeper joined it.
+    Opened,
+    /// A member joined.
+    Joined,
+    /// A member left.
+    Left,
+    /// The host removed a member.
+    Removed,
+    /// The host changed its size or thresholds.
+    Updated,
+    /// The host started it.
+    Started,
+    /// The host closed it, or this guest left.
+    Closed,
+}
+
+/// A change to a lobby, and the member it was about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct LobbyChange {
+    /// What changed.
+    pub kind: LobbyChangeKind,
+    /// The member who joined, left or was removed (keeper identity).
+    pub member: Option<Hex32>,
 }
 
 /// The plan a started lobby fixed.
@@ -192,12 +258,16 @@ pub struct Lobby {
     pub threshold: u8,
     /// Proposed viewing threshold.
     pub viewing_threshold: u8,
+    /// How many members the vault will have, host included.
+    pub expected: u8,
     /// Network.
     pub network: String,
     /// The host's keeper.
     pub host: KeeperContact,
     /// Roster in join order.
     pub members: Vec<LobbyMember>,
+    /// This keeper's member was removed by the host (the lobby is then `closed` for it).
+    pub removed: bool,
     /// The plan, once started.
     pub plan: Option<LobbyPlan>,
     /// The invite, on the host.

@@ -5,6 +5,7 @@ mod ceremonies;
 mod devices;
 mod events;
 mod lobby;
+mod names;
 mod records;
 mod vaults;
 
@@ -22,10 +23,11 @@ pub use devices::{
 };
 pub use events::KeeperEvent;
 pub use lobby::{
-    Invite, InviteParams, JoinRequestText, Lobby, LobbyJoinParams, LobbyJoined, LobbyMember,
-    LobbyMemberParams, LobbyOpenParams, LobbyOpened, LobbyParams, LobbyPlan, LobbyRole,
-    LobbyStartParams, LobbyStatus,
+    Invite, InviteParams, JoinRequestText, Lobby, LobbyChange, LobbyChangeKind, LobbyJoinParams,
+    LobbyJoined, LobbyMember, LobbyMemberParams, LobbyOpenParams, LobbyOpened, LobbyParams,
+    LobbyPlan, LobbyRemoveParams, LobbyRole, LobbyStartParams, LobbyStatus, LobbyUpdateParams,
 };
+pub use names::{Name, NamePutParams, NameSubject};
 pub use records::{
     BodyParams, Claim, ClaimParams, IdParams, MailboxPolled, PayloadParams, PayloadStored,
     ProposalParams, ProposalStored, Receipt, ReceiptParams, StoredVote, TxObserved, TxParams,
@@ -170,6 +172,10 @@ methods! {
     ClaimsPut = "claims.put" (ClaimParams) -> ();
     /// A vault's live execution claims.
     ClaimsList = "claims.list" (VaultParams) -> Vec<Claim>;
+    /// Signs, stores and replicates a rename of the vault or of this keeper's member.
+    NamesPut = "names.put" (NamePutParams) -> Name;
+    /// The vault's current name and members' names, as renamed.
+    NamesList = "names.list" (VaultParams) -> Vec<Name>;
     /// The vault's ECDH audit log, newest first.
     AuditList = "audit.list" (AuditParams) -> Vec<AuditEntry>;
     /// Opens a lobby as host.
@@ -188,6 +194,10 @@ methods! {
     LobbyClose = "lobby.close" (LobbyParams) -> Lobby;
     /// Leaves a lobby (guest).
     LobbyLeave = "lobby.leave" (LobbyParams) -> Lobby;
+    /// Removes a joiner from an open lobby this keeper hosts and rotates its invite.
+    LobbyRemove = "lobby.remove" (LobbyRemoveParams) -> Lobby;
+    /// Changes an open lobby's size or thresholds.
+    LobbyUpdate = "lobby.update" (LobbyUpdateParams) -> Lobby;
     /// Creates a one-time offer to pair a signing device.
     DevicesOffer = "devices.offer" (DeviceOfferParams) -> DeviceOffer;
     /// Paired devices.

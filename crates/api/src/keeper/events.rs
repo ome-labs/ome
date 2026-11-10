@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::{CeremonyKind, CeremonyStatus, LobbyStatus};
+use super::{CeremonyKind, CeremonyStatus, LobbyChange, LobbyStatus, Name};
 use crate::{Hex16, Hex32, daemon::ExecutionPhase};
 
 /// Something the member's daemon should know about.
@@ -113,6 +113,13 @@ pub enum KeeperEvent {
         /// The executing member's index, when its keeper is a member.
         executor: Option<u32>,
     },
+    /// A member renamed the vault, or themselves.
+    Name {
+        /// Vault.
+        vault: Hex32,
+        /// The current name.
+        name: Name,
+    },
     /// A member started executing a proposal, moved to another phase, or finished.
     Claim {
         /// Vault.
@@ -132,6 +139,8 @@ pub enum KeeperEvent {
         status: LobbyStatus,
         /// Members on the roster.
         members: u32,
+        /// What changed, when it was one member or step.
+        change: Option<LobbyChange>,
     },
     /// The member retired a share the keeper kept for a vault it no longer serves.
     Retired {

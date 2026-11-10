@@ -34,6 +34,8 @@ pub struct InvitePreview {
     pub threshold: u8,
     /// Proposed viewing threshold.
     pub viewing_threshold: u8,
+    /// How many members the vault will have, host included.
+    pub members: u8,
     /// Network.
     pub network: String,
     /// Whether it is this daemon's network.
@@ -50,6 +52,8 @@ pub struct LobbyViewMember {
     pub index: u32,
     /// Name.
     pub name: String,
+    /// The member's own Aztec account.
+    pub account: Hex32,
     /// Approval signing key.
     pub signer_key: Point,
     /// Keeper identity.
@@ -78,11 +82,15 @@ pub struct LobbyView {
     pub threshold: u8,
     /// Viewing threshold.
     pub viewing_threshold: u8,
+    /// How many members the vault will have, host included; the host starts once that many have joined.
+    pub expected: u8,
     /// Network.
     pub network: String,
     /// Roster.
     pub members: Vec<LobbyViewMember>,
-    /// The invite, on the host.
+    /// The host removed this member (the lobby is then `closed` for them).
+    pub removed: bool,
+    /// The invite, on the host; a new one after a removal.
     pub invite: Option<String>,
     /// The DKG session, once started.
     pub session: Option<Hex32>,
@@ -98,6 +106,8 @@ pub struct LobbyCreateParams {
     pub threshold: u8,
     /// Proposed viewing threshold, 2 to 8.
     pub viewing_threshold: u8,
+    /// How many members the vault will have, host included, 2 to 8.
+    pub members: u8,
 }
 
 /// Params of `lobby.start`.

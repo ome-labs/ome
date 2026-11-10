@@ -93,6 +93,8 @@ pub struct CommitteeMember {
     pub index: u32,
     /// Display name.
     pub name: String,
+    /// The member's own Aztec account, when this member's daemon learned it (lobbies and join requests carry it).
+    pub account: Option<Hex32>,
     /// Approval signing key.
     pub signer_key: Point,
     /// Verification share.
@@ -162,6 +164,8 @@ pub struct MemberReachability {
     pub index: u32,
     /// Display name.
     pub name: String,
+    /// The member's own Aztec account, when known.
+    pub account: Option<Hex32>,
     /// Keeper identity.
     pub identity: Hex32,
     /// libp2p peer id.

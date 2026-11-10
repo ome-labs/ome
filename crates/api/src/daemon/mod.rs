@@ -45,9 +45,10 @@ pub use review::{
 };
 use serde::{Deserialize, Serialize};
 pub use status::{
-    DaemonInfo, KeeperConnectParams, KeeperState, NodeStatus, PassphraseParams, Profile,
-    ProfileCreateParams, RelaysParams, RemoteKeeper, RemoteKeeperParams, SealingKey, Secret,
-    ServiceStatus, Settings, SettingsPatch, SignerStatus, Status, UnlockParams,
+    ChangePassphraseParams, DaemonInfo, KeeperConnectParams, KeeperState, NodeStatus,
+    PassphraseParams, Profile, ProfileCreateParams, ProfileDeleteParams, ProfileRenameParams,
+    RelaysParams, RemoteKeeper, RemoteKeeperParams, SealingKey, Secret, ServiceStatus, Settings,
+    SettingsPatch, SignerStatus, Status, UnlockParams,
 };
 use ts_rs::TS;
 pub use vaults::{
@@ -59,8 +60,20 @@ pub use vaults::{
 use crate::{
     AuthParams, Empty, Hex32,
     jsonrpc::methods,
-    keeper::{DeviceOffer, DeviceParams, DeviceReviewSent, InviteParams, LobbyParams, VaultParams},
+    keeper::{
+        DeviceOffer, DeviceParams, DeviceReviewSent, InviteParams, LobbyParams, LobbyRemoveParams,
+        LobbyUpdateParams, VaultParams,
+    },
 };
+
+/// Params of `vault.rename`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct RenameParams {
+    /// Vault.
+    pub vault: Hex32,
+    /// The vault's new name, 1 to 48 characters, for every member.
+    pub name: String,
+}
 
 /// Params of `vault.alias`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -145,6 +158,10 @@ methods! {
     StatusGet = "status" (Empty) -> Status;
     /// Creates the profile: the sealed signer and the member's account.
     ProfileCreate = "profile.create" (ProfileCreateParams) -> Status;
+    /// Renames the member for every vault's members.
+    ProfileRename = "profile.rename" (ProfileRenameParams) -> Profile;
+    /// Deletes this profile and stops the daemon; refused while it is a member of a vault.
+    ProfileDelete = "profile.delete" (ProfileDeleteParams) -> ();
     /// Settings.
     ConfigGet = "config.get" (Empty) -> Settings;
     /// Changes settings.
@@ -161,6 +178,8 @@ methods! {
     SignerLock = "signer.lock" (Empty) -> SignerStatus;
     /// Derives the key that unseals the signer in place of the passphrase.
     SignerSealingKey = "signer.sealingKey" (PassphraseParams) -> SealingKey;
+    /// Re-seals the signing key (and the keeper's sealed master key) under a new passphrase; the key is unchanged.
+    SignerChangePassphrase = "signer.changePassphrase" (ChangePassphraseParams) -> SignerStatus;
     /// Checks the node now.
     NodeStatusGet = "node.status" (Empty) -> NodeStatus;
     /// The fee payer this member trusts and its Fee Juice.
@@ -179,6 +198,10 @@ methods! {
     LobbyStart = "lobby.start" (StartLobbyParams) -> LobbyView;
     /// Leaves or cancels a lobby.
     LobbyLeave = "lobby.leave" (LobbyParams) -> ();
+    /// Removes a joiner from a lobby this member hosts; its invite stops working and a new one is in the view.
+    LobbyRemove = "lobby.remove" (LobbyRemoveParams) -> LobbyView;
+    /// Changes a lobby's size or thresholds before it starts.
+    LobbyUpdate = "lobby.update" (LobbyUpdateParams) -> LobbyView;
     /// Runs the founding of a started lobby.
     FoundingBegin = "founding.begin" (LobbyParams) -> FoundingState;
     /// A founding's state.
@@ -201,6 +224,8 @@ methods! {
     VaultRequest = "vault.request" (PaymentRequestParams) -> PaymentRequest;
     /// Sets a vault's alias.
     VaultAlias = "vault.alias" (AliasParams) -> Vec<VaultSummary>;
+    /// Renames the vault for every member: no proposal, the newest rename wins.
+    VaultRename = "vault.rename" (RenameParams) -> VaultSummary;
     /// Retires the viewing share the keeper kept for a vault whose newer committee it could not verify: after a
     /// rotation that removed this member without its keeper taking part.
     VaultRetire = "vault.retire" (VaultParams) -> Vec<VaultSummary>;

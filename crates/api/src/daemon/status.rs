@@ -238,6 +238,29 @@ pub struct UnlockParams {
     pub ttl_secs: u32,
 }
 
+/// Params of `signer.changePassphrase`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ChangePassphraseParams {
+    /// The current passphrase, or the sealing key.
+    pub current: Secret,
+    /// The new passphrase, at least 8 characters.
+    pub next: String,
+}
+
+/// Params of `profile.rename`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ProfileRenameParams {
+    /// The member's display name, 1 to 48 characters; every vault's members see it.
+    pub name: String,
+}
+
+/// Params of `profile.delete`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ProfileDeleteParams {
+    /// The profile's directory name, typed again to confirm.
+    pub confirm: String,
+}
+
 /// Params of `signer.sealingKey`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct PassphraseParams {

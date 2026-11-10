@@ -90,7 +90,8 @@ export type NotReadyReason =
   | "sync"
   | "vault"
   | "payload"
-  | "reshare";
+  | "reshare"
+  | "members";
 
 /**
  * What a transaction is short of.
@@ -1010,6 +1011,117 @@ export type Claim = {
 };
 
 /**
+ * What a rename names.
+ */
+export type NameSubject = "vault" | "member";
+
+/**
+ * Params of `names.put`: this keeper's member renames the vault, or themselves.
+ */
+export type NamePutParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * What it names.
+   */
+  subject: NameSubject;
+  /**
+   * The new name, 1 to 64 bytes.
+   */
+  name: string;
+};
+
+/**
+ * The current name of a subject.
+ */
+export type Name = {
+  /**
+   * What it names.
+   */
+  subject: NameSubject;
+  /**
+   * The name.
+   */
+  name: string;
+  /**
+   * When it was set (the renaming keeper's unix seconds).
+   */
+  at: number;
+  /**
+   * The renaming member's keeper identity (for a member's name, the member).
+   */
+  by: Hex32;
+  /**
+   * The renaming member's index in the current committee, when still a member.
+   */
+  member: number | null;
+};
+
+/**
+ * Params of `lobby.remove`: the host drops a joiner before starting.
+ */
+export type LobbyRemoveParams = {
+  /**
+   * Lobby id.
+   */
+  lobby: Hex16;
+  /**
+   * The joiner's keeper identity.
+   */
+  identity: Hex32;
+};
+
+/**
+ * Params of `lobby.update`: the host changes the plan before starting.
+ */
+export type LobbyUpdateParams = {
+  /**
+   * Lobby id.
+   */
+  lobby: Hex16;
+  /**
+   * How many members the vault will have.
+   */
+  members?: number;
+  /**
+   * Spending threshold.
+   */
+  threshold?: number;
+  /**
+   * Viewing threshold.
+   */
+  viewingThreshold?: number;
+};
+
+/**
+ * What changed in a lobby.
+ */
+export type LobbyChangeKind =
+  | "opened"
+  | "joined"
+  | "left"
+  | "removed"
+  | "updated"
+  | "started"
+  | "closed";
+
+/**
+ * A change to a lobby, and the member it was about.
+ */
+export type LobbyChange = {
+  /**
+   * What changed.
+   */
+  kind: LobbyChangeKind;
+  /**
+   * The member who joined, left or was removed (keeper identity).
+   */
+  member: Hex32 | null;
+};
+
+/**
  * Params of `vault.observeTx`.
  */
 export type TxParams = {
@@ -1052,6 +1164,10 @@ export type LobbyMemberParams = {
    */
   name: string;
   /**
+   * The member's own Aztec account, shown to the other members.
+   */
+  account: Hex32;
+  /**
    * Approval signing key.
    */
   signerKey: Point;
@@ -1073,6 +1189,10 @@ export type LobbyOpenParams = {
    * Proposed viewing threshold.
    */
   viewingThreshold: number;
+  /**
+   * How many members the vault will have, host included (2 to 8).
+   */
+  members: number;
   /**
    * Network the vault will live on, as the daemon names it.
    */
@@ -1156,6 +1276,10 @@ export type Invite = {
    */
   viewingThreshold: number;
   /**
+   * How many members the vault will have, host included.
+   */
+  members: number;
+  /**
    * Network.
    */
   network: string;
@@ -1233,6 +1357,10 @@ export type LobbyMember = {
    * Display name.
    */
   name: string;
+  /**
+   * The member's own Aztec account.
+   */
+  account: Hex32;
   /**
    * Approval signing key.
    */
@@ -1318,6 +1446,10 @@ export type Lobby = {
    */
   viewingThreshold: number;
   /**
+   * How many members the vault will have, host included.
+   */
+  expected: number;
+  /**
    * Network.
    */
   network: string;
@@ -1329,6 +1461,10 @@ export type Lobby = {
    * Roster in join order.
    */
   members: Array<LobbyMember>;
+  /**
+   * This keeper's member was removed by the host (the lobby is then `closed` for it).
+   */
+  removed: boolean;
   /**
    * The plan, once started.
    */
@@ -1767,6 +1903,17 @@ export type KeeperEvent =
       executor: number | null;
     }
   | {
+      type: "name";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * The current name.
+       */
+      name: Name;
+    }
+  | {
       type: "claim";
       /**
        * Vault.
@@ -1799,6 +1946,10 @@ export type KeeperEvent =
        * Members on the roster.
        */
       members: number;
+      /**
+       * What changed, when it was one member or step.
+       */
+      change: LobbyChange | null;
     }
   | {
       type: "retired";
@@ -2351,6 +2502,10 @@ export type CommitteeMember = {
    */
   name: string;
   /**
+   * The member's own Aztec account, when this member's daemon learned it (lobbies and join requests carry it).
+   */
+  account: Hex32 | null;
+  /**
    * Approval signing key.
    */
   signerKey: Point;
@@ -2466,6 +2621,10 @@ export type MemberReachability = {
    * Display name.
    */
   name: string;
+  /**
+   * The member's own Aztec account, when known.
+   */
+  account: Hex32 | null;
   /**
    * Keeper identity.
    */
@@ -2670,6 +2829,10 @@ export type InvitePreview = {
    */
   viewingThreshold: number;
   /**
+   * How many members the vault will have, host included.
+   */
+  members: number;
+  /**
    * Network.
    */
   network: string;
@@ -2695,6 +2858,10 @@ export type LobbyViewMember = {
    * Name.
    */
   name: string;
+  /**
+   * The member's own Aztec account.
+   */
+  account: Hex32;
   /**
    * Approval signing key.
    */
@@ -2746,6 +2913,10 @@ export type LobbyView = {
    */
   viewingThreshold: number;
   /**
+   * How many members the vault will have, host included; the host starts once that many have joined.
+   */
+  expected: number;
+  /**
    * Network.
    */
   network: string;
@@ -2754,7 +2925,11 @@ export type LobbyView = {
    */
   members: Array<LobbyViewMember>;
   /**
-   * The invite, on the host.
+   * The host removed this member (the lobby is then `closed` for them).
+   */
+  removed: boolean;
+  /**
+   * The invite, on the host; a new one after a removal.
    */
   invite: string | null;
   /**
@@ -2779,6 +2954,10 @@ export type LobbyCreateParams = {
    * Proposed viewing threshold, 2 to 8.
    */
   viewingThreshold: number;
+  /**
+   * How many members the vault will have, host included, 2 to 8.
+   */
+  members: number;
 };
 
 /**
@@ -4053,6 +4232,10 @@ export type Joiner = {
    */
   name: string;
   /**
+   * The newcomer's own Aztec account.
+   */
+  account: Hex32;
+  /**
    * Approval signing key.
    */
   signerKey: Point;
@@ -4264,7 +4447,38 @@ export type DaemonEvent =
        * The lobby.
        */
       lobby: LobbyView;
+      /**
+       * What changed, when it was one member or step.
+       */
+      change: LobbyChange | null;
     }
+  | {
+      type: "vaultRenamed";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * The new name.
+       */
+      name: string;
+      /**
+       * Who renamed it.
+       */
+      by: MemberRef;
+    }
+  | {
+      type: "memberRenamed";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * The member, under the new name.
+       */
+      member: MemberRef;
+    }
+  | { type: "sealingKeyChanged" }
   | {
       type: "founding";
       /**
@@ -4722,7 +4936,7 @@ export type PaymentRequest = {
    */
   vault: Hex32;
   /**
-   * The network: `<L1 chain id>:<rollup version>`.
+   * The network: `aztec:<L1 chain id>:<rollup version>`.
    */
   network: string;
   /**
@@ -4884,9 +5098,57 @@ export type ProposalCounts = {
    */
   ready: number;
   /**
-   * Open, and this member hasn't voted.
+   * Collecting or ready, and this member hasn't voted.
    */
   needsMe: number;
+};
+
+/**
+ * Params of `vault.rename`.
+ */
+export type RenameParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * The vault's new name, 1 to 48 characters, for every member.
+   */
+  name: string;
+};
+
+/**
+ * Params of `signer.changePassphrase`.
+ */
+export type ChangePassphraseParams = {
+  /**
+   * The current passphrase, or the sealing key.
+   */
+  current: Secret;
+  /**
+   * The new passphrase, at least 8 characters.
+   */
+  next: string;
+};
+
+/**
+ * Params of `profile.rename`.
+ */
+export type ProfileRenameParams = {
+  /**
+   * The member's display name, 1 to 48 characters; every vault's members see it.
+   */
+  name: string;
+};
+
+/**
+ * Params of `profile.delete`.
+ */
+export type ProfileDeleteParams = {
+  /**
+   * The profile's directory name, typed again to confirm.
+   */
+  confirm: string;
 };
 
 /**
@@ -5148,6 +5410,8 @@ export interface KeeperMethods {
   "receipts.list": { params: VaultParams; result: Array<Receipt> };
   "claims.put": { params: ClaimParams; result: null };
   "claims.list": { params: VaultParams; result: Array<Claim> };
+  "names.put": { params: NamePutParams; result: Name };
+  "names.list": { params: VaultParams; result: Array<Name> };
   "audit.list": { params: AuditParams; result: Array<AuditEntry> };
   "lobby.open": { params: LobbyOpenParams; result: LobbyOpened };
   "lobby.join": { params: LobbyJoinParams; result: LobbyJoined };
@@ -5157,6 +5421,8 @@ export interface KeeperMethods {
   "lobby.start": { params: LobbyStartParams; result: Lobby };
   "lobby.close": { params: LobbyParams; result: Lobby };
   "lobby.leave": { params: LobbyParams; result: Lobby };
+  "lobby.remove": { params: LobbyRemoveParams; result: Lobby };
+  "lobby.update": { params: LobbyUpdateParams; result: Lobby };
   "devices.offer": { params: DeviceOfferParams; result: DeviceOffer };
   "devices.list": { params: Empty; result: Array<Device> };
   "devices.revoke": { params: DeviceParams; result: null };
@@ -5171,6 +5437,8 @@ export interface DaemonMethods {
   "daemon.stop": { params: Empty; result: null };
   status: { params: Empty; result: Status };
   "profile.create": { params: ProfileCreateParams; result: Status };
+  "profile.rename": { params: ProfileRenameParams; result: Profile };
+  "profile.delete": { params: ProfileDeleteParams; result: null };
   "config.get": { params: Empty; result: Settings };
   "config.set": { params: SettingsPatch; result: Settings };
   "relays.set": { params: RelaysParams; result: Settings };
@@ -5179,6 +5447,7 @@ export interface DaemonMethods {
   "signer.unlock": { params: UnlockParams; result: SignerStatus };
   "signer.lock": { params: Empty; result: SignerStatus };
   "signer.sealingKey": { params: PassphraseParams; result: SealingKey };
+  "signer.changePassphrase": { params: ChangePassphraseParams; result: SignerStatus };
   "node.status": { params: Empty; result: NodeStatus };
   "fees.status": { params: Empty; result: FeesStatus };
   "lobby.inspect": { params: InviteParams; result: InvitePreview };
@@ -5188,6 +5457,8 @@ export interface DaemonMethods {
   "lobby.list": { params: Empty; result: Array<LobbyView> };
   "lobby.start": { params: StartLobbyParams; result: LobbyView };
   "lobby.leave": { params: LobbyParams; result: null };
+  "lobby.remove": { params: LobbyRemoveParams; result: LobbyView };
+  "lobby.update": { params: LobbyUpdateParams; result: LobbyView };
   "founding.begin": { params: LobbyParams; result: FoundingState };
   "founding.get": { params: LobbyParams; result: FoundingState | null };
   "vault.list": { params: Empty; result: Array<VaultSummary> };
@@ -5199,6 +5470,7 @@ export interface DaemonMethods {
   "vault.receiving": { params: VaultParams; result: ReceivingStatus };
   "vault.request": { params: PaymentRequestParams; result: PaymentRequest };
   "vault.alias": { params: AliasParams; result: Array<VaultSummary> };
+  "vault.rename": { params: RenameParams; result: VaultSummary };
   "vault.retire": { params: VaultParams; result: Array<VaultSummary> };
   "vault.use": { params: VaultParams; result: Array<VaultSummary> };
   "tokens.list": { params: VaultParams; result: Array<TokenBalance> };
