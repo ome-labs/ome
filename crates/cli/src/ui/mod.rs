@@ -1,5 +1,6 @@
 //! One look everywhere: Clack-style prompts and steps on stderr, one table style, one palette.
 
+pub(crate) mod abi;
 pub(crate) mod describe;
 pub(crate) mod format;
 pub(crate) mod prompt;

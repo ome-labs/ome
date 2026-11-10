@@ -3,8 +3,9 @@
 use ome_api::{
     Amount, Hex32,
     daemon::{
-        DecodedCall, Gas, Intent, LabelSource, ProposalStatus, ProposalView, Proposer, Recipient,
-        Review, ReviewChecks, Signs, Simulation, TokenInfo, Vote,
+        AbiType, AbiValue, DecodedArg, DecodedCall, FunctionKind, Gas, Intent, KnownType,
+        LabelSource, ProposalStatus, ProposalView, Proposer, Recipient, Review, ReviewChecks,
+        Signs, Simulation, TokenInfo, Vote,
     },
 };
 
@@ -66,13 +67,29 @@ pub(crate) fn proposal() -> ProposalView {
             to: usdc().address,
             to_label: Some("USDC".into()),
             function: "transfer_in_private".into(),
+            selector: "0x7a3f21c0".into(),
+            kind: FunctionKind::Private,
             args: vec![
-                hex("7a11", "01").to_string(),
-                bob.to_string(),
-                "250000000".into(),
-                "0x07".into(),
+                arg(
+                    "from",
+                    address(),
+                    &hex("7a11", "01").to_string(),
+                    Some("Treasury (this vault)"),
+                ),
+                arg("to", address(), &bob.to_string(), Some("bob (alias)")),
+                arg(
+                    "amount",
+                    AbiType::Integer {
+                        signed: false,
+                        width: 128,
+                    },
+                    "250000000",
+                    Some("250 USDC"),
+                ),
+                arg("authwit_nonce", AbiType::Field, "0x07", None),
             ],
             is_static: false,
+            decoded: true,
         }],
         token: Some(usdc()),
         execution: None,
@@ -115,5 +132,22 @@ pub(crate) fn review() -> Review {
             formula: "Poseidon2(\"ome.rejection.v0\", [vault, outer hash, 4, deadline])".into(),
         },
         proposal,
+    }
+}
+
+fn address() -> AbiType {
+    AbiType::Struct {
+        path: "aztec::protocol_types::address::aztec_address::AztecAddress".into(),
+        fields: vec![],
+        known: Some(KnownType::AztecAddress),
+    }
+}
+
+fn arg(name: &str, ty: AbiType, value: &str, display: Option<&str>) -> DecodedArg {
+    DecodedArg {
+        name: name.into(),
+        ty,
+        value: AbiValue::Text(value.into()),
+        display: display.map(Into::into),
     }
 }

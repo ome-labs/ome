@@ -3,7 +3,7 @@
 
 use ome_api::daemon::{Intent, LabelSource, ProposalView, Review};
 
-use crate::ui::{describe, format, theme};
+use crate::ui::{abi, describe, format, theme};
 
 /// A titled block of lines on the rail.
 #[derive(Debug, PartialEq, Eq)]
@@ -69,13 +69,19 @@ pub(crate) fn render(
             } else {
                 String::new()
             };
+            let decoded = if call.decoded {
+                String::new()
+            } else {
+                theme::dim(" (raw fields: this member doesn't have the contract's code yet)")
+                    .to_string()
+            };
             let mut lines = vec![format!(
-                "{}  {target} · {}{kind}",
+                "{}  {target} · {}{kind}{decoded}",
                 i + 1,
                 theme::name(&call.function)
             )];
             lines.extend(
-                format::args(&call.args, verbose, 8)
+                format::limited(abi::decoded(&call.args, verbose), verbose, 8)
                     .into_iter()
                     .map(|arg| format!("     {}", theme::dim(arg))),
             );

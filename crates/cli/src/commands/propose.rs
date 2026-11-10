@@ -3,7 +3,7 @@
 
 use ome_api::{
     Amount,
-    daemon::ContractParams,
+    daemon::ContractFunctionsParams,
     daemon::{
         ContractsFunctions, Intent, IntentCall, ProposalPreview, ProposalsCreate, ProposalsPreview,
         ProposeParams, TokensList, VaultSummary,
@@ -16,7 +16,7 @@ use crate::{
     context::{Ctx, Mode},
     error::{Error, Result},
     refs::{self, Book},
-    ui::{describe, format, prompt, steps::Step, theme},
+    ui::{abi, describe, format, prompt, steps::Step, theme},
 };
 
 pub(crate) async fn run(ctx: &Ctx, command: ProposeCommand) -> Result<()> {
@@ -198,7 +198,10 @@ async fn call(
     let functions = ctx
         .client()
         .await?
-        .call::<ContractsFunctions>(&ContractParams { contract: to })
+        .call::<ContractsFunctions>(&ContractFunctionsParams {
+            contract: to,
+            include_utility: None,
+        })
         .await
         .unwrap_or_default();
     let function = match function {
@@ -242,7 +245,7 @@ async fn call(
                     ctx,
                     None,
                     "--args",
-                    &format!("{} ({})", param.name, param.kind),
+                    &format!("{} ({})", param.name, abi::type_name(&param.ty)),
                     None,
                     |_| Ok(()),
                 )?);
@@ -270,6 +273,7 @@ async fn call(
         theme::name(&function),
         args.join(" ")
     );
+    let args = args.iter().map(|arg| abi::parse(arg)).collect();
     let intent = Intent::Calls {
         calls: vec![IntentCall { to, function, args }],
         memo: options.memo.clone(),
@@ -299,7 +303,7 @@ fn preview_lines(preview: &ProposalPreview, labels: describe::Labels<'_>) -> Vec
                 i + 1,
                 describe::target(c, labels),
                 theme::name(&c.function),
-                theme::dim(format::args(&c.args, false, 6).join(" "))
+                theme::dim(format::limited(abi::decoded(&c.args, false), false, 6).join(" "))
             )
         })
         .collect();

@@ -35,6 +35,7 @@ const COMMANDS: &str = "\
   \x1b[36mactivity\x1b[0m        proposals and received transfers
   \x1b[36mcounterparties\x1b[0m  who paid the vault, and who should handshake again
   \x1b[36mtoken\x1b[0m           add, list, remove or deploy a test token
+  \x1b[36mcontract\x1b[0m        add, list or remove contracts proposals call; their functions
 
 \x1b[1;32mProposals:\x1b[0m
   \x1b[36mpropose\x1b[0m         a transfer, a contract call, or a cancel
@@ -167,6 +168,9 @@ pub(crate) enum Command {
     /// The tokens the vault tracks.
     #[command(subcommand)]
     Token(TokenCommand),
+    /// The contracts proposals can call.
+    #[command(subcommand)]
+    Contract(ContractCommand),
 
     /// Propose a transfer, a contract call, or a cancel.
     #[command(subcommand)]
@@ -497,6 +501,50 @@ pub(crate) struct TokenAddArgs {
     /// The constructor's decimals.
     #[arg(long, requires = "salt")]
     pub(crate) decimals: Option<u8>,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum ContractCommand {
+    /// Register a contract from its artifact, checked against the class at its address.
+    Add(ContractAddArgs),
+    /// The contracts proposals can call: added ones, tokens and vaults.
+    List,
+    /// Forget an added contract.
+    Remove {
+        /// 0x…, or contracts:<name>.
+        contract: Option<String>,
+    },
+    /// A contract's functions and their parameter types.
+    Functions {
+        /// 0x…, or contracts:<name>.
+        contract: Option<String>,
+        /// Also list utility (read-only) functions.
+        #[arg(long)]
+        utility: bool,
+    },
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ContractAddArgs {
+    /// The artifact's JSON file, as `aztec compile` writes it.
+    pub(crate) artifact: Option<String>,
+    /// The contract: 0x…, or contracts:<name>.
+    pub(crate) address: Option<String>,
+    /// For a contract whose instance was never published: its deployment salt.
+    #[arg(long, requires_all = ["deployer", "initialization_hash", "immutables_hash", "public_keys"])]
+    pub(crate) salt: Option<String>,
+    /// Its deployer (0 for a universal deployment).
+    #[arg(long, requires = "salt")]
+    pub(crate) deployer: Option<String>,
+    /// Its initialization hash.
+    #[arg(long, requires = "salt")]
+    pub(crate) initialization_hash: Option<String>,
+    /// Its immutables hash.
+    #[arg(long, requires = "salt")]
+    pub(crate) immutables_hash: Option<String>,
+    /// Its public keys, as Aztec serializes them.
+    #[arg(long, requires = "salt")]
+    pub(crate) public_keys: Option<String>,
 }
 
 #[derive(Debug, Args)]

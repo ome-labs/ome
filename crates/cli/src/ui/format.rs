@@ -50,20 +50,14 @@ pub(crate) fn arg(text: &str, verbose: bool) -> String {
     }
 }
 
-/// The arguments of a call, one per line, at most `limit` unless `verbose`.
-pub(crate) fn args(args: &[String], verbose: bool, limit: usize) -> Vec<String> {
-    let shown = if verbose {
-        args.len()
-    } else {
-        args.len().min(limit)
-    };
-    let mut out: Vec<String> = args[..shown].iter().map(|a| arg(a, verbose)).collect();
-    if shown < args.len() {
-        out.push(format!(
-            "… {} more (--verbose shows them)",
-            args.len() - shown
-        ));
+/// At most `limit` lines, then how many more `--verbose` shows; all of them with `verbose`.
+pub(crate) fn limited(lines: Vec<String>, verbose: bool, limit: usize) -> Vec<String> {
+    if verbose || lines.len() <= limit {
+        return lines;
     }
+    let more = lines.len() - limit;
+    let mut out: Vec<String> = lines.into_iter().take(limit).collect();
+    out.push(format!("… {more} more (--verbose shows them)"));
     out
 }
 

@@ -9,10 +9,10 @@ expression: "to_text(&render(&review, &review.signs, false))"
 │
 ◇  The calls you sign, rebuilt on this device
 │  1  USDC · transfer_in_private
-│       0x7a11…0001
-│       0x2b1f…9e04
-│       250000000
-│       7
+│       from=Treasury (this vault)
+│       to=bob (alias)
+│       amount=250 USDC
+│       authwit_nonce=7
 │
 ◇  Checks
 │  ✓ the calls rebuild from the proposal and hash to its outer hash  0x91c3…e2a0
