@@ -6,6 +6,7 @@ mod events;
 mod founding;
 mod membership;
 mod proposals;
+mod review;
 mod status;
 mod vaults;
 
@@ -29,6 +30,10 @@ pub use proposals::{
     IntentCall, LabelSource, ProposalPreview, ProposalRef, ProposalStatus, ProposalView,
     ProposeParams, Proposer, Recipient, RejectParams, Review, ReviewChecks, Signs, Simulation,
     Vote,
+};
+pub use review::{
+    BalanceChange, CallResult, Effects, GovernanceChange, NoteCounts, PolicyWarning, ReviewError,
+    ReviewFailure, SimulationError, SimulationFailure, Visibility,
 };
 use serde::{Deserialize, Serialize};
 pub use status::{

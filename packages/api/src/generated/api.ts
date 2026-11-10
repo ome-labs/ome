@@ -2828,6 +2828,24 @@ export type Intent =
        * Note.
        */
       memo: string | null;
+    }
+  | {
+      kind: "setThreshold";
+      /**
+       * The new threshold, from 1 to the member count.
+       */
+      threshold: number;
+      /**
+       * Note.
+       */
+      memo: string | null;
+    }
+  | {
+      kind: "invalidatePending";
+      /**
+       * Note.
+       */
+      memo: string | null;
     };
 
 /**
@@ -3069,7 +3087,7 @@ export type ReviewChecks = {
   /**
    * What failed, if anything.
    */
-  failure: string | null;
+  failure: ReviewError | null;
 };
 
 /**
@@ -3110,7 +3128,11 @@ export type Simulation = {
   /**
    * Why it failed.
    */
-  error: string | null;
+  error: SimulationError | null;
+  /**
+   * What it does to the vault, when it succeeded.
+   */
+  effects: Effects | null;
 };
 
 /**
@@ -3156,6 +3178,10 @@ export type Review = {
    */
   recipient: Recipient | null;
   /**
+   * For governance intents: the vault's policy before and after.
+   */
+  change: GovernanceChange | null;
+  /**
    * Simulation.
    */
   simulation: Simulation;
@@ -3188,7 +3214,11 @@ export type ProposalPreview = {
   /**
    * Why it failed.
    */
-  error: string | null;
+  error: SimulationError | null;
+  /**
+   * What it would do to the vault, when it succeeded.
+   */
+  effects: Effects | null;
 };
 
 /**
@@ -3465,6 +3495,222 @@ export type Limits = {
    */
   maxExpiryHours: number;
 };
+
+/**
+ * Whether a balance is private (notes) or public (storage).
+ */
+export type Visibility = "private" | "public";
+
+/**
+ * A tracked token's balance in the vault, before and after the transaction.
+ */
+export type BalanceChange = {
+  /**
+   * The token.
+   */
+  token: TokenInfo;
+  /**
+   * Before, in base units.
+   */
+  before: Amount;
+  /**
+   * After, in base units.
+   */
+  after: Amount;
+  /**
+   * Which balance.
+   */
+  visibility: Visibility;
+};
+
+/**
+ * What one call returns.
+ */
+export type CallResult = {
+  /**
+   * Index into the transaction's calls.
+   */
+  call: number;
+  /**
+   * Its return values, decoded when the member has the contract's artifact.
+   */
+  returns: Array<DecodedArg>;
+};
+
+/**
+ * Notes the transaction creates and spends, against Aztec's per-transaction limits.
+ */
+export type NoteCounts = {
+  /**
+   * Note hashes created.
+   */
+  created: number;
+  /**
+   * Nullifiers emitted.
+   */
+  nullified: number;
+};
+
+/**
+ * What a simulation shows the transaction does to the vault.
+ */
+export type Effects = {
+  /**
+   * Tracked tokens whose vault balance changes.
+   */
+  balances: Array<BalanceChange>;
+  /**
+   * Calls that return something.
+   */
+  returns: Array<CallResult>;
+  /**
+   * Notes created and spent.
+   */
+  notes: NoteCounts;
+  /**
+   * False when some change to the vault couldn't be attributed (a note of an untracked contract, or of a shape the
+   * daemon doesn't read): the transaction may change other balances.
+   */
+  complete: boolean;
+};
+
+/**
+ * Why a review's checks failed.
+ */
+export type ReviewFailure =
+  | { kind: "payloadMismatch" }
+  | {
+      kind: "configChanged";
+      /**
+       * Config version in the proposal.
+       */
+      made: number;
+      /**
+       * The vault's current config version.
+       */
+      current: number;
+    }
+  | {
+      kind: "expired";
+      /**
+       * Unix seconds.
+       */
+      at: number;
+    }
+  | {
+      kind: "artifactMissing";
+      /**
+       * The contract class.
+       */
+      classId: Hex32 | null;
+    }
+  | { kind: "notMember" }
+  | { kind: "feeOnVault" }
+  | { kind: "invalid" };
+
+/**
+ * A review failure with its message.
+ */
+export type ReviewError = {
+  /**
+   * What failed.
+   */
+  failure: ReviewFailure;
+  /**
+   * In words, for people.
+   */
+  message: string;
+};
+
+/**
+ * Why a simulation failed.
+ */
+export type SimulationFailure =
+  | {
+      kind: "insufficientBalance";
+      /**
+       * The token, when tracked.
+       */
+      token: TokenInfo | null;
+      /**
+       * The token contract.
+       */
+      contract: Hex32;
+    }
+  | {
+      kind: "authwitRequired";
+      /**
+       * The contract that asked.
+       */
+      contract: Hex32 | null;
+    }
+  | { kind: "nonceUsed" }
+  | {
+      kind: "reverted";
+      /**
+       * The contract, when known.
+       */
+      contract: Hex32 | null;
+      /**
+       * The function, when known.
+       */
+      function: string | null;
+    }
+  | { kind: "unavailable" };
+
+/**
+ * A simulation failure with its message.
+ */
+export type SimulationError = {
+  /**
+   * What failed.
+   */
+  failure: SimulationFailure;
+  /**
+   * In words, for people; for `reverted`, the contract's own message.
+   */
+  message: string;
+};
+
+/**
+ * A threshold choice members should make knowingly (`ome-protocol`'s policy warnings).
+ */
+export type PolicyWarning =
+  | "single-signer"
+  | "no-spare-signer"
+  | "two-can-read"
+  | "no-spare-viewer";
+
+/**
+ * A change to the vault's own policy, as a review shows it.
+ */
+export type GovernanceChange =
+  | {
+      kind: "threshold";
+      /**
+       * Now.
+       */
+      before: number;
+      /**
+       * After.
+       */
+      after: number;
+      /**
+       * Members.
+       */
+      members: number;
+      /**
+       * Risks of the new shape.
+       */
+      warnings: Array<PolicyWarning>;
+    }
+  | {
+      kind: "invalidatePending";
+      /**
+       * Config version now.
+       */
+      version: number;
+    };
 
 /**
  * Params of `proposals.reject`.

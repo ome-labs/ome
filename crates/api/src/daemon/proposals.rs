@@ -3,7 +3,10 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::{AbiValue, DecodedArg, FunctionKind, Secret, TokenInfo};
+use super::{
+    AbiValue, DecodedArg, Effects, FunctionKind, GovernanceChange, ReviewError, Secret,
+    SimulationError, TokenInfo,
+};
 use crate::{Amount, Hex32};
 
 /// One call of a `calls` intent.
@@ -44,6 +47,18 @@ pub enum Intent {
     Cancel {
         /// The proposal cancelled.
         cancels: Hex32,
+        /// Note.
+        memo: Option<String>,
+    },
+    /// Changes the approvals needed to spend (the vault's own `set_threshold`).
+    SetThreshold {
+        /// The new threshold, from 1 to the member count.
+        threshold: u32,
+        /// Note.
+        memo: Option<String>,
+    },
+    /// Voids every approval collected so far (the vault's own `invalidate_pending`).
+    InvalidatePending {
         /// Note.
         memo: Option<String>,
     },
@@ -200,7 +215,7 @@ pub struct ReviewChecks {
     /// Not expired.
     pub not_expired: bool,
     /// What failed, if anything.
-    pub failure: Option<String>,
+    pub failure: Option<ReviewError>,
 }
 
 /// Where a recipient's label came from.
@@ -232,7 +247,9 @@ pub struct Simulation {
     /// Gas used.
     pub gas: Option<Gas>,
     /// Why it failed.
-    pub error: Option<String>,
+    pub error: Option<SimulationError>,
+    /// What it does to the vault, when it succeeded.
+    pub effects: Option<Effects>,
 }
 
 /// What a signature covers.
@@ -260,6 +277,8 @@ pub struct Review {
     pub action: String,
     /// For transfers.
     pub recipient: Option<Recipient>,
+    /// For governance intents: the vault's policy before and after.
+    pub change: Option<GovernanceChange>,
     /// Simulation.
     pub simulation: Simulation,
     /// What an approval signs.
@@ -278,7 +297,9 @@ pub struct ProposalPreview {
     /// Gas used.
     pub gas: Option<Gas>,
     /// Why it failed.
-    pub error: Option<String>,
+    pub error: Option<SimulationError>,
+    /// What it would do to the vault, when it succeeded.
+    pub effects: Option<Effects>,
 }
 
 /// Params naming a proposal.
