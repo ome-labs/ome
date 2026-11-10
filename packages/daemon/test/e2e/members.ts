@@ -39,7 +39,8 @@ export async function member(name: string, settings: Partial<Settings> = {}): Pr
   const daemon = new Daemon({
     profile: "default",
     home,
-    settings: { nodeUrl: NODE_URL, ...settings },
+    // No release checks from tests.
+    settings: { nodeUrl: NODE_URL, updateCheck: false, ...settings },
     keeperListen: ["/ip4/127.0.0.1/tcp/0"],
     // A deleted profile's daemon stops; it must not signal the test process.
     exit: () => undefined,

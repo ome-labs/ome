@@ -69,6 +69,7 @@ export const handlers: Handlers = {
       if (p.aztecWalletDir !== undefined) file.settings.aztecWalletDir = p.aztecWalletDir || null;
       if (p.aztecWalletSync !== undefined) file.settings.aztecWalletSync = p.aztecWalletSync;
       if (p.appsEnabled !== undefined) file.settings.appsEnabled = p.appsEnabled;
+      if (p.updateCheck !== undefined) file.settings.updateCheck = p.updateCheck;
     });
     if (p.feePayerSalt !== undefined) await d.setFeePayer(d.state.file.settings.feePayerSalt);
     return d.state.file.settings;

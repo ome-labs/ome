@@ -34,6 +34,10 @@ pub struct DaemonInfo {
 /// Daemon settings.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent on/off settings, each with its own meaning"
+)]
 pub struct Settings {
     /// Aztec node JSON-RPC URL.
     pub node_url: String,
@@ -54,6 +58,8 @@ pub struct Settings {
     pub aztec_wallet_sync: bool,
     /// Answer app connections (`apps.*`); off by default.
     pub apps_enabled: bool,
+    /// Check GitHub's release feed once a day for a newer release of Ome (nothing is sent but the request).
+    pub update_check: bool,
 }
 
 /// Params of `config.set`: the settings to change.
@@ -88,6 +94,10 @@ pub struct SettingsPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub apps_enabled: Option<bool>,
+    /// Check for newer releases.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub update_check: Option<bool>,
 }
 
 /// Params of `relays.set`.
@@ -304,4 +314,6 @@ pub struct Status {
     pub default_vault: Option<Hex32>,
     /// The fee payer and its Fee Juice, once the daemon has a wallet.
     pub fees: Option<FeesStatus>,
+    /// The newest release of Ome, when the update check found one newer than this daemon.
+    pub newer_release: Option<String>,
 }

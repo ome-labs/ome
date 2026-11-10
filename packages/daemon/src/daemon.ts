@@ -50,6 +50,7 @@ import { SecretsStore } from "./secrets/store.ts";
 import { handlers } from "./server/handlers.ts";
 import { DaemonServer } from "./server/server.ts";
 import { SignerService } from "./signer/signer.ts";
+import { UpdateCheck } from "./updates.ts";
 import { ReceivedWatcher } from "./vaults/received.ts";
 import { VaultService } from "./vaults/service.ts";
 
@@ -120,6 +121,7 @@ export class Daemon implements Context {
   /** The fee payer's last read status, refreshed in the background: `status` never waits on the node. */
   #fees: FeesStatus | null = null;
   #server: DaemonServer | undefined;
+  readonly #updates = new UpdateCheck(DAEMON_VERSION, () => this.state.file.settings.updateCheck);
   #appPage: AppPageServer | undefined;
   #sync: NodeJS.Timeout | undefined;
   #core: Promise<void> | undefined;
@@ -246,6 +248,7 @@ export class Daemon implements Context {
     await this.#lock();
     this.#state = await ProfileState.load(this.paths.state, this.#options.settings);
     this.#node = new NodeService(this.state.file.settings.nodeUrl);
+    this.#updates.start();
     await this.node.check();
     // A passphrase change writes both new files before swapping them in: finish one that was interrupted.
     await rename(`${this.paths.masterKey}.next`, this.paths.masterKey).catch(() => undefined);
@@ -276,6 +279,7 @@ export class Daemon implements Context {
 
   async stop(): Promise<void> {
     clearInterval(this.#sync);
+    this.#updates.stop();
     this.devices.stop();
     await this.#server?.close();
     await this.#appPage?.close();
@@ -327,6 +331,7 @@ export class Daemon implements Context {
       vaults,
       defaultVault,
       fees: this.#fees,
+      newerRelease: this.#updates.newer,
     };
   }
 

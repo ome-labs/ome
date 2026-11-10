@@ -52,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
   aztecWalletDir: null,
   aztecWalletSync: false,
   appsEnabled: false,
+  updateCheck: true,
 };
 
 /** The profile file, read once and written on every change. */

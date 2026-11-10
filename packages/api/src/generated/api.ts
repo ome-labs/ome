@@ -2145,6 +2145,10 @@ export type Settings = {
    * Answer app connections (`apps.*`); off by default.
    */
   appsEnabled: boolean;
+  /**
+   * Check GitHub's release feed once a day for a newer release of Ome (nothing is sent but the request).
+   */
+  updateCheck: boolean;
 };
 
 /**
@@ -2179,6 +2183,10 @@ export type SettingsPatch = {
    * Answer app connections.
    */
   appsEnabled?: boolean;
+  /**
+   * Check for newer releases.
+   */
+  updateCheck?: boolean;
 };
 
 /**
@@ -2414,6 +2422,10 @@ export type Status = {
    * The fee payer and its Fee Juice, once the daemon has a wallet.
    */
   fees: FeesStatus | null;
+  /**
+   * The newest release of Ome, when the update check found one newer than this daemon.
+   */
+  newerRelease: string | null;
 };
 
 /**
