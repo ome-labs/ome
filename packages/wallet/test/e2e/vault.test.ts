@@ -7,9 +7,12 @@ import { Contract } from "@aztec-labs/aztec.js/contracts";
 import { Fr } from "@aztec-labs/foundation/curves/bn254";
 import { AMMContract } from "@aztec-labs/noir-contracts.js/AMM";
 import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { loadContractArtifact } from "@aztec-labs/stdlib/abi";
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
+import type { NoirCompiledContract } from "@aztec-labs/stdlib/noir";
 import { ExecutionPayload, mergeExecutionPayloads } from "@aztec-labs/stdlib/tx";
 import type { DkgResult, HexBytes, Manifest, Point } from "@ome-labs/api";
+import compiledRouter from "@ome-labs/contracts/TestRouter.json" with { type: "json" };
 import {
   type Rotation,
   UnlockedSigner,
@@ -332,6 +335,43 @@ describe.skipIf(!available)("a vault on a local network with real keepers", () =
       return (result as bigint) > 0n ? (result as bigint) : undefined;
     }, "the vault's OPAL");
     expect(opals).toBeGreaterThan(0n);
+  });
+
+  it("grants an authwit to a contract the vault reaches through a router, and refuses one it never uses", async () => {
+    const send = { from: alice.account, fee: alice.fee };
+    const artifact = loadContractArtifact(compiledRouter as unknown as NoirCompiledContract);
+    const deployRouter = async () =>
+      (await Contract.deploy(alice.wallet, artifact, []).send(send)).contract;
+    const router = await deployRouter();
+    const puller = await deployRouter();
+    const nonce = Fr.random();
+    const pull = (amount: bigint) =>
+      token.methods.transfer_to_public(vault, puller.address, amount, nonce).getFunctionCall();
+    const route = await router.methods.route?.(puller.address, token.address, 10n, nonce);
+    if (!route) throw new Error("route missing from the artifact");
+    const proposeRoute = async (amount: bigint) =>
+      alice.wallet.prepareVaultTx(vault, await route.request({ fee: alice.fee }), {
+        expiresAt: await expiry(alice),
+        summary: "route 10 OME",
+        proposer: 1,
+        authwits: [{ caller: puller.address, call: await pull(amount) }],
+      });
+    const usage = async (tx: VaultTx) =>
+      alice.wallet.unusedAuthwits(
+        tx,
+        await alice.wallet.simulationFacts(tx, await alice.wallet.previewVaultTx(tx)),
+      );
+
+    // The puller is not one of the vault's calls: the router reaches it. The simulation shows the authwit used.
+    const routed = await proposeRoute(10n);
+    expect(await usage(routed)).toEqual([]);
+    // An authwit for another amount is one the transaction never asks about.
+    expect(await usage(await proposeRoute(11n))).toEqual([0]);
+
+    const before = await balance(alice, vault);
+    const approvals = await approve(alice, routed, [0, 1]);
+    expect((await alice.wallet.executeVaultTx(routed, approvals)).isMined()).toBe(true);
+    expect(await balance(alice, vault)).toBe(before - 10n);
   });
 
   it("rotates member 3 out; stale approvals are refused and the new member's count", async () => {

@@ -2,7 +2,10 @@ import { SchnorrInitializerlessAccountContract } from "@aztec-labs/accounts/schn
 import { createStubSchnorrAccount } from "@aztec-labs/accounts/schnorr/stub";
 import type { Account } from "@aztec-labs/aztec.js/account";
 import { NO_FROM, type NoFrom } from "@aztec-labs/aztec.js/account";
-import { computeAuthWitMessageHash } from "@aztec-labs/aztec.js/authorization";
+import {
+  computeAuthWitMessageHash,
+  computeInnerAuthWitHashFromAction,
+} from "@aztec-labs/aztec.js/authorization";
 import {
   Contract,
   ContractFunctionInteraction,
@@ -34,6 +37,7 @@ import { AuthWitness } from "@aztec-labs/stdlib/auth-witness";
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import { getContractClassFromArtifact } from "@aztec-labs/stdlib/contract";
 import type { GasSettings } from "@aztec-labs/stdlib/gas";
+import { computeVarArgsHash } from "@aztec-labs/stdlib/hash";
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client";
 import { AppTaggingSecretKind } from "@aztec-labs/stdlib/logs";
 import {
@@ -127,7 +131,10 @@ export interface ProposalTerms {
   readonly txNonce?: Fr;
   /** The contracts the calls need, for members who don't have them (see `PayloadContracts`). */
   readonly contracts?: PayloadContracts;
-  /** Private authwits the vault grants with the calls, at most four; each caller must be one of the calls' targets. */
+  /**
+   * Private authwits the vault grants with the calls, at most four. The transaction must use each one: see
+   * {@link OmeWallet.unusedAuthwits}.
+   */
   readonly authwits?: readonly VaultAuthwit[];
 }
 
@@ -553,6 +560,21 @@ export class OmeWallet extends BaseWallet {
       scopes: [tx.vault],
       senderForTags: tx.vault,
     });
+  }
+
+  /**
+   * The positions of `tx`'s authwits that its simulation never asks the vault about: no contract checked that
+   * authwit's caller and call with `verify_private_authwit`. A proposal should grant only authwits it uses.
+   */
+  async unusedAuthwits(tx: VaultTx, facts: SimulationFacts): Promise<number[]> {
+    const asked = new Set(facts.authwitChecks.map((c) => `${c.consumer}:${c.argsHash}`));
+    const used = await Promise.all(
+      tx.authwits.map(async ({ caller, call }) => {
+        const inner = await computeInnerAuthWitHashFromAction(caller, call);
+        return asked.has(`${call.to.toString()}:${(await computeVarArgsHash([inner])).toString()}`);
+      }),
+    );
+    return used.flatMap((ok, index) => (ok ? [] : [index]));
   }
 
   /** What a simulation of `tx` (from {@link previewVaultTx}) does to the vault's notes, and what its calls return. */

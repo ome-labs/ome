@@ -11,6 +11,7 @@ import { DomainSeparator } from "@aztec-labs/constants";
 import { poseidon2HashWithSeparator } from "@aztec-labs/foundation/crypto/poseidon";
 import type { Fr } from "@aztec-labs/foundation/curves/bn254";
 import type { PXE } from "@aztec-labs/pxe/server";
+import { FunctionSelector } from "@aztec-labs/stdlib/abi";
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import { siloNullifier } from "@aztec-labs/stdlib/hash";
 import type {
@@ -39,7 +40,14 @@ export interface SimulationFacts {
   readonly publicReturns: bigint[][];
   /** Every contract the private calls run, nested ones included, in first-reached order. */
   readonly contracts: string[];
+  /**
+   * Each time a contract asked the vault whether its caller may act for it (`verify_private_authwit`): the asking
+   * contract (the authwit's consumer) and the hash of the inner hash it asked about.
+   */
+  readonly authwitChecks: { readonly consumer: string; readonly argsHash: string }[];
 }
+
+const VERIFY_PRIVATE_AUTHWIT = FunctionSelector.fromSignature("verify_private_authwit(Field)");
 
 /** Every private call of the simulation, depth first. */
 function calls(root: PrivateCallExecutionResult): PrivateCallExecutionResult[] {
@@ -131,5 +139,24 @@ export async function simulationFacts(
   const contracts = [
     ...new Set(all.map((call) => call.publicInputs.callContext.contractAddress.toString())),
   ];
-  return { spent, created, noteHashes, nullifiers, privateReturns, publicReturns, contracts };
+  const verify = await VERIFY_PRIVATE_AUTHWIT;
+  const authwitChecks = all
+    .filter(
+      ({ publicInputs: { callContext } }) =>
+        callContext.contractAddress.equals(vault) && callContext.functionSelector.equals(verify),
+    )
+    .map(({ publicInputs }) => ({
+      consumer: publicInputs.callContext.msgSender.toString(),
+      argsHash: publicInputs.argsHash.toString(),
+    }));
+  return {
+    spent,
+    created,
+    noteHashes,
+    nullifiers,
+    privateReturns,
+    publicReturns,
+    contracts,
+    authwitChecks,
+  };
 }

@@ -42,8 +42,8 @@ export interface PayloadContracts {
 const NO_CONTRACTS: PayloadContracts = { classIds: [], instances: [] };
 
 /**
- * A private authwit the vault grants with a transaction: `caller` (one of the transaction's call targets) may make
- * `call` on the vault's behalf. Members sign its message hash beside the transaction's.
+ * A private authwit the vault grants with a transaction: `caller`, a contract the transaction reaches, may make `call`
+ * on the vault's behalf once. Members sign its message hash beside the transaction's.
  */
 export interface VaultAuthwit {
   readonly caller: AztecAddress;
