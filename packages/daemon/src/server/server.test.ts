@@ -70,6 +70,23 @@ describe("DaemonServer", () => {
     client.close();
   });
 
+  it("serves a request as large as a contract artifact", async () => {
+    const client = await DaemonClient.connect(socket, TOKEN);
+    // A Token artifact is about 7.5 MB, more again once escaped inside a JSON string.
+    const artifact = JSON.stringify({ name: "Token", bytecode: '"'.repeat(8 << 20) });
+    expect(await client.call("daemon.info", { artifact } as never)).toEqual({
+      method: "daemon.info",
+    });
+    client.close();
+  });
+
+  it("fails calls on a connection the daemon closed instead of leaving them waiting", async () => {
+    const client = await DaemonClient.connect(socket, TOKEN);
+    const tooLong = "x".repeat(2 * (32 << 20) + (2 << 20));
+    await expect(client.call("daemon.info", { tooLong } as never)).rejects.toThrow(/closed/u);
+    await expect(client.call("daemon.info", {})).rejects.toThrow(/closed/u);
+  });
+
   it("delivers numbered events to subscribed sessions only", async () => {
     const subscribed = await DaemonClient.connect(socket, TOKEN);
     const other = await DaemonClient.connect(socket, TOKEN);

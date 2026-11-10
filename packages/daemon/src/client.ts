@@ -100,6 +100,11 @@ export class DaemonClient {
     this.#next += 1;
     const id = this.#next;
     return new Promise((resolve, reject) => {
+      // A closed connection never answers: fail now rather than wait forever.
+      if (this.#socket.destroyed || !this.#socket.writable) {
+        reject(new Error("daemon connection closed"));
+        return;
+      }
       this.#pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
       this.#socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
     });

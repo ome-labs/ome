@@ -11,13 +11,17 @@ import type {
   Subscription,
 } from "@ome-labs/api";
 
+import { MAX_ARTIFACT_BYTES } from "../contracts/artifacts.ts";
 import { DaemonError, toRpcError } from "../errors.ts";
 
 /** Runs one method; `params` are as the client sent them (missing params read as `{}`). */
 export type Handler = (method: DaemonMethod, params: unknown) => Promise<unknown>;
 
-/** Largest accepted request line. */
-const MAX_LINE = 1 << 20;
+/**
+ * Largest accepted request line: `contracts.register` carries an artifact as a JSON string, whose escaping can double
+ * its size.
+ */
+const MAX_LINE = 2 * MAX_ARTIFACT_BYTES + (1 << 20);
 /** Events kept for clients that reconnect and ask for what they missed. */
 const REPLAY = 1024;
 
