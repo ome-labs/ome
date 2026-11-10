@@ -1,6 +1,7 @@
 import type { Hex32, HexBytes, Profile, Settings, TokenInfo } from "@ome-labs/api";
 
-import { readJson, writeJson } from "./files.ts";
+import { readVersioned, writeVersioned } from "./files.ts";
+import type { Schema } from "./schema.ts";
 
 /** A contract the member registered (its artifact is kept in the profile's `contracts` directory). */
 export interface RegisteredContract {
@@ -32,6 +33,15 @@ export interface AppRecord {
   allowedAt: number;
 }
 
+/** `profile.json`'s migrations. */
+export const PROFILE_SCHEMA: Schema = {
+  name: "profile",
+  migrations: [
+    // 1: the file gains `schema`; registered contracts and apps came after the first profiles.
+    (file) => ({ contracts: {}, apps: {}, ...file }),
+  ],
+};
+
 export const DEFAULT_SETTINGS: Settings = {
   nodeUrl: "http://localhost:8080",
   relays: [],
@@ -55,7 +65,7 @@ export class ProfileState {
   }
 
   static async load(path: string, settings: Partial<Settings> = {}): Promise<ProfileState> {
-    const file = await readJson<ProfileFile>(path, {
+    const file = await readVersioned<ProfileFile>(path, PROFILE_SCHEMA, {
       profile: null,
       settings: DEFAULT_SETTINGS,
       aliases: {},
@@ -64,8 +74,7 @@ export class ProfileState {
       contracts: {},
       apps: {},
     });
-    file.contracts ??= {};
-    file.apps ??= {};
+    // Settings added later default here: a setting is an open record, so a new one needs no migration.
     file.settings = { ...DEFAULT_SETTINGS, ...file.settings, ...settings };
     return new ProfileState(path, file);
   }
@@ -76,6 +85,6 @@ export class ProfileState {
 
   async update(change: (file: ProfileFile) => void): Promise<void> {
     change(this.#file);
-    await writeJson(this.#path, this.#file);
+    await writeVersioned(this.#path, PROFILE_SCHEMA, this.#file);
   }
 }

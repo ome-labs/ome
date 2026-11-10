@@ -34,7 +34,8 @@ import {
 
 import { type Context, until } from "../context.ts";
 import { DaemonError, notReady, require } from "../errors.ts";
-import { readAllJson, writeJson } from "../profile/files.ts";
+import { readAllVersioned, writeVersioned } from "../profile/files.ts";
+import type { Schema } from "../profile/schema.ts";
 import { summaryOf } from "../proposals/intents.ts";
 import type { Stored } from "../proposals/views.ts";
 import { decodeHandoff, encodeHandoff } from "../secrets/handoff.ts";
@@ -115,6 +116,15 @@ const pad = (points: readonly { x: string; y: string }[]) =>
  * 5. keepers activate the new committee: members read the new config note; a joiner, which cannot read it yet, sees
  *    the plan nonce's nullifier on chain and hands its keeper the config the rotation sets.
  */
+/** A rotation in progress's migrations (`rotations/<session>.json`). */
+export const ROTATION_SCHEMA: Schema = {
+  name: "rotation",
+  migrations: [
+    // 1: the file gains `schema`.
+    (file) => file,
+  ],
+};
+
 export class MembershipService {
   readonly #context: Context;
   readonly #rotations = new Map<Hex32, Rotating>();
@@ -124,7 +134,10 @@ export class MembershipService {
   }
 
   async load(): Promise<void> {
-    for (const rotating of await readAllJson<Rotating>(this.#context.paths.rotations)) {
+    for (const rotating of await readAllVersioned<Rotating>(
+      this.#context.paths.rotations,
+      ROTATION_SCHEMA,
+    )) {
       this.#rotations.set(rotating.state.plan.id, rotating);
     }
   }
@@ -369,7 +382,11 @@ export class MembershipService {
       step.detail = detail ?? step.detail;
     }
     this.#context.emit({ type: "rotation", rotation: rotating.state });
-    void writeJson(join(this.#context.paths.rotations, `${rotating.plan.session}.json`), rotating);
+    void writeVersioned(
+      join(this.#context.paths.rotations, `${rotating.plan.session}.json`),
+      ROTATION_SCHEMA,
+      rotating,
+    );
   }
 
   async #run(rotating: Rotating): Promise<void> {

@@ -27,10 +27,20 @@ import { decodeProposal, signerSetCommitment } from "@ome-labs/wasm";
 import type { Context } from "../context.ts";
 import { DaemonError, notReady } from "../errors.ts";
 import { peerId } from "../peer-id.ts";
-import { readAllJson, writeJson } from "../profile/files.ts";
+import { readAllVersioned, writeVersioned } from "../profile/files.ts";
+import type { Schema } from "../profile/schema.ts";
 import { type VaultRecord, secretsName, setupOf } from "./records.ts";
 
 /** The member's vaults: their records, their current committees, and their place in the wallet. */
+/** A vault record's migrations (`vaults/<address>.json`). */
+export const VAULT_RECORD_SCHEMA: Schema = {
+  name: "vault record",
+  migrations: [
+    // 1: the file gains `schema`.
+    (file) => file,
+  ],
+};
+
 export class VaultService {
   readonly #context: Context;
   readonly #records = new Map<Hex32, VaultRecord>();
@@ -42,7 +52,10 @@ export class VaultService {
   }
 
   async load(): Promise<void> {
-    for (const record of await readAllJson<VaultRecord>(this.#context.paths.vaults)) {
+    for (const record of await readAllVersioned<VaultRecord>(
+      this.#context.paths.vaults,
+      VAULT_RECORD_SCHEMA,
+    )) {
       this.#records.set(record.address, record);
       // oxlint-disable-next-line no-await-in-loop
       if (record.status === "active") await this.attach(record.address);
@@ -92,7 +105,11 @@ export class VaultService {
 
   async save(record: VaultRecord): Promise<void> {
     this.#records.set(record.address, record);
-    await writeJson(join(this.#context.paths.vaults, `${record.address}.json`), record);
+    await writeVersioned(
+      join(this.#context.paths.vaults, `${record.address}.json`),
+      VAULT_RECORD_SCHEMA,
+      record,
+    );
   }
 
   /**

@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 import { DaemonError } from "../errors.ts";
 
+/** The sealed format this release writes; a later one keeps reading every earlier format. */
 const VERSION = 0;
 
 /**
@@ -16,7 +17,13 @@ export function seal(key: Uint8Array, plaintext: Uint8Array): Buffer {
 }
 
 export function open(key: Uint8Array, sealed: Uint8Array): Buffer {
-  if (sealed[0] !== VERSION || sealed.length < 29)
+  const version = sealed[0] ?? 0;
+  if (version > VERSION)
+    throw new DaemonError(
+      "failed",
+      `this file was sealed by a newer Ome (format ${version}; this release reads ${VERSION}): update Ome`,
+    );
+  if (version !== VERSION || sealed.length < 29)
     throw new DaemonError("failed", "unknown sealed format");
   const decipher = createDecipheriv("aes-256-gcm", key, sealed.subarray(1, 13));
   decipher.setAuthTag(sealed.subarray(13, 29));
