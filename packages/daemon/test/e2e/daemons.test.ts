@@ -7,7 +7,10 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { type Wallet, WalletSchema } from "@aztec-labs/aztec.js/wallet";
 import { Fr } from "@aztec-labs/foundation/curves/bn254";
+import { jsonStringify } from "@aztec-labs/foundation/json-rpc";
+import { getSchemaReturnType, schemaHasMethod } from "@aztec-labs/foundation/schemas";
 import { openStoreAt } from "@aztec-labs/kv-store/lmdb-v2";
 import { AMMContract } from "@aztec-labs/noir-contracts.js/AMM";
 import { PrivateVotingContract } from "@aztec-labs/noir-contracts.js/PrivateVoting";
@@ -23,6 +26,26 @@ const available = await networkAvailable();
 
 const hex = (c: { address: AztecAddress }) => c.address.toString() as Hex32;
 
+/** An aztec.js `Wallet` an app at `origin` uses: each call goes through `m`'s daemon as `apps.call`, as wallet-sdk's
+ * transports forward them, and results are parsed as wallet-sdk's app side parses them. */
+const appWallet = (m: Member, origin: string): Wallet =>
+  new Proxy({} as Wallet, {
+    get: (_, prop) => {
+      const method = prop.toString();
+      if (!schemaHasMethod(WalletSchema, method)) return undefined;
+      return async (...args: unknown[]) => {
+        const { result } = await m.client.call("apps.call", {
+          origin,
+          method,
+          args: jsonStringify(args),
+        });
+        return getSchemaReturnType(WalletSchema[method as keyof typeof WalletSchema]).parseAsync(
+          JSON.parse(result),
+        );
+      };
+    },
+  });
+
 describe.skipIf(!available)("members' daemons on a local network", () => {
   let alice: Member; // member 1: founds and proposes
   let bob: Member; // member 2
@@ -30,6 +53,8 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
   let dave: Member; // joins in the rotation
   let vault: Hex32;
   let token: Hex32;
+  // The AMM of the swap test, which the app test trades against too.
+  let swapPool: { amm: AMMContract; jade: TokenContract; opal: TokenContract } | undefined;
 
   const proposal = (m: Member, id: Hex32) =>
     until(
@@ -314,6 +339,7 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
         shares.address,
       ).send(send);
       await shares.methods.set_minter(amm.address, true).send(send);
+      swapPool = { amm, jade, opal };
       await jade.methods.mint_to_private(from, 10_000n).send(send);
       await opal.methods.mint_to_private(from, 10_000n).send(send);
       await jade.methods.mint_to_private(AztecAddress.fromStringUnsafe(vault), 1_000n).send(send);
@@ -417,6 +443,73 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
         .methods.balance_of_private(AztecAddress.fromStringUnsafe(vault))
         .simulate({ from: AztecAddress.fromStringUnsafe(vault) });
       expect(result).toBe(900n);
+    });
+
+    it("an allowed app reads the vault, simulates, and sends a swap that becomes a proposal; it gets the receipt", async () => {
+      if (!swapPool) throw new Error("the swap test deploys the AMM");
+      const { amm, jade, opal } = swapPool;
+      const origin = "https://swap.example";
+      const app = appWallet(alice, origin);
+      const vaultAddress = AztecAddress.fromStringUnsafe(vault);
+
+      // Nothing answers until the member turns connections on and allows the app.
+      await expect(app.getAccounts()).rejects.toThrow(/app connections are off/u);
+      await alice.client.call("config.set", { appsEnabled: true });
+      await expect(app.getAccounts()).rejects.toThrow(/isn't allowed/u);
+      expect(alice.events.some((e) => e.type === "appConnect" && e.origin === origin)).toBe(true);
+      await alice.client.call("apps.allow", { origin, vault, name: "Swap" });
+      expect(await alice.client.call("apps.list", {})).toMatchObject([
+        { origin, vault, name: "Swap" },
+      ]);
+
+      // The app sees the vault as its only account, and nothing of the member's own.
+      const accounts = await app.getAccounts();
+      expect(accounts.map((a) => a.item.toString())).toEqual([vault]);
+      expect(await app.getAddressBook()).toEqual([]);
+
+      // As any Aztec app would: an authwit for the AMM, a simulation, then the transaction.
+      const nonce = Fr.random();
+      const pool = AMMContract.at(amm.address, app);
+      const authwit = await app.createAuthWit(vaultAddress, {
+        caller: amm.address,
+        call: await TokenContract.at(jade.address, app)
+          .methods.transfer_to_public(vaultAddress, amm.address, 50n, nonce)
+          .getFunctionCall(),
+      });
+      const swap = pool.methods
+        .swap_exact_tokens_for_tokens(jade.address, opal.address, 50n, 1n, nonce)
+        .with({ authWitnesses: [authwit] });
+      const simulated = await swap.simulate({ from: vaultAddress });
+      expect(simulated).toBeDefined();
+      const sending = swap.send({ from: vaultAddress });
+
+      const request = await until(
+        async () => alice.events.find((e) => e.type === "appRequest" && e.origin === origin),
+        "the app's proposal",
+      );
+      if (request.type !== "appRequest") throw new Error("not an app request");
+      await proposal(bob, request.proposal);
+      const review = await until(
+        async () => {
+          const r = await bob.client.call("proposals.review", { vault, id: request.proposal });
+          return r.simulation.ok ? r : undefined;
+        },
+        "Bob's review of the app's proposal",
+        180_000,
+        2000,
+      );
+      expect(review.proposal.intent).toMatchObject({ kind: "app", origin, name: "Swap" });
+      expect(review.proposal.authwits).toHaveLength(1);
+      await bob.client.call("proposals.approve", { vault, id: request.proposal });
+      await alice.client.call("proposals.approve", { vault, id: request.proposal });
+
+      // Alice's daemon executes it once ready, and the app's send returns with the receipt.
+      const { receipt } = await sending;
+      expect(receipt.isMined()).toBe(true);
+      await status(bob, request.proposal, "executed");
+
+      await alice.client.call("apps.revoke", { origin });
+      await expect(app.getAccounts()).rejects.toThrow(/isn't allowed/u);
     });
 
     it("shows the vault's balance before and after, names a shortfall, and reviews a threshold change", async () => {
