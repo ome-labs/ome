@@ -3,9 +3,9 @@
 use ome_api::{
     Amount, Hex32,
     daemon::{
-        AbiType, AbiValue, DecodedArg, DecodedCall, FunctionKind, Gas, Intent, KnownType,
-        LabelSource, ProposalStatus, ProposalView, Proposer, Recipient, Review, ReviewChecks,
-        Signs, Simulation, TokenInfo, Vote,
+        AbiType, AbiValue, BalanceChange, DecodedArg, DecodedCall, Effects, FunctionKind, Gas,
+        Intent, KnownType, LabelSource, NoteCounts, ProposalStatus, ProposalView, Proposer,
+        Recipient, Review, ReviewChecks, Signs, Simulation, TokenInfo, Visibility, Vote,
     },
 };
 
@@ -122,7 +122,22 @@ pub(crate) fn review() -> Review {
                 l2: 12_840,
             }),
             error: None,
+            effects: Some(Effects {
+                balances: vec![BalanceChange {
+                    token: usdc(),
+                    before: Amount(1_000_000_000),
+                    after: Amount(750_000_000),
+                    visibility: Visibility::Private,
+                }],
+                returns: Vec::new(),
+                notes: NoteCounts {
+                    created: 2,
+                    nullified: 2,
+                },
+                complete: true,
+            }),
         },
+        change: None,
         signs: Signs {
             message: proposal.approval_message,
             formula: "Poseidon2(\"ome.approval.v0\", [vault, outer hash, 4, deadline])".into(),

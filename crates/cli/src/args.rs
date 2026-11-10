@@ -593,6 +593,18 @@ pub(crate) enum ProposeCommand {
         #[command(flatten)]
         options: ProposeOptions,
     },
+    /// Change how many members must approve a payment.
+    Threshold {
+        /// The new approvals to spend, from 1 to the member count.
+        approvals: u32,
+        #[command(flatten)]
+        options: ProposeOptions,
+    },
+    /// Void every approval collected so far: open proposals need their votes again.
+    Invalidate {
+        #[command(flatten)]
+        options: ProposeOptions,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -807,6 +819,17 @@ mod tests {
         );
         assert_eq!(options.memo.as_deref(), Some("rent"));
         assert_eq!(options.expires, "3d");
+    }
+
+    #[test]
+    fn threshold_takes_the_new_count() {
+        let cli = parse("propose threshold 3 --dry-run");
+        let Some(Command::Propose(ProposeCommand::Threshold { approvals, options })) = cli.command
+        else {
+            panic!("not a threshold change");
+        };
+        assert_eq!(approvals, 3);
+        assert!(options.dry_run);
     }
 
     #[test]

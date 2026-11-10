@@ -110,7 +110,9 @@ fn review(p: ProposalView) -> Review {
             ok: true,
             gas: None,
             error: None,
+            effects: None,
         },
+        change: None,
         signs: Signs {
             message: p.approval_message,
             formula: "Poseidon2(…)".into(),

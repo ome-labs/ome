@@ -3,11 +3,14 @@
 use std::fmt::Write;
 
 use ome_api::{
-    Hex32,
-    daemon::{Intent, ProposalStatus, ProposalView, TokenInfo},
+    Amount, Hex32,
+    daemon::{
+        BalanceChange, Effects, GovernanceChange, Intent, PolicyWarning, ProposalStatus,
+        ProposalView, SimulationError, SimulationFailure, TokenInfo,
+    },
 };
 
-use crate::ui::{format, table::Tone};
+use crate::ui::{format, table::Tone, theme};
 
 /// Labels for addresses, from the address book, vaults and aliases.
 pub(crate) type Labels<'a> = &'a dyn Fn(&Hex32) -> Option<String>;
@@ -43,6 +46,8 @@ pub(crate) fn intent_with(p: &ProposalView, labels: Labels<'_>) -> String {
             )
         }
         Intent::Cancel { cancels, .. } => format!("cancel {}", format::id(cancels)),
+        Intent::SetThreshold { threshold, .. } => format!("need {threshold} approvals to spend"),
+        Intent::InvalidatePending { .. } => "void every approval collected so far".to_owned(),
         Intent::Calls { calls, .. } => match calls.as_slice() {
             [call] if call.to == p.vault && call.function == "rotate_membership" => {
                 "change membership".to_owned()
@@ -86,7 +91,9 @@ pub(crate) fn memo(p: &ProposalView) -> Option<&str> {
     match &p.intent {
         Intent::Transfer { memo, .. }
         | Intent::Calls { memo, .. }
-        | Intent::Cancel { memo, .. } => memo.as_deref(),
+        | Intent::Cancel { memo, .. }
+        | Intent::SetThreshold { memo, .. }
+        | Intent::InvalidatePending { memo } => memo.as_deref(),
     }
 }
 
@@ -169,30 +176,123 @@ pub(crate) fn risks(threshold: u32, viewing_threshold: u32, members: u32) -> Vec
     warnings(threshold, viewing_threshold, members)
         .into_iter()
         .map(|warning| match warning {
-            Warning::SingleSigner => Risk {
+            Warning::SingleSigner => PolicyWarning::SingleSigner,
+            Warning::NoSpareSigner => PolicyWarning::NoSpareSigner,
+            Warning::TwoCanRead => PolicyWarning::TwoCanRead,
+            Warning::NoSpareViewer => PolicyWarning::NoSpareViewer,
+        })
+        .map(|warning| risk(warning, members))
+        .collect()
+}
+
+/// A policy warning in words: what the shape risks among `members`.
+pub(crate) fn risk(warning: PolicyWarning, members: u32) -> Risk {
+    match warning {
+            PolicyWarning::SingleSigner => Risk {
                 severe: false,
                 text: "any one member can spend alone".into(),
             },
-            Warning::NoSpareSigner => Risk {
+            PolicyWarning::NoSpareSigner => Risk {
                 severe: true,
                 text: format!(
                     "all {members} members must approve: one lost signing key stops all spending for good"
                 ),
             },
-            Warning::TwoCanRead => Risk {
+            PolicyWarning::TwoCanRead => Risk {
                 severe: false,
                 text: "any 2 members, even 2 who later leave, can read what arrived while they were members"
                     .into(),
             },
-            Warning::NoSpareViewer => Risk {
+            PolicyWarning::NoSpareViewer => Risk {
                 severe: true,
                 text: format!(
                     "all {members} keepers are needed to read: lose one and the vault can never find its notes \
                      again, so its funds are stuck"
                 ),
             },
-        })
-        .collect()
+    }
+}
+
+/// A balance change as people read it: `The vault's OMET: 1,000 → 924.5`.
+pub(crate) fn balance_change(change: &BalanceChange) -> String {
+    let units = |amount: &Amount| format::amount(amount.0, change.token.decimals);
+    format!(
+        "The vault's {}: {} → {}",
+        change.token.symbol,
+        units(&change.before),
+        units(&change.after)
+    )
+}
+
+/// What a simulation shows the transaction does to the vault: balances before and after, and what it can't value.
+pub(crate) fn effects(effects: Option<&Effects>) -> Vec<String> {
+    let Some(effects) = effects else {
+        return Vec::new();
+    };
+    let mut lines: Vec<String> = effects.balances.iter().map(balance_change).collect();
+    if !effects.complete {
+        lines.push(format!(
+            "{} it may change other balances: some of the vault's notes it touches aren't a tracked token's",
+            theme::caution()
+        ));
+    }
+    lines
+}
+
+/// A change to the vault's policy, with the risks of the new shape.
+pub(crate) fn governance(change: &GovernanceChange) -> Vec<String> {
+    match change {
+        GovernanceChange::Threshold {
+            before,
+            after,
+            members,
+            warnings,
+        } => {
+            let mut lines = vec![format!(
+                "Approvals to spend: {before} of {members} → {} of {members}",
+                theme::bold(after.to_string())
+            )];
+            lines.extend(warnings.iter().map(|w| {
+                let risk = risk(*w, *members);
+                let mark = if risk.severe {
+                    theme::bad("✗").to_string()
+                } else {
+                    theme::caution().to_string()
+                };
+                format!("{mark} {}", risk.text)
+            }));
+            lines.push("Open proposals made under the old config need their votes again".into());
+            lines
+        }
+        GovernanceChange::InvalidatePending { version } => vec![format!(
+            "Every approval collected under config version {version} stops counting: open proposals need their \
+             votes again"
+        )],
+    }
+}
+
+/// Why a simulation failed, in words.
+pub(crate) fn simulation_failure(error: &SimulationError) -> String {
+    match &error.failure {
+        SimulationFailure::InsufficientBalance { token, contract } => format!(
+            "the vault holds too little {}",
+            token
+                .as_ref()
+                .map_or_else(|| format::short(contract), |t| t.symbol.clone())
+        ),
+        SimulationFailure::AuthwitRequired { contract } => format!(
+            "{} needs an authwit from the vault, which this proposal doesn't carry",
+            contract
+                .as_ref()
+                .map_or_else(|| "a contract".to_owned(), format::short)
+        ),
+        SimulationFailure::NonceUsed => "it was already executed or cancelled".to_owned(),
+        SimulationFailure::Reverted { function, .. } => match function {
+            Some(function) => format!("{function} reverted: {}", error.message),
+            None => error.message.clone(),
+        },
+        SimulationFailure::Unavailable => format!("it can't be simulated now: {}", error.message),
+    }
 }
 
 #[cfg(test)]
@@ -207,6 +307,27 @@ mod tests {
         assert_eq!(severe(2, 2, 2), 2);
         assert_eq!(severe(2, 3, 3), 1);
         assert_eq!(risks(2, 3, 4).len(), 0);
+    }
+
+    #[test]
+    fn simulation_failures_and_threshold_changes_read_as_words() {
+        console::set_colors_enabled(false);
+        let short = SimulationError {
+            failure: SimulationFailure::InsufficientBalance {
+                token: None,
+                contract: Hex32([7; 32]),
+            },
+            message: String::new(),
+        };
+        assert!(simulation_failure(&short).starts_with("the vault holds too little 0x"));
+        let lines = governance(&GovernanceChange::Threshold {
+            before: 2,
+            after: 3,
+            members: 3,
+            warnings: vec![PolicyWarning::NoSpareSigner],
+        });
+        assert_eq!(lines[0], "Approvals to spend: 2 of 3 → 3 of 3");
+        assert!(lines[1].starts_with("✗ all 3 members must approve"));
     }
 
     #[test]

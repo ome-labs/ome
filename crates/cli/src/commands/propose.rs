@@ -1,5 +1,5 @@
-//! `ome propose transfer|call|cancel`: every proposal is simulated first and shown before it is made; `--dry-run`
-//! stops after the simulation.
+//! `ome propose transfer|call|cancel|threshold|invalidate`: every proposal is simulated first and shown before it is
+//! made; `--dry-run` stops after the simulation.
 
 use ome_api::{
     Amount,
@@ -34,6 +34,41 @@ pub(crate) async fn run(ctx: &Ctx, command: ProposeCommand) -> Result<()> {
             args,
             options,
         } => call(ctx, &vault, function, contract, args, options).await,
+        ProposeCommand::Threshold { approvals, options } => {
+            ctx.intro(&format!("Propose a new threshold · {}", vault.name));
+            let intent = Intent::SetThreshold {
+                threshold: approvals,
+                memo: options.memo.clone(),
+            };
+            submit(
+                ctx,
+                &vault,
+                intent,
+                &options,
+                vec![format!(
+                    "Spending needs {approvals} approvals instead of {}. Open proposals need their votes again.",
+                    vault.threshold
+                )],
+            )
+            .await
+        }
+        ProposeCommand::Invalidate { options } => {
+            ctx.intro(&format!("Propose voiding open approvals · {}", vault.name));
+            let intent = Intent::InvalidatePending {
+                memo: options.memo.clone(),
+            };
+            submit(
+                ctx,
+                &vault,
+                intent,
+                &options,
+                vec![
+                    "Every approval collected so far stops counting: open proposals need their votes again."
+                        .into(),
+                ],
+            )
+            .await
+        }
         ProposeCommand::Cancel { proposal, options } => {
             let target = refs::proposal(ctx, vault.address, proposal.as_deref(), |p| {
                 describe::is_open(p.status)
@@ -318,9 +353,13 @@ fn preview_lines(preview: &ProposalPreview, labels: describe::Labels<'_>) -> Vec
         (_, error) => format!(
             "{} it does not simulate: {}",
             theme::check(false),
-            error.as_deref().unwrap_or("no reason given")
+            error.as_ref().map_or_else(
+                || "no reason given".to_owned(),
+                describe::simulation_failure
+            )
         ),
     });
+    lines.extend(describe::effects(preview.effects.as_ref()));
     lines
 }
 

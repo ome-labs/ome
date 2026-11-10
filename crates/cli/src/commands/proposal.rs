@@ -244,8 +244,8 @@ pub(crate) async fn approve(ctx: &Ctx, arg: ProposalArg) -> Result<()> {
             review
                 .checks
                 .failure
-                .as_deref()
-                .unwrap_or("A check failed.")
+                .as_ref()
+                .map_or("A check failed.", |f| f.message.as_str())
         ))
         .hint(format!(
             "Reject it instead: `{}`.",

@@ -130,7 +130,10 @@ pub(crate) fn render(
         (_, error) => format!(
             "{} it does not simulate yet: {}",
             theme::caution(),
-            error.as_deref().unwrap_or("no reason given")
+            error.as_ref().map_or_else(
+                || "no reason given".to_owned(),
+                describe::simulation_failure
+            )
         ),
     });
     if let Some(recipient) = &review.recipient {
@@ -148,7 +151,7 @@ pub(crate) fn render(
         }
     }
     if let Some(failure) = &c.failure {
-        checks.push(format!("{} {failure}", theme::check(false)));
+        checks.push(format!("{} {}", theme::check(false), failure.message));
     }
     out.push(section("Checks", checks));
 
@@ -197,7 +200,12 @@ fn effect(review: &Review, full: &dyn Fn(&ome_api::Hex32) -> String) -> Vec<Stri
             format::id(cancels)
         )),
         Intent::Calls { .. } => lines.push(capitalize(&describe::intent(p))),
+        Intent::SetThreshold { .. } | Intent::InvalidatePending { .. } => match &review.change {
+            Some(change) => lines.extend(describe::governance(change)),
+            None => lines.push(capitalize(&describe::intent(p))),
+        },
     }
+    lines.extend(describe::effects(review.simulation.effects.as_ref()));
     if let Some(memo) = describe::memo(p) {
         lines.push(format!(
             "Memo from {}: {}",
@@ -267,6 +275,8 @@ fn to_text(sections: &[Section]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use ome_api::daemon::{ReviewError, ReviewFailure};
+
     use crate::fixtures;
 
     use super::*;
@@ -287,7 +297,10 @@ mod tests {
     fn a_failed_check_is_not_safe_to_sign() {
         let mut review = fixtures::review();
         review.checks.rebuilt = false;
-        review.checks.failure = Some("the payload does not match the intent".into());
+        review.checks.failure = Some(ReviewError {
+            failure: ReviewFailure::PayloadMismatch,
+            message: "the payload does not match the intent".into(),
+        });
         assert!(!safe_to_sign(&review));
         let text = to_text(&render(&review, &review.signs, false));
         assert!(text.contains("✗ the payload does not match the intent"));
