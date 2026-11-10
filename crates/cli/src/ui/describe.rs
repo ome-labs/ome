@@ -65,6 +65,14 @@ pub(crate) fn intent_with(p: &ProposalView, labels: Labels<'_>) -> String {
                     .join(", ")
             ),
         },
+        Intent::App { origin, name, .. } => format!(
+            "{} from {}",
+            match p.calls.len() {
+                1 => "1 call".to_owned(),
+                n => format!("{n} calls"),
+            },
+            name.as_deref().unwrap_or(origin)
+        ),
     }
 }
 
@@ -124,7 +132,8 @@ pub(crate) fn memo(p: &ProposalView) -> Option<&str> {
         | Intent::Calls { memo, .. }
         | Intent::Cancel { memo, .. }
         | Intent::SetThreshold { memo, .. }
-        | Intent::InvalidatePending { memo } => memo.as_deref(),
+        | Intent::InvalidatePending { memo }
+        | Intent::App { memo, .. } => memo.as_deref(),
     }
 }
 

@@ -1,5 +1,6 @@
 //! One module per group of the command tree.
 
+mod apps;
 mod config;
 mod contract;
 mod daemon;
@@ -67,6 +68,7 @@ pub(crate) async fn run(ctx: &mut Ctx, command: Option<Command>) -> Result<()> {
         }
         Command::Member(command) => member::run(ctx, command).await,
         Command::Device(command) => device::run(ctx, command).await,
+        Command::Apps(command) => apps::run(ctx, command).await,
         Command::Watch => watch::run(ctx).await,
     }
 }

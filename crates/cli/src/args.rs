@@ -197,6 +197,9 @@ pub(crate) enum Command {
     /// Pair a phone, and move your signing key to it.
     #[command(subcommand)]
     Device(DeviceCommand),
+    /// Apps allowed to use a vault: their transactions become proposals.
+    #[command(subcommand)]
+    Apps(AppsCommand),
 
     /// Full-screen view of a vault: proposals, votes, activity; act with single keys.
     Watch,
@@ -259,6 +262,8 @@ pub(crate) enum ConfigKey {
     /// aztec-wallet's data directory, when not ~/.aztec/wallet.
     #[value(name = "aztec-wallet.dir")]
     AztecWalletDir,
+    /// Answer app connections: on or off.
+    Apps,
 }
 
 #[derive(Debug, Subcommand)]
@@ -786,6 +791,26 @@ pub(crate) struct ChangeArgs {
     /// The vault's name, to confirm a removal without a prompt.
     #[arg(long, value_name = "NAME")]
     pub(crate) confirm: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum AppsCommand {
+    /// The apps allowed to use a vault.
+    List,
+    /// Let an app, by its web origin (scheme, host and port), use this vault. Reads and simulations are answered at
+    /// once; every transaction it sends becomes a proposal the members approve.
+    Allow {
+        /// The app's origin.
+        origin: String,
+        /// A name to show for it.
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Stop an app from using any vault.
+    Revoke {
+        /// The app's origin.
+        origin: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]

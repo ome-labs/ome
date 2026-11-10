@@ -215,6 +215,13 @@ fn effect(review: &Review, full: &dyn Fn(&ome_api::Hex32) -> String) -> Vec<Stri
             format::id(cancels)
         )),
         Intent::Calls { .. } => lines.push(capitalize(&describe::intent(p))),
+        Intent::App { origin, name, .. } => {
+            lines.push(capitalize(&describe::intent(p)));
+            lines.push(format!(
+                "Sent by the app at {origin}{}, which you allowed: the calls are the app's, rebuilt below",
+                name.as_ref().map(|n| format!(" ({n})")).unwrap_or_default()
+            ));
+        }
         Intent::SetThreshold { .. } | Intent::InvalidatePending { .. } => match &review.change {
             Some(change) => lines.extend(describe::governance(change)),
             None => lines.push(capitalize(&describe::intent(p))),

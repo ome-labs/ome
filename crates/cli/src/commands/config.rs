@@ -12,7 +12,7 @@ use crate::{
     ui::{format, table, theme},
 };
 
-const KEYS: [ConfigKey; 7] = [
+const KEYS: [ConfigKey; 8] = [
     ConfigKey::NodeUrl,
     ConfigKey::Prover,
     ConfigKey::Relays,
@@ -20,6 +20,7 @@ const KEYS: [ConfigKey; 7] = [
     ConfigKey::UnlockTimeout,
     ConfigKey::AztecWalletSync,
     ConfigKey::AztecWalletDir,
+    ConfigKey::Apps,
 ];
 
 pub(crate) async fn run(ctx: &mut Ctx, command: ConfigCommand) -> Result<()> {
@@ -63,7 +64,7 @@ pub(crate) async fn run(ctx: &mut Ctx, command: ConfigCommand) -> Result<()> {
                 ConfigKey::Relays | ConfigKey::AztecWalletDir => "",
                 ConfigKey::FeePayer => "0",
                 ConfigKey::UnlockTimeout => "1h",
-                ConfigKey::AztecWalletSync => "off",
+                ConfigKey::AztecWalletSync | ConfigKey::Apps => "off",
             };
             set(ctx, key, default).await?
         }
@@ -128,6 +129,13 @@ async fn set(ctx: &Ctx, key: ConfigKey, value: &str) -> Result<Settings> {
             });
         }
         ConfigKey::AztecWalletDir => patch.aztec_wallet_dir = Some(value.to_owned()),
+        ConfigKey::Apps => {
+            patch.apps_enabled = Some(match value {
+                "on" | "true" | "yes" => true,
+                "off" | "false" | "no" => false,
+                _ => return Err(Error::usage("apps is on or off.")),
+            });
+        }
     }
     let settings = client.call::<ConfigSet>(&patch).await?;
     if key == ConfigKey::AztecWalletSync && settings.aztec_wallet_sync {
@@ -149,6 +157,7 @@ fn name(key: ConfigKey) -> &'static str {
         ConfigKey::UnlockTimeout => "unlock-timeout",
         ConfigKey::AztecWalletSync => "aztec-wallet.sync",
         ConfigKey::AztecWalletDir => "aztec-wallet.dir",
+        ConfigKey::Apps => "apps",
     }
 }
 
@@ -170,6 +179,7 @@ fn value(settings: &Settings, key: ConfigKey) -> String {
             }
         }
         ConfigKey::UnlockTimeout => format::span(u64::from(settings.unlock_timeout_secs)),
+        ConfigKey::Apps => if settings.apps_enabled { "on" } else { "off" }.into(),
         ConfigKey::AztecWalletSync => if settings.aztec_wallet_sync {
             "on"
         } else {

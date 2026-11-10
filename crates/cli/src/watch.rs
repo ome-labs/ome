@@ -493,6 +493,7 @@ mod tests {
                 fee_payer_salt: Hex32([0; 32]),
                 remote_keeper: None,
                 aztec_wallet_dir: None,
+                apps_enabled: false,
                 aztec_wallet_sync: false,
             },
             keeper: KeeperState {
