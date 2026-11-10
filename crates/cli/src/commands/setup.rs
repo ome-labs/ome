@@ -312,6 +312,13 @@ pub(crate) async fn status(ctx: &Ctx) -> Result<()> {
     if !vaults.is_empty() {
         ctx.section("Vaults", &vaults);
     }
+    if let Some(newer) = &status.newer_release {
+        ctx.info(&format!(
+            "Ome {newer} is out (this is {}): `{}` updates it",
+            ome_api::RELEASE_VERSION,
+            ctx.ome("update")
+        ));
+    }
     match next_step(ctx, &status).await {
         Some((text, command)) => {
             ctx.outro(&text);
@@ -510,8 +517,18 @@ pub(crate) async fn doctor(ctx: &Ctx, args: NodeArgs) -> Result<()> {
     checks.push((
         true,
         format!("ome {} installed by {method}", ome_api::RELEASE_VERSION),
-        Some(format!("Update with `{update}`.")),
+        Some(format!("Update with `{update}`, or `ome update`.")),
     ));
+    if let Some(client) = ctx.running_client().await
+        && let Ok(status) = client.call::<StatusGet>(&Empty {}).await
+        && let Some(newer) = status.newer_release
+    {
+        checks.push((
+            false,
+            format!("Ome {newer} is out"),
+            Some("Run `ome update`.".into()),
+        ));
+    }
     let node = Command::new("node").arg("--version").output();
     let version = node
         .ok()

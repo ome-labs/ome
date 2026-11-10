@@ -13,6 +13,7 @@ pub(crate) mod propose;
 mod setup;
 mod signer;
 mod token;
+mod update;
 pub(crate) mod vault;
 
 use crate::{
@@ -31,6 +32,7 @@ pub(crate) async fn run(ctx: &mut Ctx, command: Option<Command>) -> Result<()> {
         Command::Status => setup::status(ctx).await,
         Command::Fees => setup::fees(ctx).await,
         Command::Doctor(args) => setup::doctor(ctx, args).await,
+        Command::Update => update::run(ctx),
         Command::Config(command) => config::run(ctx, command).await,
         Command::Profile(command) => profile::run(ctx, command).await,
         Command::Daemon(command) => daemon::run(ctx, command).await,

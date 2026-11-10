@@ -495,6 +495,7 @@ mod tests {
                 aztec_wallet_dir: None,
                 apps_enabled: false,
                 aztec_wallet_sync: false,
+                update_check: false,
             },
             keeper: KeeperState {
                 status: ServiceStatus::Running,
@@ -523,6 +524,7 @@ mod tests {
             vaults: vec![],
             default_vault: None,
             fees: None,
+            newer_release: None,
         }
     }
 

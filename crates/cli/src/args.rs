@@ -135,6 +135,8 @@ pub(crate) enum Command {
     /// Get, set or unset a setting.
     #[command(subcommand)]
     Config(ConfigCommand),
+    /// Update Ome the way it was installed, then restart this profile's daemon on the new release.
+    Update,
     /// List, show, use or remove profiles.
     #[command(subcommand)]
     Profile(ProfileCommand),
@@ -264,6 +266,9 @@ pub(crate) enum ConfigKey {
     AztecWalletDir,
     /// Answer app connections: on or off.
     Apps,
+    /// Check once a day for a newer release of Ome: on or off.
+    #[value(name = "update-check")]
+    UpdateCheck,
 }
 
 #[derive(Debug, Subcommand)]
@@ -919,6 +924,18 @@ mod tests {
             ["contracts:jade transfer_to_public vault: contracts:amm 100 0"]
         );
         assert_eq!(args.len(), 5);
+    }
+
+    #[test]
+    fn update_and_its_check_parse() {
+        assert!(matches!(parse("update").command, Some(Command::Update)));
+        assert!(matches!(
+            parse("config set update-check off").command,
+            Some(Command::Config(ConfigCommand::Set {
+                key: ConfigKey::UpdateCheck,
+                ..
+            }))
+        ));
     }
 
     #[test]
