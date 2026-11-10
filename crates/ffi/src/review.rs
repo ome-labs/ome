@@ -1,5 +1,5 @@
 //! Reviewing a proposal on the phone. The phone verifies everything it can from the proposal itself: the committee
-//! against the config, the calls against the hash it signs, each call's signature against its selector, that its key
+//! against the config, the calls and authwits against the hashes it signs, each call's signature against its selector, that its key
 //! holds a slot, its own policy, and a rotation's or signer swap's shape. It trusts its member's own keeper and daemon
 //! only for the config being current, unpinned labels, the simulation and which rotation the keeper reshared.
 
@@ -85,6 +85,18 @@ pub struct CallView {
     pub fee_payment: bool,
 }
 
+/// A private authwit the proposal grants, as the phone shows it: the contract that may make the call on the vault's
+/// behalf, inside this transaction.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct AuthwitView {
+    /// The contract allowed to make the call (hex).
+    pub caller: String,
+    /// A name for the caller: pinned on this phone, or claimed by the member's daemon.
+    pub caller_label: Option<String>,
+    /// The call it may make.
+    pub call: CallView,
+}
+
 /// A proposal as the phone shows it, with every check it ran.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct Review {
@@ -110,6 +122,8 @@ pub struct Review {
     pub signers: u32,
     /// The calls.
     pub calls: Vec<CallView>,
+    /// The authwits it grants, signed with the transaction.
+    pub authwits: Vec<AuthwitView>,
     /// Every check.
     pub checks: Vec<Check>,
     /// The daemon's simulation outcome.
@@ -127,6 +141,7 @@ pub(crate) struct Analysis {
     pub(crate) kind: ReviewKind,
     pub(crate) checks: Vec<Check>,
     pub(crate) calls: Vec<CallView>,
+    pub(crate) authwits: Vec<AuthwitView>,
     pub(crate) vault: Option<Vault>,
     pub(crate) chain: Option<ChainInfo>,
     pub(crate) rotation: Option<Rotation>,
@@ -201,7 +216,7 @@ pub(crate) fn analyze(
         .ok();
     let request = ExecutionRequest::from_payload(&review.payload);
     checks.push(check(
-        "Every call's function matches its selector",
+        "Every call's and authwit's function matches its selector",
         request.as_ref().map(drop).map_err(ToString::to_string),
     ));
     let rebuilt = match (&vault, chain) {
@@ -213,7 +228,7 @@ pub(crate) fn analyze(
         _ => Err("the vault or chain is not readable".to_owned()),
     };
     checks.push(check(
-        "The calls hash to what you sign, under the current config, before the deadline",
+        "The calls and authwits hash to what you sign, under the current config, before the deadline",
         rebuilt,
     ));
     let slot = vault
@@ -224,9 +239,22 @@ pub(crate) fn analyze(
         slot.map(drop)
             .ok_or_else(|| "this phone's key is not one of the vault's signers".to_owned()),
     ));
-    let calls: Vec<Call> = request.map(|r| r.calls).unwrap_or_default();
+    let (calls, authwits) = request.map(|r| (r.calls, r.authwits)).unwrap_or_default();
     let (kind, rotation) = classify(review, vault.as_ref(), &calls, fee_payers, &mut checks);
-    let violations = policy.violations(&calls, fee_payers);
+    if rotation.is_some() {
+        checks.push(check(
+            "A rotation grants no authwit",
+            if authwits.is_empty() {
+                Ok(())
+            } else {
+                Err("a rotation must not let a contract act for the vault".to_owned())
+            },
+        ));
+    }
+    // An authwit's call moves the vault's tokens as surely as a call does, so the policy counts both.
+    let mut governed = calls.clone();
+    governed.extend(authwits.iter().map(|a| a.call.clone()));
+    let violations = policy.violations(&governed, fee_payers);
     checks.push(check(
         "This phone's policy allows it",
         if violations.is_empty() {
@@ -241,6 +269,14 @@ pub(crate) fn analyze(
         calls: calls
             .iter()
             .map(|c| call_view(c, review, policy, fee_payers))
+            .collect(),
+        authwits: authwits
+            .iter()
+            .map(|a| AuthwitView {
+                caller: display_address(&a.caller),
+                caller_label: label(&a.caller, review, policy),
+                call: call_view(&a.call, review, policy, fee_payers),
+            })
             .collect(),
         vault,
         chain,
@@ -324,11 +360,6 @@ fn call_view(
     fee_payers: &[WireField],
 ) -> CallView {
     let pinned = policy.pinned(&call.to);
-    let claimed = review
-        .labels
-        .iter()
-        .find(|l| l.address == call.to)
-        .map(|l| l.label.clone());
     let decoded = call
         .signature
         .as_deref()
@@ -353,7 +384,7 @@ fn call_view(
     CallView {
         to: display_address(&call.to),
         label_pinned: pinned.is_some(),
-        label: pinned.map(str::to_owned).or(claimed),
+        label: label(&call.to, review, policy),
         function: call
             .signature
             .as_deref()
@@ -363,6 +394,17 @@ fn call_view(
         public: call.kind == CallKind::Public,
         fee_payment: fee_payers.contains(&call.to),
     }
+}
+
+/// A name for `address`: pinned on this phone, or claimed by the member's daemon.
+fn label(address: &WireField, review: &DeviceReview, policy: &Policy) -> Option<String> {
+    policy.pinned(address).map(str::to_owned).or_else(|| {
+        review
+            .labels
+            .iter()
+            .find(|l| &l.address == address)
+            .map(|l| l.label.clone())
+    })
 }
 
 /// A parameter's display value.

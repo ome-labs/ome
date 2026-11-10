@@ -719,6 +719,7 @@ fn render(review: &DeviceReview, entry: &ReviewEntry, analysis: &Analysis, now: 
         threshold: review.config.threshold,
         signers: review.config.signer_count,
         calls: analysis.calls.clone(),
+        authwits: analysis.authwits.clone(),
         checks: analysis.checks.clone(),
         simulation: review.simulation.clone(),
         signable: analysis.passed()

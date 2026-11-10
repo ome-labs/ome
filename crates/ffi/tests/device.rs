@@ -291,6 +291,7 @@ fn proposal(vault: &Vault, amount: u64, nonce: u64) -> (Proposal, ProposalPayloa
                     .map(|a| field(&Base::from(a)))
                     .to_vec(),
             }],
+            authwits: vec![],
             extras: vec![],
         },
         tx_nonce: Base::from(nonce),
@@ -491,11 +492,11 @@ async fn a_device_pairs_reviews_and_approves_through_a_relay() {
     let Message::DeviceVote(vote) = &vote.body else {
         panic!("not a vote")
     };
-    let Ballot::Approval(approval) = vote.ballot else {
+    let Ballot::Approval(approval) = &vote.ballot else {
         panic!("not an approval")
     };
     assert_eq!(approval.slot, 0);
-    assert_eq!(verify_approval(&vault, &good, &approval), Ok(()));
+    assert_eq!(verify_approval(&vault, &good, approval), Ok(()));
     assert!(matches!(
         device.approve(id).await,
         Err(FfiError::Refused { .. })
