@@ -81,7 +81,7 @@ import { vaultArtifact, vaultPreviewArtifact } from "../vault/artifact.ts";
 import { readVaultConfig } from "../vault/config.ts";
 import type { VaultDeployment } from "../vault/deployment.ts";
 import { thresholdAccountKeys } from "../vault/keys.ts";
-import { fromVaultRequest, toVaultRequest } from "../vault/payload.ts";
+import { type PayloadContracts, fromVaultRequest, toVaultRequest } from "../vault/payload.ts";
 
 /** Options for {@link OmeWallet.create}. */
 export interface OmeWalletOptions {
@@ -117,6 +117,8 @@ export interface ProposalTerms {
   readonly proposer: number;
   /** Entrypoint nonce; reusing one cancels the other proposal. Random by default. */
   readonly txNonce?: Fr;
+  /** The contracts the calls need, for members who don't have them (see `PayloadContracts`). */
+  readonly contracts?: PayloadContracts;
 }
 
 /** A vault transaction and the proposal that describes it. */
@@ -415,7 +417,7 @@ export class OmeWallet extends BaseWallet {
   ): Promise<VaultTx> {
     const input = await this.vaultInput(vault);
     const txNonce = terms.txNonce ?? Fr.random();
-    const request = toVaultRequest(payload);
+    const request = toVaultRequest(payload, terms.contracts);
     const built = buildProposal(input, await this.chain(), {
       ...request,
       txNonce: txNonce.toString(),

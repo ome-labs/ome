@@ -36,7 +36,12 @@ export {
   thresholdAccountKeys,
   vaultPublicKeys,
 } from "./vault/keys.ts";
-export { fromVaultRequest, toVaultRequest } from "./vault/payload.ts";
+export {
+  type PayloadContracts,
+  fromVaultRequest,
+  payloadContracts,
+  toVaultRequest,
+} from "./vault/payload.ts";
 export {
   OmeWallet,
   type OmeWalletOptions,

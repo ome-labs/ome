@@ -19,7 +19,22 @@ interface Extras {
   readonly capsules: string[];
   readonly extraHashedArgs: string[];
   readonly feePayer: string | null;
+  /** What members need to decode, simulate and prove the calls; absent from payloads that name none. */
+  readonly contracts?: PayloadContracts;
 }
+
+/**
+ * The contract classes a payload's calls run, and the instances of its targets. A member's daemon fetches the classes'
+ * artifacts from the proposer's keeper and checks each against its class id; an instance is checked against its
+ * address. Both are hints: neither can change which calls run.
+ */
+export interface PayloadContracts {
+  readonly classIds: string[];
+  /** `SerializableContractInstance` bytes with the address, as hex, for targets whose instance isn't published. */
+  readonly instances: { readonly address: string; readonly instance: HexBytes }[];
+}
+
+const NO_CONTRACTS: PayloadContracts = { classIds: [], instances: [] };
 
 const hex = (bytes: Uint8Array): HexBytes => `0x${Buffer.from(bytes).toString("hex")}`;
 const bytes = (value: HexBytes): Buffer => Buffer.from(value.slice(2), "hex");
@@ -28,7 +43,10 @@ const bytes = (value: HexBytes): Buffer => Buffer.from(value.slice(2), "hex");
  * The calls and extras of an Aztec execution payload, as an Ome proposal carries them (`buildProposal`). Each call's
  * target, selector, kind, arguments and flags are signed; utility calls cannot run through the entrypoint.
  */
-export function toVaultRequest(payload: ExecutionPayload): ExecutionRequest {
+export function toVaultRequest(
+  payload: ExecutionPayload,
+  contracts: PayloadContracts = NO_CONTRACTS,
+): ExecutionRequest {
   const calls: Call[] = payload.calls.map((call) => {
     if (call.type === FunctionType.UTILITY)
       throw new Error(`${call.name} is a utility function; it cannot run through the vault`);
@@ -50,8 +68,15 @@ export function toVaultRequest(payload: ExecutionPayload): ExecutionRequest {
     capsules: payload.capsules.map((c) => c.toString()),
     extraHashedArgs: payload.extraHashedArgs.map((h) => hex(h.toBuffer())),
     feePayer: payload.feePayer?.toString() ?? null,
+    ...(contracts.classIds.length > 0 || contracts.instances.length > 0 ? { contracts } : {}),
   };
   return { calls, extras: hex(Buffer.from(JSON.stringify(extras), "utf8")) };
+}
+
+/** The contracts a checked request's calls need (see {@link PayloadContracts}). */
+export function payloadContracts(request: ExecutionRequest): PayloadContracts {
+  const extras = JSON.parse(bytes(request.extras).toString("utf8")) as Extras;
+  return extras.contracts ?? NO_CONTRACTS;
 }
 
 /** The Aztec execution payload a checked proposal describes (the inverse of {@link toVaultRequest}). */
