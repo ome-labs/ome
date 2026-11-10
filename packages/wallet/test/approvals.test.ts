@@ -1,3 +1,4 @@
+import { computeAuthWitMessageHash } from "@aztec-labs/aztec.js/authorization";
 // A vault transaction is signed as an Ome proposal but executed by Aztec's account entrypoint, so both must hash the
 // payload alike. Approvals tally into the 49-field witness in slot order, which the vault's witness provider serves
 // only for the approved hash.
@@ -14,7 +15,12 @@ import { ExecutionPayload } from "@aztec-labs/stdlib/tx";
 import { buildProposal, checkProposal, tally } from "@ome-labs/wasm";
 import { describe, expect, it } from "vitest";
 
-import { VaultWitnessProvider, fromVaultRequest, toVaultRequest } from "../src/index.ts";
+import {
+  VaultWitnessProvider,
+  fromVaultRequest,
+  toVaultRequest,
+  vaultAuthwits,
+} from "../src/index.ts";
 import { vaultFixture } from "./fixture.ts";
 
 const chainInfo = { chainId: new Fr(31_337n), version: new Fr(1n) };
@@ -100,6 +106,39 @@ describe("vault proposals", () => {
     expect(toVaultRequest(rebuilt)).toEqual(toVaultRequest(exec));
     expect(rebuilt.feePayer).toEqual(exec.feePayer);
     expect(rebuilt.authWitnesses).toEqual(exec.authWitnesses);
+  });
+
+  it("hash authwits as aztec.js does, and round-trip them", async () => {
+    const { input } = await vaultFixture();
+    const exec = await payload();
+    const [transfer] = exec.calls;
+    if (!transfer) throw new Error("no call");
+    // The first call's target may pull another of the vault's tokens.
+    const authwit = {
+      caller: transfer.to,
+      call: new FunctionCall(
+        "",
+        AztecAddress.fromFieldUnsafe(Fr.random()),
+        await FunctionSelector.fromSignature("transfer_to_public((Field),(Field),u128,Field)"),
+        FunctionType.PRIVATE,
+        false,
+        false,
+        [Fr.random(), Fr.random(), new Fr(9n), Fr.random()],
+      ),
+    };
+    const built = buildProposal(input, chain, {
+      ...toVaultRequest(exec, undefined, [authwit]),
+      txNonce: Fr.random().toString(),
+      createdAt: EXPIRES_AT - 3600,
+      expiresAt: EXPIRES_AT,
+      summary: "swap",
+      proposer: 1,
+    });
+    expect(built.authwits).toEqual([
+      (await computeAuthWitMessageHash(authwit, chainInfo)).toString(),
+    ]);
+    const checked = checkProposal(input, chain, built.proposal, built.payload, NOW);
+    expect(vaultAuthwits(checked)).toEqual([authwit]);
   });
 
   it("refuses a utility call, which the entrypoint cannot run", async () => {

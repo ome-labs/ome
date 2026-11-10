@@ -39,9 +39,11 @@ export {
 } from "./vault/keys.ts";
 export {
   type PayloadContracts,
+  type VaultAuthwit,
   fromVaultRequest,
   payloadContracts,
   toVaultRequest,
+  vaultAuthwits,
 } from "./vault/payload.ts";
 export {
   OmeWallet,

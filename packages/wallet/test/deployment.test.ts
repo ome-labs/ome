@@ -35,6 +35,7 @@ describe("deriveVault", () => {
     // An empty proposal (a cancellation) builds only if the manifest and config agree.
     const cancel = {
       calls: [],
+      authwits: [],
       extras: "0x",
       txNonce: Fr.random().toString(),
       createdAt: 1_899_996_400,

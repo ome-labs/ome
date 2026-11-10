@@ -4,7 +4,7 @@ import { AuthWitness } from "@aztec-labs/stdlib/auth-witness";
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import { Capsule, ExecutionPayload, HashedValues } from "@aztec-labs/stdlib/tx";
 import type { HexBytes } from "@ome-labs/api";
-import type { Call, ExecutionRequest } from "@ome-labs/wasm";
+import type { Authwit, Call, ExecutionRequest } from "@ome-labs/wasm";
 
 /**
  * What a payload carries besides the calls: data the PXE needs to execute them but the signatures do not cover. It
@@ -36,6 +36,15 @@ export interface PayloadContracts {
 
 const NO_CONTRACTS: PayloadContracts = { classIds: [], instances: [] };
 
+/**
+ * A private authwit the vault grants with a transaction: `caller` (one of the transaction's call targets) may make
+ * `call` on the vault's behalf. Members sign its message hash beside the transaction's.
+ */
+export interface VaultAuthwit {
+  readonly caller: AztecAddress;
+  readonly call: FunctionCall;
+}
+
 const hex = (bytes: Uint8Array): HexBytes => `0x${Buffer.from(bytes).toString("hex")}`;
 const bytes = (value: HexBytes): Buffer => Buffer.from(value.slice(2), "hex");
 
@@ -46,20 +55,9 @@ const bytes = (value: HexBytes): Buffer => Buffer.from(value.slice(2), "hex");
 export function toVaultRequest(
   payload: ExecutionPayload,
   contracts: PayloadContracts = NO_CONTRACTS,
+  authwits: readonly VaultAuthwit[] = [],
 ): ExecutionRequest {
-  const calls: Call[] = payload.calls.map((call) => {
-    if (call.type === FunctionType.UTILITY)
-      throw new Error(`${call.name} is a utility function; it cannot run through the vault`);
-    return {
-      signature: null,
-      to: call.to.toString(),
-      selector: call.selector.value,
-      kind: call.type === FunctionType.PRIVATE ? "private" : "public",
-      isStatic: call.isStatic,
-      hideMsgSender: call.hideMsgSender,
-      args: call.args.map((arg) => arg.toString()),
-    };
-  });
+  const calls = payload.calls.map(toCall);
   const extras: Extras = {
     v: 0,
     names: payload.calls.map((call) => call.name),
@@ -70,7 +68,45 @@ export function toVaultRequest(
     feePayer: payload.feePayer?.toString() ?? null,
     ...(contracts.classIds.length > 0 || contracts.instances.length > 0 ? { contracts } : {}),
   };
-  return { calls, extras: hex(Buffer.from(JSON.stringify(extras), "utf8")) };
+  return {
+    calls,
+    authwits: authwits.map((a): Authwit => ({ caller: a.caller.toString(), call: toCall(a.call) })),
+    extras: hex(Buffer.from(JSON.stringify(extras), "utf8")),
+  };
+}
+
+function toCall(call: FunctionCall): Call {
+  if (call.type === FunctionType.UTILITY)
+    throw new Error(`${call.name} is a utility function; it cannot run through the vault`);
+  return {
+    signature: null,
+    to: call.to.toString(),
+    selector: call.selector.value,
+    kind: call.type === FunctionType.PRIVATE ? "private" : "public",
+    isStatic: call.isStatic,
+    hideMsgSender: call.hideMsgSender,
+    args: call.args.map((arg) => arg.toString()),
+  };
+}
+
+const fromCall = (call: Call, name = "", returnType?: AbiType) =>
+  new FunctionCall(
+    name,
+    AztecAddress.fromStringUnsafe(call.to),
+    new FunctionSelector(call.selector),
+    call.kind === "private" ? FunctionType.PRIVATE : FunctionType.PUBLIC,
+    call.hideMsgSender,
+    call.isStatic,
+    call.args.map((arg) => Fr.fromString(arg)),
+    returnType,
+  );
+
+/** The authwits a checked request grants (the inverse of {@link toVaultRequest}'s `authwits`). */
+export function vaultAuthwits(request: ExecutionRequest): VaultAuthwit[] {
+  return request.authwits.map((a) => ({
+    caller: AztecAddress.fromStringUnsafe(a.caller),
+    call: fromCall(a.call),
+  }));
 }
 
 /** The contracts a checked request's calls need (see {@link PayloadContracts}). */
@@ -84,18 +120,8 @@ export function fromVaultRequest(request: ExecutionRequest): ExecutionPayload {
   const extras = JSON.parse(bytes(request.extras).toString("utf8")) as Extras;
   if (extras.v !== 0 || extras.names.length !== request.calls.length)
     throw new Error("Unknown or inconsistent payload extras");
-  const calls = request.calls.map(
-    (call, i) =>
-      new FunctionCall(
-        extras.names[i] ?? "",
-        AztecAddress.fromStringUnsafe(call.to),
-        new FunctionSelector(call.selector),
-        call.kind === "private" ? FunctionType.PRIVATE : FunctionType.PUBLIC,
-        call.hideMsgSender,
-        call.isStatic,
-        call.args.map((arg) => Fr.fromString(arg)),
-        extras.returnTypes[i] ?? undefined,
-      ),
+  const calls = request.calls.map((call, i) =>
+    fromCall(call, extras.names[i] ?? "", extras.returnTypes[i] ?? undefined),
   );
   return new ExecutionPayload(
     calls,

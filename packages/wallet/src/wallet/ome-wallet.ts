@@ -2,6 +2,7 @@ import { SchnorrInitializerlessAccountContract } from "@aztec-labs/accounts/schn
 import { createStubSchnorrAccount } from "@aztec-labs/accounts/schnorr/stub";
 import type { Account } from "@aztec-labs/aztec.js/account";
 import { NO_FROM, type NoFrom } from "@aztec-labs/aztec.js/account";
+import { computeAuthWitMessageHash } from "@aztec-labs/aztec.js/authorization";
 import {
   Contract,
   ContractFunctionInteraction,
@@ -36,7 +37,7 @@ import type { GasSettings } from "@aztec-labs/stdlib/gas";
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client";
 import { AppTaggingSecretKind } from "@aztec-labs/stdlib/logs";
 import {
-  type ExecutionPayload,
+  ExecutionPayload,
   SimulationOverrides,
   type TxExecutionRequest,
   type TxReceipt,
@@ -82,7 +83,13 @@ import { readVaultConfig } from "../vault/config.ts";
 import type { VaultDeployment } from "../vault/deployment.ts";
 import { type SimulationFacts, simulationFacts } from "../vault/effects.ts";
 import { thresholdAccountKeys } from "../vault/keys.ts";
-import { type PayloadContracts, fromVaultRequest, toVaultRequest } from "../vault/payload.ts";
+import {
+  type PayloadContracts,
+  type VaultAuthwit,
+  fromVaultRequest,
+  toVaultRequest,
+  vaultAuthwits,
+} from "../vault/payload.ts";
 
 /** Options for {@link OmeWallet.create}. */
 export interface OmeWalletOptions {
@@ -120,6 +127,8 @@ export interface ProposalTerms {
   readonly txNonce?: Fr;
   /** The contracts the calls need, for members who don't have them (see `PayloadContracts`). */
   readonly contracts?: PayloadContracts;
+  /** Private authwits the vault grants with the calls, at most four; each caller must be one of the calls' targets. */
+  readonly authwits?: readonly VaultAuthwit[];
 }
 
 /** A vault transaction and the proposal that describes it. */
@@ -130,6 +139,9 @@ export interface VaultTx {
   readonly txNonce: Fr;
   /** Hash the entrypoint asks the witness for. */
   readonly outerHash: Fr;
+  /** The authwits granted with the calls, and their message hashes in the same order. */
+  readonly authwits: readonly VaultAuthwit[];
+  readonly authwitHashes: readonly Fr[];
   readonly configVersion: number;
   readonly expiresAt: number;
   /** Proposal id. */
@@ -137,8 +149,8 @@ export interface VaultTx {
   /** The proposal and payload as the keeper stores them (`proposals.put`, `payloads.put`). */
   readonly proposal: HexBytes;
   readonly payloadBody: HexBytes;
-  /** What each signer signs. */
-  readonly approvalMessage: string;
+  /** What each signer signs: the transaction's message, then each authwit's. */
+  readonly approvalMessages: readonly string[];
 }
 
 /**
@@ -408,8 +420,8 @@ export class OmeWallet extends BaseWallet {
   }
 
   /**
-   * Builds the proposal for a vault transaction under the vault's current config. The outer hash is computed twice,
-   * by `@ome-labs/wasm` from the calls and by Aztec's own entrypoint code, and must agree.
+   * Builds the proposal for a vault transaction under the vault's current config. The outer hash and each authwit's
+   * message hash are computed twice, by `@ome-labs/wasm` and by Aztec's own code, and must agree.
    */
   async prepareVaultTx(
     vault: AztecAddress,
@@ -418,7 +430,8 @@ export class OmeWallet extends BaseWallet {
   ): Promise<VaultTx> {
     const input = await this.vaultInput(vault);
     const txNonce = terms.txNonce ?? Fr.random();
-    const request = toVaultRequest(payload, terms.contracts);
+    const authwits = terms.authwits ?? [];
+    const request = toVaultRequest(payload, terms.contracts, authwits);
     // Made now, by the clock the deadline uses; a deadline already past (tests do this) is not before it was made.
     const createdAt = Math.min(await this.chainTime(), terms.expiresAt);
     const built = buildProposal(input, await this.chain(), {
@@ -435,19 +448,21 @@ export class OmeWallet extends BaseWallet {
       payload,
       txNonce,
       outerHash,
+      authwits,
+      authwitHashes: await this.#checkAuthwits(authwits, built.authwits),
       configVersion: input.config.version,
       expiresAt: terms.expiresAt,
       id: built.id,
       proposal: built.proposal,
       payloadBody: built.payload,
-      approvalMessage: built.approvalMessage,
+      approvalMessages: built.approvalMessages,
     };
   }
 
   /**
    * The vault transaction a received proposal describes, after `@ome-labs/wasm`'s checks (the payload is the one
-   * referenced and hashes to the outer hash on this vault and chain, the config is current, the deadline has not
-   * passed, fees stay off the vault) and Aztec's own outer hash for the rebuilt payload.
+   * referenced and hashes to the outer hash and authwit hashes on this vault and chain, every authwit's caller is
+   * called, the config is current, the deadline has not passed, fees stay off the vault) and Aztec's own hashes.
    */
   async vaultTxOf(
     vault: AztecAddress,
@@ -466,21 +481,21 @@ export class OmeWallet extends BaseWallet {
     const payload = fromVaultRequest(request);
     const txNonce = Fr.fromString(info.txNonce);
     const outerHash = await this.#checkOuterHash(vault, payload, txNonce, info.outerHash);
+    const authwits = vaultAuthwits(request);
     return {
       vault,
       payload,
       txNonce,
       outerHash,
+      authwits,
+      authwitHashes: await this.#checkAuthwits(authwits, info.authwits),
       configVersion: info.configVersion,
       expiresAt: info.expiresAt,
       id: info.id,
       proposal,
       payloadBody,
-      approvalMessage: approvalMessage(
-        vault.toString(),
-        info.outerHash,
-        info.configVersion,
-        info.expiresAt,
+      approvalMessages: [info.outerHash, ...info.authwits].map((hash) =>
+        approvalMessage(vault.toString(), hash, info.configVersion, info.expiresAt),
       ),
     };
   }
@@ -546,7 +561,8 @@ export class OmeWallet extends BaseWallet {
   }
 
   /**
-   * Tallies `approvals`, and once `k` members approved under the vault's current config, assembles the witness,
+   * Tallies `approvals`, and once `k` members approved under the vault's current config, assembles the witness and
+   * one per authwit (added to the transaction's auth witnesses, where the vault's `verify_private_authwit` finds them),
    * proves and sends the transaction and waits for it to be mined. Approvals collected before a config change are
    * refused here; the contract would refuse them too.
    */
@@ -576,9 +592,29 @@ export class OmeWallet extends BaseWallet {
       tx.outerHash,
       result.witness.map((field) => Fr.fromString(field)),
     );
+    const authwitWitnesses = (result.authwitWitnesses ?? []).map(
+      ({ messageHash, witness }) =>
+        new AuthWitness(
+          Fr.fromString(messageHash),
+          witness.map((field) => Fr.fromString(field)),
+        ),
+    );
+    if (
+      authwitWitnesses.length !== tx.authwitHashes.length ||
+      authwitWitnesses.some((w, i) => !tx.authwitHashes[i]?.equals(w.requestHash))
+    )
+      throw new Error("The tally's authwit witnesses don't match the proposal's authwits");
+    const { payload } = tx;
+    const granted = new ExecutionPayload(
+      payload.calls,
+      [...payload.authWitnesses, ...authwitWitnesses],
+      payload.capsules,
+      payload.extraHashedArgs,
+      payload.feePayer,
+    );
     this.#pinnedNonces.set(tx.vault.toString(), tx.txNonce);
     try {
-      const { receipt } = await this.sendTx(tx.payload, {
+      const { receipt } = await this.sendTx(granted, {
         from: tx.vault,
         fee: options.gasSettings ? { gasSettings: options.gasSettings } : undefined,
       });
@@ -646,6 +682,20 @@ export class OmeWallet extends BaseWallet {
   }
 
   /** Aztec's entrypoint hash for `payload`, which must equal the outer hash the proposal carries. */
+  /** Each authwit's message hash by aztec.js's own `computeAuthWitMessageHash`, which must equal `expected`. */
+  async #checkAuthwits(
+    authwits: readonly VaultAuthwit[],
+    expected: readonly string[],
+  ): Promise<Fr[]> {
+    const chainInfo = await this.getChainInfo();
+    const hashes = await Promise.all(
+      authwits.map((intent) => computeAuthWitMessageHash(intent, chainInfo)),
+    );
+    if (hashes.length !== expected.length || hashes.some((h, i) => h.toString() !== expected[i]))
+      throw new VaultTxError("outer-hash", "Aztec computes other authwit hashes than the proposal");
+    return hashes;
+  }
+
   async #checkOuterHash(
     vault: AztecAddress,
     payload: ExecutionPayload,
