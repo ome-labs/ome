@@ -14,8 +14,10 @@ How Ome is versioned, built, published and installed, and how to check that what
   published, and a moving Cargo version would rewrite `Cargo.lock` on every release.
 - `@ome-labs/pxe` has its own version, `6.0.0-ome.N` ([pxe-integration.md](pxe-integration.md)), and is published only
   when that version is new.
-- Protocol `v0` is frozen from the first release: wire formats, the contract and sealed files change only with a
-  migration.
+- Protocol `v0` is frozen from 0.2.0: wire formats, the contract and sealed files change only with a new protocol
+  version (`ome-wire`'s `version.rs`) or a migration. 0.1.0 wrote an earlier `v0` (before approvals carried one
+  signature per authwit, proposals their authwits, and lobbies their members' accounts); it had no vaults in use, so
+  0.2.0 replaced it rather than adding a version. A 0.1.0 member can't read a 0.2.0 member's proposals or votes.
 
 ## What a release publishes
 
