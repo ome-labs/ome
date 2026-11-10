@@ -87,12 +87,20 @@ message hash = Poseidon2(AUTHWIT_OUTER, [call.to, chain_id, rollup_version, inne
 This is aztec.js's `computeAuthWitMessageHash({ caller, call })`; `tests/payload.rs` checks it against
 `tests/vectors/payload.json`, computed with `@aztec-labs/aztec.js` 6.0.0. An authwit is refused when:
 
-- its caller is zero, or is not the target of one of the transaction's calls (so it is usable only inside the flow
-  the members approve);
-- its caller is the vault (the vault's own calls need no authwit);
+- the transaction has no calls to use it;
+- its caller is zero, or is the vault (the vault's own calls need no authwit);
 - its call is public (a public authwit lives in the auth registry, set by a call of the transaction itself) or its
   consumer is the vault;
 - there are more than four.
+
+**Decision (phase 22): the transaction's use of an authwit is checked by simulation, not by the calls.** The caller
+an authwit names is the contract the consumer sees as its caller, which may sit behind another contract (an AMM behind
+a router), so no rule over the calls alone can tell whether the transaction uses it. Each member's daemon reads its own
+simulation instead: every point where a contract asks the vault `verify_private_authwit`, with the asking contract (the
+consumer) and the hash of what it asked. A proposal whose simulation never asks for one of its authwits is refused
+when it is made, fails review (`unusedAuthwit`), and is never approved by a daemon that can't simulate it. The
+protocol keeps only the rules above as its floor; a member who signs without a simulation (the phone) relies on its
+own daemon's.
 
 The witness of each authwit is built from the same `k` approvals and added to the transaction's auth witnesses, where
 the PXE finds it when the consumer asks.

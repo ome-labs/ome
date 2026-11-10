@@ -121,9 +121,9 @@ The phone **verifies itself**:
 
 - the manifest against the config (`Vault::from_manifest`): signer set, thresholds and committee agree;
 - the proposal (`check_proposal`): the payload is the one referenced, the calls hash to the outer hash on this vault
-  and chain and its authwits to their hashes (each caller one of the calls), the config version is current, the
-  deadline has not passed, fees stay off the vault. The review lists each authwit (`AuthwitView`: the caller and the
-  call it may make), and the approval signs every one;
+  and chain and its authwits to their hashes, the config version is current, the deadline has not passed, fees stay
+  off the vault. The review lists each authwit (`AuthwitView`: the caller and the call it may make), and the approval
+  signs every one;
 - every call's function signature against its selector, and the arguments decoded by the signature's types
   (`payload::arguments`);
 - that the phone's signing key holds a slot in the vault;
@@ -137,7 +137,8 @@ The phone **trusts the member's own keeper and daemon** for:
 
 - that the config is the current one (only a PXE reads the config note);
 - labels it has not pinned, shown as claimed;
-- the simulation result;
+- the simulation result, including that the transaction uses every authwit it grants (the daemon forwards nothing
+  else for review, and refuses to make or approve a proposal with an unused one);
 - for a rotation, that it is the one this member's keeper reshared.
 
 A lying keeper or daemon can make the phone refuse a valid proposal or show a wrong claimed label. It cannot make the

@@ -149,14 +149,22 @@ Times are Unix seconds, and hex values are typed.
 | aztec      | `aztec.aliases`, `aztec.alias`: `aztec-wallet`'s aliases, the only names for addresses (Ome keeps no address book)                                                                    |
 | membership | `membership.request`, `membership.plan`, `membership.begin`, `membership.get`, `membership.list`, `membership.swapSigner`                                                             |
 | devices    | `devices.pair`, `devices.list`, `devices.revoke`, `devices.enroll`, `devices.forward`                                                                                                 |
+| apps       | `apps.list`, `apps.allow`, `apps.revoke`, `apps.call`                                                                                                                                 |
 
 - `proposals.approve` and `proposals.reject` take an optional `secret`, which unseals a locked signer for that one
   call.
+- **Apps** (`architecture/daemon.md`, App connections): `apps.allow { origin, vault, name? }` → `AppView { origin,
+  vault, name, allowedAt }` (an origin is `http(s)://host[:port]`), `apps.revoke { origin }`, `apps.list`.
+  `apps.call { origin, method, args }` → `{ result }` answers one aztec.js `Wallet` call, its arguments and result in
+  aztec.js's JSON encoding; it needs `settings.appsEnabled` (`config.set { appsEnabled }`) and an allowed origin.
 - An `Intent` is one of:
   - `transfer { token, to, amount, memo }`;
   - `calls { calls: [{ to, fn, args }], authwits?: [{ caller, call: { to, fn, args } }], memo }`, 1 to
-    `limits.maxCalls` calls; `args` are `AbiValue`s, one per parameter. Each authwit lets `caller`, one of the calls'
-    targets, make its private `call` on the vault's behalf inside this transaction, at most `limits.maxAuthwits`;
+    `limits.maxCalls` calls; `args` are `AbiValue`s, one per parameter. Each authwit lets `caller`, a contract the
+    transaction reaches, make its private `call` on the vault's behalf once, at most `limits.maxAuthwits`; the
+    transaction must use it (an unused one is refused, `unusedAuthwit`);
+  - `app { origin, name, memo }`: a transaction an allowed app sent (`apps.call`); its calls are the app's, from the
+    payload. It is made only through the app's connection, never with `proposals.create`;
   - `cancel { cancels, memo }`;
   - `setThreshold { threshold, memo }`: the vault's `set_threshold`, from 1 to the member count and not the current
     value;
@@ -198,7 +206,8 @@ Times are Unix seconds, and hex values are typed.
   - `ReviewError { failure, message }`, `failure.kind` one of `payloadMismatch`, `configChanged { made, current }`,
     `expired { at }`, `artifactMissing { classId }`, `notMember`, `feeOnVault`, `invalid`.
   - `SimulationError { failure, message }`, `failure.kind` one of `insufficientBalance { token, contract }`,
-    `authwitRequired { contract }`, `nonceUsed`, `reverted { contract, function }` (the message is the contract's own),
+    `authwitRequired { contract }`, `unusedAuthwit { index, contract }` (the proposal grants an authwit the
+    transaction never asks for), `nonceUsed`, `reverted { contract, function }` (the message is the contract's own),
     `unavailable` (node, keepers or prover not ready).
   - `GovernanceChange`: `threshold { before, after, members, warnings }`, the warnings being the policy warnings of the
     new shape (`single-signer`, `no-spare-signer`, `two-can-read`, `no-spare-viewer`), or `invalidatePending { version
@@ -270,6 +279,8 @@ changes on every restart); `n` counts up from 1 within it. The daemon keeps the 
 | `memberChanged`                              | who is in the vault                                          | `vault.details`, `vault.peers`, `status`                        |
 | `rotation`                                   | a rotation advanced                                          | `membership.get`, `membership.list`                             |
 | `handshakeAdvised`                           | counterparties should handshake again                        | `vault.counterparties`                                          |
+| `appConnect { origin }`                      | an app the member hasn't allowed asked to connect            | `apps.list`                                                     |
+| `appRequest { origin, vault, proposal }`     | an app's transaction is now a proposal                       | `proposals.get`, `proposals.review`                             |
 
 Proposal events come from the keeper's `proposal`, `payload`, `approval`, `rejection` and `receipt` events, which the
 keeper raises for what this member stores and for what members' keepers replicate alike. A proposal whose payload

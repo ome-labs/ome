@@ -83,7 +83,8 @@ A compromised proposer or front end therefore can't get a member's signature on:
 - a proposal that pays fees from the vault in public;
 - a rotation that leaves the vault unreadable or keeps removed members' shares valid;
 - a rotation that also moves funds, or grants an authwit;
-- an authwit other than the ones the payload describes, or one granted to a contract the transaction doesn't call;
+- an authwit other than the ones the payload describes, or one granted to or consumed by the vault (whether the
+  transaction uses an authwit is the member's daemon's check, from its simulation: `architecture/protocol.md`);
 - a signer swap that changes anything but one key.
 
 **Fee payers in a rotation.** A sponsored fee payer is paid through a call in the vault's own payload, so a rotation

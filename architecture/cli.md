@@ -21,7 +21,7 @@ signer stays sealed in the daemon, and viewing shares stay in the keeper.
 ## The command tree
 
 ```text
-SET UP      init · status · fees · doctor · config get|set|unset · profile list|show|use|rename|remove
+SET UP      init · status · fees · doctor · config get|set|unset (apps on|off, …) · profile list|show|use|rename|remove
             daemon start|stop|restart|logs · keeper status|connect|use-local|logs · completions <shell>
 SIGNER      unlock [--for 15m] [--touch-id] · lock · signer status|touch-id on|off|passphrase
 VAULTS      vault create|join|list|show|use|alias|rename|members|peers|health|audit|receive|balance|retire
@@ -37,6 +37,7 @@ PROPOSALS   propose transfer <amount> <token> <to> | call <fn> -ca <contract> [-
             (each with --memo, --expires 24h, --dry-run)
             proposals [--status open|ready|needs-me|done|all] · proposal list|show|review|approve|reject|execute
             approve <proposal> · reject <proposal> [--reason] · execute <proposal> [--no-wait] [--force]
+APPS        apps list · apps allow <origin> [--name] · apps revoke <origin>
             fees
 MEMBERS     member request|change|join|status|swap-key
 DEVICES     device pair|list|enroll|forward|revoke
@@ -115,10 +116,15 @@ they use a typed form; anything else is passed as typed. A review of a proposal 
    vault's balance of each tracked token before and after, and a warning when it may change balances the daemon can't
    value; for a threshold change, the before and after and the risks of the new shape;
 2. the calls, as rebuilt;
-3. the checks: the calls hash to the outer hash, the config is current, the deadline, the simulation, and a warning
-   when the recipient's name is the member's own `aztec-wallet` alias, or when it has none;
+3. the checks: the calls hash to the outer hash, the config is current, the deadline, the simulation (which also
+   says when the proposal grants an authwit the transaction never uses), and a warning when the recipient's name is
+   the member's own `aztec-wallet` alias, or when it has none;
 4. the votes so far;
-5. the exact message signed and its formula.
+5. the exact message signed and its formula, and the message for each authwit it grants.
+
+A proposal an app sent says so ("Sent by the app at https://swap.example (Swap), which you allowed"); `ome apps allow`
+lets an app (by web origin) use the current vault, after a question, and says when app connections are still off
+(`ome config set apps on`).
 
 A failed check refuses the approval (rejecting stays possible); a failed simulation is a warning that says why (the
 vault holds too little of a token, a contract wants an authwit, the nonce is spent, or the contract's own message).
@@ -227,15 +233,15 @@ OMET." · "See what the vault holds with `ome balance`."), and the daemon's mess
 
 ## Tests
 
-| Test                                    | What it checks                                                                                                                                                                        |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| unit tests in `src/`                    | parsing, `-ca`, references, amounts, durations, exit codes, secret sources, plain rows                                                                                                |
-| snapshots (`insta`, `src/ui/snapshots`) | the review screen and a table, without colour                                                                                                                                         |
-| `src/watch.rs`                          | the full-screen view rendered on ratatui's test backend                                                                                                                               |
-| `tests/fake_daemon.rs`                  | the binary against a stand-in daemon on the real socket protocol: JSON and plain output, the passphrase coming only from `OME_PASSPHRASE_FILE`, exit codes, ambiguous prefixes        |
-| `scripts/test-cli.ts` (`pnpm test:cli`) | three members through `ome` only against the local network: profiles, founding a 2-of-3 vault, a payment approved by two (with an early execute refused as exit 4), removing a member |
+| Test                                    | What it checks                                                                                                                                                                                                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| unit tests in `src/`                    | parsing, `-ca`, references, amounts, durations, exit codes, secret sources, plain rows                                                                                                                                                                                                                 |
+| snapshots (`insta`, `src/ui/snapshots`) | the review screen and a table, without colour                                                                                                                                                                                                                                                          |
+| `src/watch.rs`                          | the full-screen view rendered on ratatui's test backend                                                                                                                                                                                                                                                |
+| `tests/fake_daemon.rs`                  | the binary against a stand-in daemon on the real socket protocol: JSON and plain output, the passphrase coming only from `OME_PASSPHRASE_FILE`, exit codes, ambiguous prefixes                                                                                                                         |
+| `scripts/test-cli.ts` (`pnpm test:cli`) | three members through `ome` only against the local network: profiles, founding a 2-of-3 vault, a payment approved by two (with an early execute refused as exit 4), a swap through Aztec's AMM granting it an authwit (`--authwit`; the AMM and its liquidity set up with aztec.js), removing a member |
 
-Measured on the local network with fake proofs: `pnpm test:cli`, 4 tests in 47 s.
+Measured on the local network with fake proofs: `pnpm test:cli`, 6 tests in 93 s (the swap's AMM setup 45 s).
 
 ## Not built yet
 

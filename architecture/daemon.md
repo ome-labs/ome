@@ -153,11 +153,13 @@ exits.
     Aztec's encoder encodes it. The payload's extras list the classes the calls run and the instances the node
     doesn't publish (`PayloadContracts`), and the daemon offers those artifacts to its keeper.
   - A `calls` intent may grant `authwits`: `{ caller, call }`, at most `limits.maxAuthwits` (4). Each call is built
-    the same way and must be private, and each caller must be one of the intent's own call targets; the wallet
-    signs their hashes with the transaction (`architecture/protocol.md`). Views, previews and reviews decode each
-    authwit from the payload (a call without a function name decodes by its selector), name its caller as the call
-    it is, and show the hash and the message an approval signs for it. The daemon rebuilds nothing else for them:
-    execution adds each approved authwit's witness through the wallet.
+    the same way and must be private; the wallet signs their hashes with the transaction (`architecture/protocol.md`).
+    Views, previews and reviews decode each authwit from the payload (a call without a function name decodes by its
+    selector), name its caller, and show the hash and the message an approval signs for it. Execution adds each
+    approved authwit's witness through the wallet.
+  - **Authwits must be used.** Making a proposal simulates it: an authwit the transaction never asks the vault about
+    is refused (`unusedAuthwit`), and reviews and previews report one the same way. `approve` of a proposal with
+    authwits simulates it on this device first and refuses unless every authwit is seen used.
   - A cancellation is the fee call alone, under the cancelled proposal's nonce.
   - `setThreshold` and `invalidatePending` call the vault itself; a threshold outside 1 to the member count, or equal
     to the current one, is refused before anything is built. Once a threshold change runs, each member's keeper adopts
@@ -166,7 +168,9 @@ exits.
     observes it when the signers or threshold differ, so no member acts on a stale policy until the next sync.
 
   The wallet builds the proposal, and the daemon stores the payload and the proposal with the keeper, which
-  replicates them. The proposal's summary is the intent as JSON.
+  replicates them. The proposal's summary is the intent as JSON. The simulation made with the proposal also lists
+  every contract it reached, nested calls included, in the payload's extras (`PayloadContracts.addresses`), and their
+  artifacts are offered to the keeper.
 
 - **Views**: built from the keeper's records.
   - Votes are verified against the signer set.
@@ -209,8 +213,10 @@ exits.
 - **A proposal's contracts**: approving needs no artifact (members sign the payload's calls as they are), but decoding,
   simulating and executing do. When a proposal arrives, and before a review or an execution, the daemon makes its
   contracts usable: each class this PXE lacks is fetched through the keeper, recomputed and refused if it doesn't
-  match, then registered; each target's instance comes from the node or from the payload's extras, checked against its
-  address. A class still on its way is announced with `contractAvailable` once it arrives; until then the review's
+  match, then registered; each target's instance (the calls', the authwits' and every contract the proposer's
+  simulation reached) comes from the node or from the payload's extras, checked against its address, with a missing
+  class fetched the same way. A simulation that still meets a contract this PXE doesn't know (`No contract instance
+  found`) fetches it and runs once more. A class still on its way is announced with `contractAvailable` once it arrives; until then the review's
   calls are marked `decoded: false`.
 - **Limits** are in `src/limits.ts` and reported by `daemon.info`.
 
@@ -334,6 +340,32 @@ replace a lost one.
   manifest.
 - The desktop's own key stays in the profile: it may still sign for the member's other vaults.
 
+## App connections
+
+Aztec apps use a vault as an Aztec `Wallet` (`src/apps/`). Off until the member sets `appsEnabled`; then an app is
+answered only once the member allowed its web origin for one vault (`apps.allow`); an app that asks first raises
+`appConnect`.
+
+- **`apps.call`** takes one wallet call in aztec.js's encoding (`jsonStringify` of the arguments), parses it with
+  `WalletSchema`, and answers with `AppWallet`:
+  - `getAccounts` is the vault alone, and `getAddressBook` is empty; reads (`executeUtility`, `getPrivateEvents`) are
+    scoped to the vault; contract and sender registrations go to the vault's PXE;
+  - `simulateTx` builds the vault transaction with the member's fee payer and the app's pending authwits and runs it
+    against the vault preview;
+  - `createAuthWit` takes only a caller and a call (never a bare hash), records it for the app's next transaction,
+    and returns a placeholder witness;
+  - `sendTx` makes an `app` proposal (`{ origin, name }`) of the app's calls without its fee payer or placeholder
+    witnesses, with the pending authwits, emits `appRequest`, executes it here once the members approve, and returns
+    the receipt (or its hash for `NO_WAIT`). Past 15 minutes, or when the members block it or it expires, the call
+    fails naming the proposal, which stays open;
+  - `profileTx` and arbitrary signing are refused.
+- **The app page** (`src/apps/page/`, `page-server.ts`): with `OME_APPS_PORT`, `omed` serves on 127.0.0.1 a page an
+  app loads in an iframe, speaking wallet-sdk 6.0.0's iframe protocol (discovery for an allowed origin, the ECDH key
+  exchange and its verification hash, encrypted calls, pings) with wallet-sdk's own crypto and message types, and
+  forwarding each call to `apps.call`. Its two API routes need the `x-ome-page` header, which a website can't send
+  there cross-origin without a preflight the server never answers. It is a development and test transport: members
+  will connect through a browser extension, a later phase.
+
 ## Background work
 
 Every 15 seconds, for each vault, the daemon reads the config note and hands it to the keeper:
@@ -345,21 +377,29 @@ Every 15 seconds, for each vault, the daemon reads the config note and hands it 
 
 ## Tests
 
-| Test                             | What it checks                                                                                         |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `src/server/server.test.ts`      | the socket: authentication, refused tokens, error kinds and codes, events, `0600`                      |
-| `src/proposals/review.test.ts`   | a payload that rebuilds to another outer hash is reported, and approval refuses it                     |
-| `src/proposals/failures.test.ts` | check and simulation failures map to their kinds, and unknown ones keep their message                  |
-| `src/membership/plan.test.ts`    | plans the rules refuse report why, dealers are members who stay, and a member with no part can't begin |
-| `test/e2e/daemons.test.ts`       | the local-network suite, below                                                                         |
-| `test/e2e/device.test.ts`        | a member's phone on the local network with a real relay, below                                         |
-| `test/e2e/remote-keeper.test.ts` | a member's keeper on their own server, reached over TLS, below                                         |
+| Test                                | What it checks                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `src/server/server.test.ts`         | the socket: authentication, refused tokens, error kinds and codes, events, `0600`                      |
+| `src/proposals/review.test.ts`      | a payload that rebuilds to another outer hash is reported, and approval refuses it                     |
+| `src/proposals/failures.test.ts`    | check and simulation failures map to their kinds, and unknown ones keep their message                  |
+| `src/membership/plan.test.ts`       | plans the rules refuse report why, dealers are members who stay, and a member with no part can't begin |
+| `src/apps/service.test.ts`          | connections off until enabled, only allowed origins, web origins only, unknown wallet methods refused  |
+| `src/apps/page-server.test.ts`      | the page and wallet-sdk's modules are served; its API answers only the page, and forwards calls        |
+| `src/apps/page/wallet-page.test.ts` | wallet-sdk's protocol with its own crypto: discovery, key exchange, encrypted calls, origin isolation  |
+| `test/e2e/daemons.test.ts`          | the local-network suite, below                                                                         |
+| `test/e2e/device.test.ts`           | a member's phone on the local network with a real relay, below                                         |
+| `test/e2e/remote-keeper.test.ts`    | a member's keeper on their own server, reached over TLS, below                                         |
 
 `test/e2e/daemons.test.ts` runs against `aztec start --local-network`. Three, then four, daemons run in one process,
 each with its own keeper process and PXE, all driven through their sockets:
 
 - they found a vault and agree on its address;
 - they pay with two approvals, and a rejection blocks a proposal;
+- a swap through Aztec's AMM under an authwit: an unused authwit is refused, Bob fetches every contract it reaches
+  (the output token included), simulates, and executes it;
+- an app at an allowed origin connects through the app page (discovery, key exchange), sees the vault as its only
+  account, simulates and sends a swap with an authwit; it becomes an `app` proposal Bob reviews, and the app gets the
+  receipt once both approve;
 - a newcomer joins and a member leaves in one rotation;
 - the newcomer reads the vault and its approval counts;
 - the member who left can't see the new balance and retires its share.

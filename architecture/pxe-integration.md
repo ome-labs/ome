@@ -122,8 +122,9 @@ A vault transaction is an Ome proposal.
      so members who lack them can fetch the artifacts (`architecture/daemon.md`, Contracts) and register them after
      checking each class id and address.
 
-   `terms.authwits` lists the private authwits granted with the calls (`{ caller, call }`, the caller one of the
-   calls' targets; `architecture/protocol.md`). They are signed, not extras.
+   `terms.authwits` lists the private authwits granted with the calls (`{ caller, call }`; `architecture/protocol.md`).
+   They are signed, not extras. `PayloadContracts.addresses` lists every contract the proposer's simulation reached,
+   nested calls included, so members register their instances before simulating.
 
    `@ome-labs/wasm` builds the proposal and payload, and computes the outer hash and the authwit hashes in Rust. The
    wallet also computes them with Aztec's own `DefaultAccountEntrypoint` and `computeAuthWitMessageHash`, and refuses
@@ -133,8 +134,7 @@ A vault transaction is an Ome proposal.
    Other members' keepers receive the proposal and fetch the payload by hash.
 3. **Check and approve.** Another member's wallet rebuilds the transaction with `vaultTxOf(vault, proposal,
    payload)`. This runs `checkProposal` (the payload is the one referenced and hashes to the outer hash and authwit
-   hashes, every authwit's caller is called, the config is current, the deadline hasn't passed, fees stay off the
-   vault) and Aztec's hashes again. The member's
+   hashes, the config is current, the deadline hasn't passed, fees stay off the vault) and Aztec's hashes again. The member's
    `UnlockedSigner` approves; the signer runs the same checks itself.
 4. **Execute.** `executeVaultTx(tx, approvals)` steps:
    1. refuse approvals collected under an older config version;
@@ -150,6 +150,12 @@ and the functions a proposal can call on it, built from `ome_vault`'s modules, w
 transaction. The request is built as for Aztec's stub account, whose entrypoint has the same ABI. Calls to the vault
 itself (`rotate_membership`, `set_threshold`) run the vault's real checks, so a rotation the contract would refuse is
 caught at review. The preview class is never deployed; its test pins its selectors to the vault's.
+
+**Authwit use.** `simulationFacts` also lists every contract the private calls ran (`contracts`) and each
+`verify_private_authwit` call into the vault (`authwitChecks`: the asking contract and the args hash of the inner hash
+it asked about). `unusedAuthwits(tx, facts)` recomputes each authwit's inner hash with aztec.js and returns those no
+contract asked about; the vault preview's `verify_private_authwit` accepts without a witness, so the check needs no
+approvals.
 
 **Effects.** `simulationFacts(pxe, vault, result)` (`packages/wallet/src/vault/effects.ts`) reads a simulation's
 private call tree. A call's nullifiers, siloed with its contract, are matched against the vault's notes in the PXE
@@ -239,6 +245,8 @@ metadata leak stays (`architecture/daemon.md`).
 - a proposal travels between keepers, is checked in the other wallet, and pays with two approvals;
 - the vault swaps through Aztec's AMM: the AMM pulls the input under an authwit both members sign with the swap,
   checked in the other wallet, and the output arrives as a private note the vault finds;
+- the vault grants an authwit to a contract it reaches only through a router (`contracts/test_router`, two
+  instances): the simulation shows it used and it executes, while an authwit for another amount shows as unused;
 - one approval, a late proposal and a cancelled nonce are refused;
 - a reshare and a `rotate_membership` proposal (which pays its sponsored fee) take member 3 out:
   - the new committee activates on all three of its keepers;
@@ -247,5 +255,5 @@ metadata leak stays (`architecture/daemon.md`).
   - the newcomer's approval counts;
   - both wallets keep reading the vault in the new epoch.
 
-Measured on Apple Silicon with fake proofs: 9 tests in 63 s, setup included (the AMM's deployment and liquidity
-take most of the added time). `OME_E2E_PROVE=1` proves client-side.
+Measured on Apple Silicon with fake proofs: 10 tests, setup included; the AMM's deployment and liquidity take most of
+the added time. `OME_E2E_PROVE=1` proves client-side.
