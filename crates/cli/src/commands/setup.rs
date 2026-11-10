@@ -6,7 +6,7 @@ use clap::CommandFactory;
 use ome_api::{
     Empty,
     daemon::{
-        ConfigSet, DaemonInfoGet, NodeStatusGet, ProfileCreate, ProfileCreateParams,
+        ConfigSet, DaemonInfoGet, FeesStatusGet, NodeStatusGet, ProfileCreate, ProfileCreateParams,
         ProposalStatus, ProposalsList, RelaysParams, RelaysSet, ServiceStatus, SettingsPatch,
         Status, StatusGet,
     },
@@ -323,6 +323,22 @@ pub(crate) async fn status(ctx: &Ctx) -> Result<()> {
     Ok(())
 }
 
+/// `ome fees`: the fee payer, whose it is, and its Fee Juice, read from the node now.
+pub(crate) async fn fees(ctx: &Ctx) -> Result<()> {
+    let fees = ctx.client().await?.call::<FeesStatusGet>(&Empty {}).await?;
+    if ctx.mode == Mode::Json {
+        return ctx.json(&fees);
+    }
+    ctx.out(&describe::fees(&fees));
+    if !fees.healthy {
+        ctx.warn(&format!(
+            "Executions refuse until the fee payer holds Fee Juice: bridge some to {}.",
+            fees.payer
+        ));
+    }
+    Ok(())
+}
+
 fn services(status: &Status) -> Vec<String> {
     let k = &status.keeper;
     let keeper = match k.status {
@@ -407,7 +423,9 @@ fn services(status: &Status) -> Vec<String> {
             )
         )
     };
-    vec![keeper, node, signer, relays]
+    let mut lines = vec![keeper, node, signer, relays];
+    lines.extend(status.fees.as_ref().map(describe::fees));
+    lines
 }
 
 /// What the member should do next, as a sentence and a command.

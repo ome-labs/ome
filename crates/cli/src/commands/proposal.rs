@@ -4,9 +4,10 @@
 use ome_api::{
     Hex32,
     daemon::{
-        ApproveParams, DaemonEvent, EventEnvelope, ExecutionPhase, Intent, ProposalRef,
-        ProposalStatus, ProposalView, ProposalsApprove, ProposalsExecute, ProposalsList,
-        ProposalsReject, ProposalsReview, RejectParams, Review, TokensList, VaultSummary,
+        ApproveParams, DaemonEvent, EventEnvelope, ExecuteParams, ExecutionPhase, Intent,
+        ProposalRef, ProposalStatus, ProposalView, ProposalsApprove, ProposalsExecute,
+        ProposalsList, ProposalsReject, ProposalsReview, RejectParams, Review, TokensList,
+        VaultSummary,
     },
     keeper::VaultParams,
 };
@@ -108,25 +109,17 @@ pub(crate) async fn show(ctx: &Ctx, arg: ProposalArg) -> Result<()> {
     if let Some(memo) = describe::memo(&p) {
         what.push(format!("memo {}", theme::name(format!("{memo:?}"))));
     }
-    what.push(format!("proposed by {} · {status}", p.proposer.name));
+    what.push(format!(
+        "proposed by {} {} · {status}",
+        p.proposer.name,
+        format::relative(p.created_at)
+    ));
+    if let Some(line) = describe::execution(&p) {
+        what.push(line);
+    }
     ctx.section("What", &what);
     let mut votes = vec![describe::votes(&p)];
-    votes.extend(
-        p.approvals
-            .iter()
-            .map(|v| format!("{} {}", theme::check(v.valid), v.name)),
-    );
-    votes.extend(p.rejections.iter().map(|v| {
-        format!(
-            "{} {}{}",
-            theme::bad("✗"),
-            v.name,
-            v.reason
-                .as_ref()
-                .map(|r| format!(": {r:?}"))
-                .unwrap_or_default()
-        )
-    }));
+    votes.extend(describe::vote_timeline(&p));
     ctx.section("Votes", &votes);
     let mut details = vec![
         format!("expires     {}", format::relative(p.expires_at)),
@@ -352,7 +345,7 @@ fn voted(ctx: &Ctx, view: &ProposalView, verb: &str) -> Result<()> {
         return ctx.json(view);
     }
     let short = format::id(&view.id);
-    let approvals = view.approvals.iter().filter(|v| v.valid).count();
+    let approvals = view.approvals().filter(|v| v.valid).count();
     match view.status {
         ProposalStatus::Ready => {
             ctx.outro(&format!(
@@ -390,7 +383,7 @@ fn phase_label(phase: ExecutionPhase) -> &'static str {
 /// Why a proposal that is not ready cannot execute, and what to do.
 fn not_executable(ctx: &Ctx, p: &ProposalView) -> Error {
     let short = format::id(&p.id);
-    let approvals = p.approvals.iter().filter(|v| v.valid).count();
+    let approvals = p.approvals().filter(|v| v.valid).count();
     let (status, _) = describe::status(p);
     match p.status {
         ProposalStatus::Collecting => Error::new(
@@ -420,9 +413,10 @@ pub(crate) async fn execute(ctx: &Ctx, args: ExecuteArgs) -> Result<()> {
     let mut events = client.events().await?;
     let call = {
         let client = client.clone();
-        let target = ProposalRef {
+        let target = ExecuteParams {
             vault: vault.address,
             id: p.id,
+            force: args.force.then_some(true),
         };
         tokio::spawn(async move { client.call::<ProposalsExecute>(&target).await })
     };
@@ -479,7 +473,7 @@ pub(crate) async fn execute(ctx: &Ctx, args: ExecuteArgs) -> Result<()> {
             return Err(Error::from(error).context(format!("Can't execute {short}")));
         }
     };
-    let hash = view.execution.map(|e| e.tx_hash).or(tx);
+    let hash = view.execution.as_ref().map(|e| e.tx_hash).or(tx);
     step.finish(&format!(
         "Mined  {}  {}",
         hash.map(|h| h.to_string()).unwrap_or_default(),

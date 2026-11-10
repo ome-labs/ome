@@ -5,6 +5,7 @@ expression: "to_text(&render(&review, &review.signs, false))"
 ◇  What happens if it executes
 │  Pay 250 USDC to bob (accounts:bob in aztec-wallet)  0x2b1f…9e04  (250000000 base units)
 │  The vault's USDC: 1,000 → 750
+│  Fee about 0.0012 Fee Juice, at most 0.0018, paid by 0x2d8f…69d3
 │  Memo from Alice: "March rent"
 │  The fee is paid by the sponsored fee payer 0x2d8f…69d3, never by the vault in public
 │

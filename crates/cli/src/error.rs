@@ -265,7 +265,9 @@ fn fix(details: &ErrorDetails) -> Option<String> {
             "Fund the fee payer, or choose another with `ome config`."
         }
         ErrorDetails::Expired { .. } | ErrorDetails::Stale { .. } => "Propose it again.",
-        ErrorDetails::Conflict { .. } => "Wait for it: `ome proposal show` follows it.",
+        ErrorDetails::Conflict { .. } => {
+            "Wait for it (`ome proposal show` follows it), or prove it too with `ome execute --force`."
+        }
         ErrorDetails::Unreadable { .. } => {
             "Ask the other members to start their keepers; `ome vault health` shows who is online."
         }

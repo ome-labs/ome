@@ -63,19 +63,21 @@ fn proposal(id: &str, status: ProposalStatus) -> ProposalView {
         status,
         threshold: 2,
         members: 3,
-        approvals: vec![Vote {
+        votes: vec![Vote {
             slot: 0,
             index: 1,
             name: "Alice".into(),
+            approve: true,
             valid: true,
             reason: None,
+            at: 3_999_900_000,
         }],
-        rejections: vec![],
         my_slot: 1,
         approved_by_me: false,
         rejected_by_me: false,
         config_version: 0,
         current_config_version: 0,
+        created_at: 3_999_900_000,
         expires_at: 4_000_000_000,
         tx_nonce: hex("7"),
         outer_hash: hex("91c3"),
@@ -89,6 +91,7 @@ fn proposal(id: &str, status: ProposalStatus) -> ProposalView {
             decimals: 6,
         }),
         execution: None,
+        executing: None,
         cancelled_by: None,
     }
 }
@@ -111,6 +114,7 @@ fn review(p: ProposalView) -> Review {
             gas: None,
             error: None,
             effects: None,
+            fee: None,
         },
         change: None,
         signs: Signs {

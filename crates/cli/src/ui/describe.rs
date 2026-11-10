@@ -5,8 +5,9 @@ use std::fmt::Write;
 use ome_api::{
     Amount, Hex32,
     daemon::{
-        BalanceChange, Effects, GovernanceChange, Intent, PolicyWarning, ProposalStatus,
-        ProposalView, SimulationError, SimulationFailure, TokenInfo,
+        BalanceChange, DaemonEvent, Effects, ExecutionPhase, FeeEstimate, FeePayerKind, FeesStatus,
+        GovernanceChange, Intent, PolicyWarning, ProposalStatus, ProposalView, SimulationError,
+        SimulationFailure, TokenInfo,
     },
 };
 
@@ -99,10 +100,11 @@ pub(crate) fn memo(p: &ProposalView) -> Option<&str> {
 
 /// `1 of 2 approvals`, with rejections when there are any.
 pub(crate) fn votes(p: &ProposalView) -> String {
-    let approvals = p.approvals.iter().filter(|v| v.valid).count();
+    let approvals = p.approvals().filter(|v| v.valid).count();
     let mut text = format!("{approvals} of {} approvals", p.threshold);
-    if !p.rejections.is_empty() {
-        let _ = write!(text, ", {} rejected", p.rejections.len());
+    let rejected = p.rejections().count();
+    if rejected > 0 {
+        let _ = write!(text, ", {rejected} rejected");
     }
     text
 }
@@ -113,7 +115,7 @@ pub(crate) fn status(p: &ProposalView) -> (String, Tone) {
         ProposalStatus::Collecting => (
             format!(
                 "{}/{}",
-                p.approvals.iter().filter(|v| v.valid).count(),
+                p.approvals().filter(|v| v.valid).count(),
                 p.threshold
             ),
             Tone::Warn,
@@ -212,6 +214,136 @@ pub(crate) fn risk(warning: PolicyWarning, members: u32) -> Risk {
             },
     }
 }
+
+/// Who executed a proposal, or who is executing it now: `executed by Alice 5m ago in block 1,234`.
+pub(crate) fn execution(p: &ProposalView) -> Option<String> {
+    if let Some(e) = &p.execution {
+        let by = e
+            .executor
+            .as_ref()
+            .map_or_else(String::new, |m| format!(" by {}", m.name));
+        let block = e
+            .block
+            .map(|b| format!(" in block {}", format::group_thousands(&b.to_string())))
+            .unwrap_or_default();
+        return Some(format!("executed{by} {}{block}", format::relative(e.at)));
+    }
+    p.executing.as_ref().map(|x| {
+        let who = if x.mine {
+            "you are".to_owned()
+        } else {
+            format!("{} is", x.member.name)
+        };
+        format!(
+            "{} {who} executing it: {} · started {}",
+            theme::caution(),
+            format!("{:?}", x.phase).to_lowercase(),
+            format::relative(x.since)
+        )
+    })
+}
+
+/// Every vote in the order this member's keeper stored them, with when.
+pub(crate) fn vote_timeline(p: &ProposalView) -> Vec<String> {
+    let mut votes: Vec<_> = p.votes.iter().collect();
+    votes.sort_by_key(|v| v.at);
+    votes
+        .into_iter()
+        .map(|v| {
+            let (mark, verb) = if v.approve {
+                (theme::check(v.valid).to_string(), "approved")
+            } else {
+                (theme::bad("✗").to_string(), "rejected")
+            };
+            let reason = v
+                .reason
+                .as_ref()
+                .map(|r| format!(": {r:?}"))
+                .unwrap_or_default();
+            let invalid = if v.valid {
+                ""
+            } else {
+                " (signature does not verify)"
+            };
+            format!(
+                "{mark} {} {verb}{reason}{invalid}  {}",
+                v.name,
+                theme::dim(format::relative(v.at))
+            )
+        })
+        .collect()
+}
+
+/// What a transaction is expected to cost: `fee about 0.0012 Fee Juice, at most 0.0018`.
+pub(crate) fn fee_estimate(estimate: &FeeEstimate) -> String {
+    let units = |amount: &Amount| format::amount(amount.0, FEE_JUICE_DECIMALS);
+    format!(
+        "fee about {} Fee Juice, at most {}, paid by {}",
+        units(&estimate.fee),
+        units(&estimate.max_fee),
+        format::short(&estimate.payer)
+    )
+}
+
+/// The fee payer in one line: `✓ fees     sponsored 0x2d8f…69d3 · 1,000 Fee Juice`.
+pub(crate) fn fees(fees: &FeesStatus) -> String {
+    let kind = match fees.kind {
+        FeePayerKind::Sponsored => "sponsored",
+        FeePayerKind::Own => "your own",
+    };
+    let juice = fees.fee_juice.map_or_else(
+        || "balance unknown".to_owned(),
+        |j| format!("{} Fee Juice", format::amount(j.0, FEE_JUICE_DECIMALS)),
+    );
+    let mark = if fees.healthy {
+        theme::check(true).to_string()
+    } else {
+        theme::check(false).to_string()
+    };
+    format!(
+        "{mark} fees     {kind} {} · {juice}",
+        format::short(&fees.payer)
+    )
+}
+
+/// A line for a lifecycle event worth telling a member who is watching: another member executing, a proposal about to
+/// expire, one that expired or was cancelled.
+pub(crate) fn lifecycle_notice(event: &DaemonEvent) -> Option<String> {
+    match event {
+        DaemonEvent::ProposalExecuting {
+            proposal,
+            summary,
+            by,
+            phase,
+            ..
+        } if !matches!(phase, ExecutionPhase::Mined | ExecutionPhase::Failed) => Some(format!(
+            "{} is executing {} ({}): {summary}",
+            by.name,
+            format::id(proposal),
+            format!("{phase:?}").to_lowercase()
+        )),
+        DaemonEvent::ProposalExpiring {
+            proposal,
+            summary,
+            at,
+            ..
+        } => Some(format!(
+            "{} expires {}: {summary}",
+            format::id(proposal),
+            format::relative(*at)
+        )),
+        DaemonEvent::ProposalExpired {
+            proposal, summary, ..
+        } => Some(format!("{} expired: {summary}", format::id(proposal))),
+        DaemonEvent::ProposalCancelled {
+            proposal, summary, ..
+        } => Some(format!("{} was cancelled: {summary}", format::id(proposal))),
+        _ => None,
+    }
+}
+
+/// Fee Juice, like Ether, has 18 decimals.
+pub(crate) const FEE_JUICE_DECIMALS: u8 = 18;
 
 /// A balance change as people read it: `The vault's OMET: 1,000 → 924.5`.
 pub(crate) fn balance_change(change: &BalanceChange) -> String {
@@ -328,6 +460,42 @@ mod tests {
         });
         assert_eq!(lines[0], "Approvals to spend: 2 of 3 → 3 of 3");
         assert!(lines[1].starts_with("✗ all 3 members must approve"));
+    }
+
+    #[test]
+    fn executions_name_who_ran_them_and_who_is_running_them() {
+        console::set_colors_enabled(false);
+        let mut p = crate::fixtures::proposal();
+        let alice = ome_api::daemon::MemberRef {
+            index: 1,
+            name: "Alice".into(),
+        };
+        p.executing = Some(ome_api::daemon::ExecutionView {
+            member: alice.clone(),
+            phase: ExecutionPhase::Proving,
+            since: format::now() - 40,
+            mine: false,
+        });
+        assert_eq!(
+            execution(&p).unwrap(),
+            "▲ Alice is executing it: proving · started 40s ago"
+        );
+        p.execution = Some(ome_api::daemon::Execution {
+            tx_hash: Hex32([1; 32]),
+            at: format::now() - 300,
+            executor: Some(alice),
+            block: Some(1234),
+        });
+        assert_eq!(
+            execution(&p).unwrap(),
+            "executed by Alice 5m ago in block 1,234"
+        );
+        let notice = lifecycle_notice(&DaemonEvent::ProposalExpired {
+            vault: Hex32([2; 32]),
+            proposal: p.id,
+            summary: "Pay 250 USDC to bob".into(),
+        });
+        assert!(notice.unwrap().ends_with("expired: Pay 250 USDC to bob"));
     }
 
     #[test]

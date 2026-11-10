@@ -28,6 +28,7 @@ pub(crate) async fn run(ctx: &mut Ctx, command: Option<Command>) -> Result<()> {
     match command {
         Command::Init(args) => setup::init(ctx, args).await,
         Command::Status => setup::status(ctx).await,
+        Command::Fees => setup::fees(ctx).await,
         Command::Doctor(args) => setup::doctor(ctx, args).await,
         Command::Config(command) => config::run(ctx, command).await,
         Command::Profile(command) => profile::run(ctx, command).await,

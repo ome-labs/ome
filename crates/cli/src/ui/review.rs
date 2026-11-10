@@ -206,6 +206,13 @@ fn effect(review: &Review, full: &dyn Fn(&ome_api::Hex32) -> String) -> Vec<Stri
         },
     }
     lines.extend(describe::effects(review.simulation.effects.as_ref()));
+    lines.extend(
+        review
+            .simulation
+            .fee
+            .as_ref()
+            .map(|fee| capitalize(&describe::fee_estimate(fee))),
+    );
     if let Some(memo) = describe::memo(p) {
         lines.push(format!(
             "Memo from {}: {}",
@@ -221,7 +228,7 @@ fn effect(review: &Review, full: &dyn Fn(&ome_api::Hex32) -> String) -> Vec<Stri
 
 fn votes(p: &ProposalView) -> Vec<String> {
     let mut lines = vec![describe::votes(p)];
-    for vote in &p.approvals {
+    for vote in p.approvals() {
         lines.push(format!(
             "{} {} approved{}",
             theme::check(vote.valid),
@@ -233,7 +240,7 @@ fn votes(p: &ProposalView) -> Vec<String> {
             }
         ));
     }
-    for vote in &p.rejections {
+    for vote in p.rejections() {
         let reason = vote
             .reason
             .as_ref()

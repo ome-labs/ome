@@ -1002,8 +1002,8 @@ fn entry_key(entry: &ActivityEntry) -> String {
             "{}:{:?}:{}:{}",
             proposal.id,
             proposal.status,
-            proposal.approvals.len(),
-            proposal.rejections.len()
+            proposal.approvals().count(),
+            proposal.rejections().count()
         ),
         ActivityEntry::Received { tx_hash, token, .. } => format!("{tx_hash}:{}", token.address),
     }
@@ -1080,6 +1080,12 @@ pub(crate) async fn activity(ctx: &Ctx, args: ActivityArgs) -> Result<()> {
                 Some(Ok(DaemonEvent::HandshakeAdvised { vault: v, counterparties })) if v == vault.address => {
                     ctx.warn(&format!("{counterparties} counterparties should handshake again: `{}`", ctx.ome("counterparties")));
                     false
+                }
+                Some(Ok(ref event)) if event.vault() == Some(&vault.address) && describe::lifecycle_notice(event).is_some() => {
+                    if ctx.human() && let Some(notice) = describe::lifecycle_notice(event) {
+                        ctx.info(&notice);
+                    }
+                    true
                 }
                 Some(Ok(event)) if event.vault() == Some(&vault.address) => true,
                 Some(_) => false,

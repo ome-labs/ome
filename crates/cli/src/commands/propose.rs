@@ -360,6 +360,7 @@ fn preview_lines(preview: &ProposalPreview, labels: describe::Labels<'_>) -> Vec
         ),
     });
     lines.extend(describe::effects(preview.effects.as_ref()));
+    lines.extend(preview.fee.as_ref().map(describe::fee_estimate));
     lines
 }
 

@@ -156,6 +156,10 @@ pub(crate) async fn run(ctx: &mut Ctx) -> Result<()> {
                     view.message = format!("{counterparties} counterparties should handshake again (ome counterparties)");
                     false
                 }
+                Some(Ok(event)) if event.vault() == Some(&vault.address) && describe::lifecycle_notice(&event).is_some() => {
+                    view.message = describe::lifecycle_notice(&event).unwrap_or_default();
+                    true
+                }
                 // Anything else about this vault changes what the view shows.
                 Some(Ok(event)) if event.vault() == Some(&vault.address) => true,
                 Some(_) => false,
@@ -270,6 +274,7 @@ impl Action {
                     ExecuteArgs {
                         proposal: Some(id.clone()),
                         no_wait: false,
+                        force: false,
                     },
                 )
                 .await
@@ -515,6 +520,7 @@ mod tests {
             },
             vaults: vec![],
             default_vault: None,
+            fees: None,
         }
     }
 

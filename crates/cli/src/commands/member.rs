@@ -365,6 +365,7 @@ async fn follow(
                         crate::args::ExecuteArgs {
                             proposal: Some(id.to_string()),
                             no_wait: false,
+                            force: false,
                         },
                     )
                     .await?;

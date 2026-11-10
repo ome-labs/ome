@@ -3,9 +3,10 @@
 use ome_api::{
     Amount, Hex32,
     daemon::{
-        AbiType, AbiValue, BalanceChange, DecodedArg, DecodedCall, Effects, FunctionKind, Gas,
-        Intent, KnownType, LabelSource, NoteCounts, ProposalStatus, ProposalView, Proposer,
-        Recipient, Review, ReviewChecks, Signs, Simulation, TokenInfo, Visibility, Vote,
+        AbiType, AbiValue, BalanceChange, DecodedArg, DecodedCall, Effects, FeeEstimate,
+        FunctionKind, Gas, Intent, KnownType, LabelSource, NoteCounts, ProposalStatus,
+        ProposalView, Proposer, Recipient, Review, ReviewChecks, Signs, Simulation, TokenInfo,
+        Visibility, Vote,
     },
 };
 
@@ -44,20 +45,22 @@ pub(crate) fn proposal() -> ProposalView {
         status: ProposalStatus::Collecting,
         threshold: 2,
         members: 3,
-        approvals: vec![Vote {
+        votes: vec![Vote {
             slot: 0,
             index: 1,
             name: "Alice".into(),
+            approve: true,
             valid: true,
             reason: None,
+            at: format::now() - 2 * 3600,
         }],
-        rejections: vec![],
         my_slot: 1,
         approved_by_me: false,
         rejected_by_me: false,
         config_version: 4,
         current_config_version: 4,
         // Five hours and twelve minutes from now, with slack for a slow test.
+        created_at: format::now() - 2 * 3600,
         expires_at: format::now() + 5 * 3600 + 12 * 60 + 30,
         tx_nonce: hex("", "7"),
         outer_hash: hex("91c3", "e2a0"),
@@ -93,6 +96,7 @@ pub(crate) fn proposal() -> ProposalView {
         }],
         token: Some(usdc()),
         execution: None,
+        executing: None,
         cancelled_by: None,
     }
 }
@@ -135,6 +139,15 @@ pub(crate) fn review() -> Review {
                     nullified: 2,
                 },
                 complete: true,
+            }),
+            fee: Some(FeeEstimate {
+                gas: Gas {
+                    da: 1024,
+                    l2: 12_840,
+                },
+                fee: Amount(1_200_000_000_000_000),
+                max_fee: Amount(1_800_000_000_000_000),
+                payer: hex("2d8f", "69d3"),
             }),
         },
         change: None,

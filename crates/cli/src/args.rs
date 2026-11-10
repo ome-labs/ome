@@ -128,6 +128,8 @@ pub(crate) enum Command {
     Init(InitArgs),
     /// Profile, daemon, keeper, node, signer, vaults, and the next step.
     Status,
+    /// The fee payer this member trusts and its Fee Juice.
+    Fees,
     /// Check Node, binaries, the node, relays and the keychain.
     Doctor(NodeArgs),
     /// Get, set or unset a setting.
@@ -649,6 +651,9 @@ pub(crate) struct ExecuteArgs {
     /// Return once the transaction is sent, without waiting for its block.
     #[arg(long)]
     pub(crate) no_wait: bool,
+    /// Execute even while another member is: both prove, and only one transaction can land.
+    #[arg(long)]
+    pub(crate) force: bool,
 }
 
 #[derive(Debug, Subcommand)]
