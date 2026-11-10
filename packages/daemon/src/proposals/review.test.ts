@@ -13,6 +13,7 @@ describe("proposals.review", () => {
     const fake = await fakeContext();
     const built = buildProposal({ manifest: fake.manifest, config: fake.config }, CHAIN, {
       calls: [],
+      authwits: [],
       extras: "0x",
       txNonce: Fr.random().toString(),
       createdAt: NOW,

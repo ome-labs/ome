@@ -30,7 +30,11 @@ export function summaryLine(view: ProposalView): string {
     case "calls": {
       if (intent.calls.some((call) => call.fn === ROTATE)) return "Change the vault's members";
       const count = intent.calls.length;
-      return `Make ${count} contract ${count === 1 ? "call" : "calls"}`;
+      const calls = `Make ${count} contract ${count === 1 ? "call" : "calls"}`;
+      const granted = intent.authwits?.length ?? 0;
+      return granted > 0
+        ? `${calls} with ${granted} ${granted === 1 ? "authwit" : "authwits"}`
+        : calls;
     }
     case "cancel":
       return `Cancel proposal ${intent.cancels.slice(2, 6)}`;

@@ -6,6 +6,7 @@ import { MAX_ARTIFACT_BYTES } from "./contracts/artifacts.ts";
 /** An Aztec entrypoint runs 5 calls (`APP_MAX_CALLS`); the fee payer's always takes one. */
 export const LIMITS: Limits = {
   maxCalls: 4,
+  maxAuthwits: 4,
   maxSummaryBytes: 4096,
   maxArtifactBytes: MAX_ARTIFACT_BYTES,
   memoChars: 280,

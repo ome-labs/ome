@@ -1,9 +1,10 @@
 import { Contract } from "@aztec-labs/aztec.js/contracts";
 import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { FunctionType } from "@aztec-labs/stdlib/abi";
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import { type ExecutionPayload, mergeExecutionPayloads } from "@aztec-labs/stdlib/tx";
-import type { Hex32, Intent, IntentCall } from "@ome-labs/api";
-import { vaultArtifact } from "@ome-labs/wallet";
+import type { Hex32, Intent, IntentAuthwit, IntentCall } from "@ome-labs/api";
+import { type VaultAuthwit, vaultArtifact } from "@ome-labs/wallet";
 
 import type { Context } from "../context.ts";
 import { argument } from "../contracts/abi.ts";
@@ -80,6 +81,30 @@ export async function payloadOf(
     default:
       throw new DaemonError("invalid", "unknown intent");
   }
+}
+
+/**
+ * The private authwits an intent grants. Each caller must be one of the intent's own call targets: the vault lets a
+ * contract act for it only inside the transaction that calls that contract.
+ */
+export async function authwitsOf(context: Context, intent: Intent): Promise<VaultAuthwit[]> {
+  if (intent.kind !== "calls") return [];
+  const authwits: readonly IntentAuthwit[] = intent.authwits ?? [];
+  require(authwits.length <=
+    LIMITS.maxAuthwits, `a proposal grants at most ${LIMITS.maxAuthwits} authwits`);
+  const targets = new Set(intent.calls.map((call) => call.to.toLowerCase()));
+  return Promise.all(
+    authwits.map(async ({ caller, call }) => {
+      require(targets.has(
+        caller.toLowerCase(),
+      ), `an authwit's caller ${caller} must be one of the proposal's calls`);
+      const [fn] = (await callPayload(context, call)).calls;
+      if (!fn) throw new DaemonError("invalid", `${call.fn} built no call`);
+      require(fn.type ===
+        FunctionType.PRIVATE, `${call.fn} is not a private function; a private authwit authorizes a private call`);
+      return { caller: AztecAddress.fromStringUnsafe(caller), call: fn };
+    }),
+  );
 }
 
 /** One call, its arguments checked against the function's parameters before Aztec encodes them. */

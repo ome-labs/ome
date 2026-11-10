@@ -57,13 +57,14 @@ export async function decodeCalls(
       const base = {
         to,
         toLabel: to === labels.vault ? labels.vaultName : labelOf(to, labels),
-        fn: call.name,
+        fn: call.name || `function ${call.selector.toString()}`,
         selector: call.selector.toString(),
         kind: call.type === FunctionType.PRIVATE ? ("private" as const) : ("public" as const),
         isStatic: call.isStatic,
       };
       const artifact = await artifactOf(context, to).catch(() => undefined);
       const fn = artifact ? await functionOf(artifact, call) : undefined;
+      if (fn) base.fn = fn.name;
       if (!fn)
         return {
           ...base,
@@ -95,9 +96,9 @@ export async function decodeCalls(
   );
 }
 
-/** The function a call runs: by name, confirmed by its selector. */
+/** The function a call runs: by name, confirmed by its selector; by selector alone for a call without a name. */
 async function functionOf(artifact: ContractArtifact, call: FunctionCall) {
-  for (const fn of artifact.functions.filter((f) => f.name === call.name)) {
+  for (const fn of artifact.functions.filter((f) => !call.name || f.name === call.name)) {
     // oxlint-disable-next-line no-await-in-loop
     const selector = await FunctionSelector.fromNameAndParameters(fn.name, fn.parameters);
     if (selector.equals(call.selector)) return fn;

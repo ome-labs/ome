@@ -31,8 +31,8 @@ import { LIMITS } from "../limits.ts";
 import { requireBalance } from "../vaults/tokens.ts";
 import { effectsOf } from "./effects.ts";
 import { reviewError, simulationError } from "./failures.ts";
-import { intentOf, payloadOf, summaryOf } from "./intents.ts";
-import { type Stored, proposalView, storedProposals } from "./views.ts";
+import { authwitsOf, intentOf, payloadOf, summaryOf } from "./intents.ts";
+import { type Stored, decodeAuthwits, proposalView, storedProposals } from "./views.ts";
 
 /** `rotate_membership(...)`'s selector; its proposals are approved through the membership service. */
 const ROTATE_MEMBERSHIP_SELECTOR = 0xe1071b7c;
@@ -96,14 +96,19 @@ export class ProposalService {
     const wallet = this.#context.wallet();
     const vault = this.#context.vaults.address(params.vault);
     const payload = await payloadOf(this.#context, params.intent, vault);
+    const authwits = await authwitsOf(this.#context, params.intent);
     const contracts = share
-      ? await this.#context.contracts.forProposal(payload.calls.map((call) => call.to))
+      ? await this.#context.contracts.forProposal([
+          ...payload.calls.map((call) => call.to),
+          ...authwits.map((a) => a.call.to),
+        ])
       : undefined;
     return wallet.prepareVaultTx(vault, payload, {
       expiresAt: (await wallet.chainTime()) + params.expiresInHours * 3600,
       summary: summaryOf(params.intent),
       proposer: this.#context.vaults.myIndex(params.vault),
       txNonce,
+      authwits,
       ...(contracts ? { contracts } : {}),
     });
   }
@@ -140,7 +145,7 @@ export class ProposalService {
       );
       return await this.#context.contracts.ensure(
         ref.vault,
-        request.calls.map((call) => call.to),
+        [...request.calls, ...request.authwits.map((a) => a.call)].map((call) => call.to),
         payloadContracts(request),
       );
     } catch {
@@ -154,12 +159,10 @@ export class ProposalService {
    */
   async preview(params: ProposeParams): Promise<ProposalPreview> {
     const tx = await this.#prepare(params);
-    const calls = await decodeCalls(
-      this.#context,
-      tx.payload.calls,
-      await this.#labels(params.vault),
-    );
-    return { calls, ...(await this.#simulate(params.vault, tx)) };
+    const labels = await this.#labels(params.vault);
+    const calls = await decodeCalls(this.#context, tx.payload.calls, labels);
+    const authwits = await decodeAuthwits(this.#context, tx, calls, labels);
+    return { calls, authwits, ...(await this.#simulate(params.vault, tx)) };
   }
 
   /** Simulates `tx` and reads its effects on the vault; a failure becomes a kind with its message. */
@@ -465,6 +468,8 @@ function actionOf(proposal: ProposalView): string {
     case "invalidatePending":
       return "void every approval collected so far";
     case "calls":
-      return `${proposal.calls.length} call(s)`;
+      return proposal.authwits.length > 0
+        ? `${proposal.calls.length} call(s), granting ${proposal.authwits.length} authwit(s)`
+        : `${proposal.calls.length} call(s)`;
   }
 }

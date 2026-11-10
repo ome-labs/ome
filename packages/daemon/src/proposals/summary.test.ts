@@ -28,6 +28,14 @@ describe("summaryLine", () => {
       }) as unknown as ProposalView;
     expect(summaryLine(calls("swap"))).toBe("Make 1 contract call");
     expect(summaryLine(calls("rotate_membership"))).toBe("Change the vault's members");
+    const swap = calls("swap_exact_tokens_for_tokens");
+    const authwit = {
+      caller: hex("22"),
+      call: { to: hex("cc"), fn: "transfer_to_public", args: [] },
+    };
+    expect(
+      summaryLine({ ...swap, intent: { ...swap.intent, authwits: [authwit] } } as ProposalView),
+    ).toBe("Make 1 contract call with 1 authwit");
     expect(
       summaryLine({
         intent: { kind: "cancel", cancels: hex("3e"), memo: null },

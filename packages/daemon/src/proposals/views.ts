@@ -1,5 +1,14 @@
-import type { Hex32, HexBytes, ProposalStatus, ProposalView, TokenInfo, Vote } from "@ome-labs/api";
-import { fromVaultRequest } from "@ome-labs/wallet";
+import type {
+  DecodedAuthwit,
+  DecodedCall,
+  Hex32,
+  HexBytes,
+  ProposalStatus,
+  ProposalView,
+  TokenInfo,
+  Vote,
+} from "@ome-labs/api";
+import { type VaultAuthwit, fromVaultRequest, vaultAuthwits } from "@ome-labs/wallet";
 import {
   type ProposalInfo,
   approvalMessage,
@@ -13,7 +22,7 @@ import {
 } from "@ome-labs/wasm";
 
 import type { Context } from "../context.ts";
-import { decodeCalls } from "../contracts/decode.ts";
+import { type Labels, decodeCalls, labelOf } from "../contracts/decode.ts";
 import { intentOf } from "./intents.ts";
 
 /** Everything stored about one proposal, gathered from the member's keeper. */
@@ -131,6 +140,10 @@ export async function proposalView(
     .filter((v) => v.valid && !approvedSlots.has(v.slot));
 
   let calls: ProposalView["calls"] = [];
+  let authwits: ProposalView["authwits"] = [];
+  const messages = [info.outerHash, ...info.authwits].map((hash) =>
+    approvalMessage(vault, hash, info.configVersion, info.expiresAt),
+  );
   if (stored.payload) {
     try {
       const request = checkProposal(
@@ -140,13 +153,24 @@ export async function proposalView(
         stored.payload,
         Math.min(now, info.expiresAt),
       );
-      calls = await decodeCalls(context, fromVaultRequest(request).calls, {
+      const labels = {
         vault,
         vaultName: record.name,
         tokens,
         names: await context.names(),
         members: context.vaults.memberAccounts(vault),
-      });
+      };
+      calls = await decodeCalls(context, fromVaultRequest(request).calls, labels);
+      authwits = await decodeAuthwits(
+        context,
+        {
+          authwits: vaultAuthwits(request),
+          authwitHashes: info.authwits,
+          approvalMessages: messages,
+        },
+        calls,
+        labels,
+      );
     } catch {
       // A stale proposal no longer checks against the vault; its status says why.
     }
@@ -198,9 +222,10 @@ export async function proposalView(
     expiresAt: info.expiresAt,
     txNonce: info.txNonce,
     outerHash: info.outerHash,
-    approvalMessage: approvalMessage(vault, info.outerHash, info.configVersion, info.expiresAt),
+    approvalMessage: messages[0] ?? info.outerHash,
     feeMethod: info.feeMethod === 0 ? "external" : `method ${info.feeMethod}`,
     calls,
+    authwits,
     token:
       intent.kind === "transfer" ? (tokens.find((t) => t.address === intent.token) ?? null) : null,
     execution: receipt
@@ -221,4 +246,37 @@ export async function proposalView(
       : null,
     cancelledBy,
   };
+}
+
+/**
+ * A proposal's authwits as reviews show them: each call decoded like the transaction's, the caller named as the call
+ * it is (the caller is always one of them), and the hash and message an approval signs for it.
+ */
+export async function decodeAuthwits(
+  context: Context,
+  tx: {
+    readonly authwits: readonly VaultAuthwit[];
+    readonly authwitHashes: readonly { toString(): string }[];
+    readonly approvalMessages: readonly string[];
+  },
+  calls: readonly DecodedCall[],
+  labels: Labels,
+): Promise<DecodedAuthwit[]> {
+  const decoded = await decodeCalls(
+    context,
+    tx.authwits.map((a) => a.call),
+    labels,
+  );
+  return tx.authwits.map((a, i) => {
+    const caller = a.caller.toString().toLowerCase() as Hex32;
+    const call = decoded[i];
+    if (!call) throw new Error("an authwit did not decode");
+    return {
+      caller,
+      callerLabel: calls.find((c) => c.to === caller)?.toLabel ?? labelOf(caller, labels),
+      call,
+      messageHash: (tx.authwitHashes[i]?.toString() ?? "") as Hex32,
+      approvalMessage: (tx.approvalMessages[i + 1] ?? "") as Hex32,
+    };
+  });
 }
