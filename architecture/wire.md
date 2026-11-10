@@ -129,6 +129,19 @@ A keeper keeps a chunk only if it matches the manifest's hash. Neither the manif
 the artifact itself: the daemon recomputes the class id from the reassembled artifact before using it. The messages
 travel on the sync lane, like payloads.
 
+### Payment requests
+
+A payment request is a link a member hands a payer (`vault.request`, `ome request`):
+
+```text
+ome-pay:<vault address>?network=aztec:<L1 chain id>:<rollup version>[&token=<address>][&amount=<base units>][&memo=<text>]
+```
+
+The query is URL-encoded (`application/x-www-form-urlencoded`). `network` is required, so a wallet can refuse a
+request for another network; `amount` is a positive whole number of the token's base units and needs `token`. The
+link carries no secret and registers no sender: a payer's wallet pays with its default non-interactive handshake,
+which every member's daemon finds.
+
 ### Invites
 
 An invite's string form is `ome-invite-v0:` followed by base64url, without padding, of the canonical bytes. Decoding

@@ -172,6 +172,13 @@ three kinds:
 | after a handshake                                                | the handshake's secret, fixed until a new handshake | the same, until the counterparty handshakes again                                                 |
 | constrained self-sends (config notes, for example)               | address-derived, fixed                              | the removed member can see that the vault wrote one, and when                                     |
 
+**Payments from anyone.** A sending wallet's default strategy (`DEFAULT_TAGGING_SECRET_STRATEGY`) is a
+non-interactive handshake: it records an ephemeral key for the vault in the standard HandshakeRegistry. Every
+contract's sync (aztec-nr `do_sync_state`) pages the registry's `get_non_interactive_handshakes(vault)` and derives
+each secret with `get_shared_secrets`, which this patch serves through threshold ECDH, so the vault finds the payment
+without knowing the sender. The registry shows publicly that someone handshook with the vault; that is the payer's
+wallet's choice. Interactive handshakes (no announcement) and address-derived tags still need the sender registered.
+
 **Epoch tagging secret.** The vault's unconstrained self-sends are tagged with
 `epochTaggingSecret(vault, epoch, transcript)` from `ome-protocol`. It is `s · G`, where `s` is a Poseidon2 hash,
 tagged `ome.epoch-tagging.v0`, of the vault, the committee epoch and that epoch's ceremony transcript (the founding

@@ -25,14 +25,14 @@ SET UP      init · status · doctor · config get|set|unset · profile list|sho
             daemon start|stop|restart|logs · keeper status|connect|use-local|logs · completions <shell>
 SIGNER      unlock [--for 15m] [--touch-id] · lock · signer status|touch-id on|off
 VAULTS      vault create|join|list|show|use|alias|members|peers|health|audit|receive|balance|retire
-            balance [token] · activity [--follow] · counterparties
+            balance [token] · activity [--follow] · counterparties · request [amount] [token] [--memo]
             token add|list|remove|deploy-test
             contract add <artifact> <address>|list|remove|functions <contract> [--utility]
 PROPOSALS   propose transfer <amount> <token> <to> | call <fn> -ca <contract> --args … | cancel <proposal>
             | threshold <k> | invalidate
             (call arguments: text, or JSON for lists, structs and booleans: [1,2] {"x":1} true)
             (each with --memo, --expires 24h, --dry-run)
-            proposals [--status open|ready|done|all] · proposal list|show|review|approve|reject|execute
+            proposals [--status open|ready|needs-me|done|all] · proposal list|show|review|approve|reject|execute
             approve <proposal> · reject <proposal> [--reason] · execute <proposal> [--no-wait] [--force]
             fees
 MEMBERS     member request|change|join|status|swap-key
@@ -125,6 +125,10 @@ proposal is made.
 names who executed it and in which block, or who is executing it right now. `ome execute` refuses while another
 member executes the proposal (exit 4, naming them); `--force` proves it anyway, and only one transaction can land.
 Previews and reviews show the expected fee; `ome fees` and `ome status` show the fee payer and its Fee Juice.
+
+`ome balance` shows each token's private and public balance; a private balance that too few keepers can read says
+so with the numbers (`unreadable: 1 of 2 keepers answered`). `ome vault receive` shows the address, a QR code and
+what payments the vault finds; `ome request` prints an `ome-pay:` link and QR code for a payer.
 
 Thresholds that can strand the funds for good (every keeper needed to read, or every key needed to spend: see
 `architecture/recovery.md`) are shown when a vault is created or its members change, and need a deliberate yes

@@ -191,7 +191,23 @@ payer the signer trusts in rotations and the one paired devices are told about.
 
 - `tokens.add` registers a token's instance in the PXE: the one the node publishes, or, for a token whose instance
   was never published, the one its deployment (`deployment`: salt, deployer, and the constructor's admin, name,
-  symbol and decimals) derives, refused if it derives another address.
+  symbol and decimals) derives, refused if it derives another address. A token with its own code (not Aztec's
+  standard `Token` class) is accepted when this member registered its artifact (`contracts.register`) and it has
+  `balance_of_private`, `transfer`, and name, symbol and decimals getters (`private_get_…` or `public_get_…`);
+  otherwise it is refused naming what is missing. `TokenInfo.standard` tells the two apart.
+- `tokens.list` reads each token's **private** balance (the vault's notes, through the keepers) and **public**
+  balance (`balance_of_public`, read from the member's own account, so it shows when the keepers can't answer), each
+  as `known { amount }`, `unreadable { answered, needed }` or `failed { message }`. `unreadable` comes from the
+  keeper's `Unavailable` error, found through the error's `cause` chain or, when Aztec wrapped it, its message
+  (`only 1 of 2 members answered`). A balance already synced reads without the keepers; a new note can't.
+- **Receiving.** Payments are found without registering their sender: a sending wallet's default tagging strategy
+  is a non-interactive handshake through the standard HandshakeRegistry, and every contract's sync asks the
+  registry for the vault's handshakes and derives their secrets through threshold ECDH (`pxe-integration.md`).
+  `aztec-wallet`'s accounts are also registered as senders, for wallets that tag by address. `vault.receiving`
+  reports both and the last payment; `vault.request` builds an `ome-pay:` link (`wire.md`).
+- **Not found:** transfers in a contract this member's PXE doesn't know. Aztec's tags are siloed per contract and the
+  PXE syncs a contract's notes only when it runs one of its functions, so a token must be tracked (or its contract
+  registered and called) before its notes to the vault are found.
 - `vault.activity` lists proposals and **received transfers**: the tracked tokens' private `Transfer` events to the
   vault that its PXE decrypted (through threshold ECDH, like notes), timed by their blocks. The vault's own change is
   not "received".
@@ -205,6 +221,11 @@ payer the signer trusts in rotations and the one paired devices are told about.
   (`registerSender`), at start and with each 15-second sync, so its notes to the vault are found by the tags they
   share with it.
 - `tokens.remove` stops tracking a token.
+- **Paging** (`src/paging.ts`): `proposals.list` (with `filter`: `all`, `open`, `ready`, `done`, `needsMe`),
+  `vault.activity` (with `kinds` and `token`), `vault.audit` and `vault.counterparties` return `{ items, next }`,
+  newest first, at most `limit` (50; 1 to 500). The cursor is the last item's time and id, and the next page holds
+  strictly older items, so new arrivals never shift a page. `status.vaults[].counts` (open, ready, needs my vote) is
+  recounted after proposal and vote events and every sync.
 
 ## Working with aztec-wallet
 

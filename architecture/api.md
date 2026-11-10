@@ -134,21 +134,21 @@ The keeper maps its errors to kinds as follows:
 
 Times are Unix seconds, and hex values are typed.
 
-| Area       | Methods                                                                                                                                           |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| session    | `session.auth`, `events.subscribe`                                                                                                                |
-| daemon     | `daemon.info` (with `apiVersion`), `daemon.stop`, `status`, `profile.create`                                                                      |
-| settings   | `config.get`, `config.set` (a `SettingsPatch`), `relays.set`                                                                                      |
-| signer     | `signer.status`, `signer.unlock` (`Secret` is `{ passphrase }` or `{ key }`), `signer.lock`, `signer.sealingKey`                                  |
-| node       | `node.status`                                                                                                                                     |
-| founding   | `lobby.inspect`, `lobby.create`, `lobby.join`, `lobby.get`, `lobby.list`, `lobby.start`, `lobby.leave`, `founding.begin`, `founding.get`          |
-| vaults     | `vault.list`, `vault.details`, `vault.peers`, `vault.audit`, `vault.activity`, `vault.counterparties`, `vault.alias`, `vault.use`, `vault.retire` |
-| tokens     | `tokens.list`, `tokens.add`, `tokens.remove`, `tokens.deployTest` (local network only)                                                            |
-| proposals  | `proposals.list`, `get`, `preview`, `create`, `review`, `approve`, `reject`, `execute`, `cancel`                                                  |
-| contracts  | `contracts.functions`, `contracts.register`, `contracts.list`, `contracts.remove`                                                                 |
-| aztec      | `aztec.aliases`, `aztec.alias`: `aztec-wallet`'s aliases, the only names for addresses (Ome keeps no address book)                                |
-| membership | `membership.request`, `membership.plan`, `membership.begin`, `membership.get`, `membership.list`, `membership.swapSigner`                         |
-| devices    | `devices.pair`, `devices.list`, `devices.revoke`, `devices.enroll`, `devices.forward`                                                             |
+| Area       | Methods                                                                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| session    | `session.auth`, `events.subscribe`                                                                                                                                                    |
+| daemon     | `daemon.info` (with `apiVersion`), `daemon.stop`, `status`, `profile.create`                                                                                                          |
+| settings   | `config.get`, `config.set` (a `SettingsPatch`), `relays.set`                                                                                                                          |
+| signer     | `signer.status`, `signer.unlock` (`Secret` is `{ passphrase }` or `{ key }`), `signer.lock`, `signer.sealingKey`                                                                      |
+| node       | `node.status`                                                                                                                                                                         |
+| founding   | `lobby.inspect`, `lobby.create`, `lobby.join`, `lobby.get`, `lobby.list`, `lobby.start`, `lobby.leave`, `founding.begin`, `founding.get`                                              |
+| vaults     | `vault.list`, `vault.details`, `vault.peers`, `vault.audit`, `vault.activity`, `vault.counterparties`, `vault.receiving`, `vault.request`, `vault.alias`, `vault.use`, `vault.retire` |
+| tokens     | `tokens.list`, `tokens.add`, `tokens.remove`, `tokens.deployTest` (local network only)                                                                                                |
+| proposals  | `proposals.list`, `get`, `preview`, `create`, `review`, `approve`, `reject`, `execute`, `cancel`                                                                                      |
+| contracts  | `contracts.functions`, `contracts.register`, `contracts.list`, `contracts.remove`                                                                                                     |
+| aztec      | `aztec.aliases`, `aztec.alias`: `aztec-wallet`'s aliases, the only names for addresses (Ome keeps no address book)                                                                    |
+| membership | `membership.request`, `membership.plan`, `membership.begin`, `membership.get`, `membership.list`, `membership.swapSigner`                                                             |
+| devices    | `devices.pair`, `devices.list`, `devices.revoke`, `devices.enroll`, `devices.forward`                                                                                                 |
 
 - `proposals.approve` and `proposals.reject` take an optional `secret`, which unseals a locked signer for that one
   call.
@@ -161,6 +161,15 @@ Times are Unix seconds, and hex values are typed.
     value;
   - `invalidatePending { memo }`: the vault's `invalidate_pending`, which bumps the config version so every approval
     collected so far stops counting.
+- **Balances, receiving and paging** (`architecture/daemon.md`, Tokens and activity):
+  - `TokenBalance { token, private, public }`, each a `BalanceState`: `known { amount }`, `unreadable { answered,
+    needed }` (too few keepers), or `failed { message }`. `TokenInfo.standard` is false for a token with its own code.
+  - `vault.receiving` → `ReceivingStatus { handshakes, senders, lastReceivedAt }`; `vault.request { vault, token?,
+    amount?, memo? }` → `PaymentRequest { uri, vault, network, token, amount, memo }`.
+  - `proposals.list { vault, filter?, limit?, before? }` → `ProposalPage`; `vault.activity { vault, kinds?, token?,
+    limit?, before? }` → `ActivityPage`; `vault.audit` and `vault.counterparties` take `PageParams { vault, limit?,
+    before? }`. Each page is `{ items, next }`, newest first; `next` is null on the last page.
+  - `VaultSummary.counts: ProposalCounts { open, ready, needsMe }`.
 - **Proposal lifecycle** (`architecture/daemon.md`, Proposals):
   - `ProposalView` has `createdAt` (from the proposal itself), `votes: Vote[]` (approvals then valid rejections, each
     `{ slot, index, name, approve, valid, reason, at }`, `at` being when this member's keeper stored it), `execution {
