@@ -1,5 +1,91 @@
 # Changelog
 
+## [0.2.0](https://github.com/ome-labs/ome/compare/v0.1.0...v0.2.0) (2026-11-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **repo:** a 0.1.0 member can't read a 0.2.0 member's proposals or votes. Upgrade every member of a vault together, and make again any proposal left open under 0.1.0. Vaults on chain are unaffected: the contract is unchanged.
+
+### Features
+
+* **api:** an unused authwit fails a proposal's simulation ([4bb052b](https://github.com/ome-labs/ome/commit/4bb052bc63e7106652ed711ecd2ab1307308a587))
+* **api:** app connections, app proposals and their events ([74dc413](https://github.com/ome-labs/ome/commit/74dc4131d413219e5fb09879543507f5f5560337))
+* **api:** authwits on call intents, proposal views and previews ([65956f3](https://github.com/ome-labs/ome/commit/65956f37fafe0829c8f864a35290b3e2f32b5eb3))
+* **api:** balances as states, payment requests and paged lists ([2286e6c](https://github.com/ome-labs/ome/commit/2286e6c4240b3a0fb6f2fd1d58500f7b542d5ab8))
+* **api:** describe simulation effects, failure kinds and threshold changes ([cc81575](https://github.com/ome-labs/ome/commit/cc815759bfef9961974736a8d9f5e6476b3fa654))
+* **api:** error kinds with typed details, and numbered, scoped daemon events ([bb2c406](https://github.com/ome-labs/ome/commit/bb2c4066dd6bb632fd64078ccddae255091fe14f))
+* **api:** member accounts, lobby size and removal, shared names, passphrase and profile methods ([c0474d1](https://github.com/ome-labs/ome/commit/c0474d160dd76c45649f6b97f5f631913ef8ff7a))
+* **api:** proposal times, timed votes, executors, claims and fees ([b0e8f6d](https://github.com/ome-labs/ome/commit/b0e8f6d0098f2bf6bea3c52eec87ff11cb21807a))
+* **api:** typed calls, full ABI types, contracts and artifact methods, and limits ([06b53bb](https://github.com/ome-labs/ome/commit/06b53bbed7afd68858e20cdfd9e101192174c9d2))
+* **cli:** --authwit on ome propose call, and authwits in previews and reviews ([28d7300](https://github.com/ome-labs/ome/commit/28d7300cb9a24a9442f821e7a92133de22419955))
+* **cli:** balances with reasons, payment requests and paged lists ([4042246](https://github.com/ome-labs/ome/commit/40422460333afe8da95ddd4a8670730fae290b7b))
+* **cli:** contract commands, typed call arguments and named arguments in reviews ([b681c57](https://github.com/ome-labs/ome/commit/b681c57b7f01844ae916613d0c59312f9017b617))
+* **client:** numbered daemon events and catch-up on subscribe ([a62204b](https://github.com/ome-labs/ome/commit/a62204bc9abc28010c3cfeccae800dc0861f8bae))
+* **cli:** executing members, forced execution, fees and vote times ([1d925fc](https://github.com/ome-labs/ome/commit/1d925fc75d3599de2aadbddab5743893f6addf5d))
+* **cli:** lobby removal and updates, renames, passphrase change and member accounts ([fba1334](https://github.com/ome-labs/ome/commit/fba1334db60d6ee186381c0afdbe34e77d5ab50a))
+* **cli:** ome apps list|allow|revoke, the apps setting, and app proposals in reviews ([cc35c36](https://github.com/ome-labs/ome/commit/cc35c36049ea98d70110ad5f1381a83e7d6efe1a))
+* **cli:** show balance changes, failure reasons and threshold proposals ([a804c01](https://github.com/ome-labs/ome/commit/a804c012242d64193fd2e15a9988aee604960fbd))
+* **cli:** words, fixes and exit codes for the new error kinds ([6f19bf1](https://github.com/ome-labs/ome/commit/6f19bf1e85710f295d4ee840873f6beb5452db07))
+* **daemon:** allowed apps use a vault as an Aztec wallet; their transactions are proposals ([df45ed7](https://github.com/ome-labs/ome/commit/df45ed727071f2d6e74e603efebec976eeaa9206))
+* **daemon:** an app page on localhost speaking wallet-sdk's iframe protocol ([cf00ed5](https://github.com/ome-labs/ome/commit/cf00ed5fa34fe204dde006a432ca0d51e2b8ce14))
+* **daemon:** balances with reasons, public balances and custom tokens ([b62a90c](https://github.com/ome-labs/ome/commit/b62a90cce25aa121b5173bf565cf6b2495b38dac))
+* **daemon:** execution claims, fee checks and lifecycle events ([877701d](https://github.com/ome-labs/ome/commit/877701d6741fdc8d39fef91f70ec9b7e4b122d42))
+* **daemon:** grant only authwits the transaction uses, confirmed before approving ([b173972](https://github.com/ome-labs/ome/commit/b173972145a6bbb171f32a1f49c2b2c0094c6bd6))
+* **daemon:** member accounts, lobby size and removal, renames, passphrase change and profile delete ([31ea19a](https://github.com/ome-labs/ome/commit/31ea19aae5f171a482d1c94702f0cd11c5885465))
+* **daemon:** members fetch every contract a proposal reaches, nested calls included ([45d73f9](https://github.com/ome-labs/ome/commit/45d73f95f2fb8be2d11345095b21b68b6044f918))
+* **daemon:** numbered, scoped events with replay, and errors with details ([ab3b008](https://github.com/ome-labs/ome/commit/ab3b008a3e82f629963001a478ff1eee71c4e029))
+* **daemon:** payment requests, paged lists and proposal counts ([9a6de63](https://github.com/ome-labs/ome/commit/9a6de6389049b8e56c5a8ff3c318ce9964c646a7))
+* **daemon:** propose, review and execute calls that grant authwits ([8add17c](https://github.com/ome-labs/ome/commit/8add17c45384455c05bd83a398945a969494eafa))
+* **daemon:** register contracts, typed calls, decoded reviews and shared artifacts ([bbdffcc](https://github.com/ome-labs/ome/commit/bbdffcc2f2ddd18fcc64c51bbbf8f37e569e470d))
+* **daemon:** simulation effects, failure kinds and threshold proposals ([7ae9890](https://github.com/ome-labs/ome/commit/7ae9890f530db8175f9489e46da86f0578b9e8d6))
+* **ffi:** show a proposal's authwits on the phone and hold them to its policy ([8671bea](https://github.com/ome-labs/ome/commit/8671bea37b9faf331c65cc6494cc9bf345b1d987))
+* **keeper:** adopt an executed threshold change into the manifest ([1331290](https://github.com/ome-labs/ome/commit/1331290381361e128e8cb55f64d43c494e823fda))
+* **keeper:** lobby size, removal with invite rotation, and replicated names ([5325cf9](https://github.com/ome-labs/ome/commit/5325cf99b41fb12c5127dd931a32f6d02bca3707))
+* **keeper:** sign receipts, replicate execution claims and time votes ([fb9cd31](https://github.com/ome-labs/ome/commit/fb9cd3146011e248b23d00c30e6785e4c585432b))
+* **keeper:** store artifacts by class and fetch them from members in chunks ([bfbaf2a](https://github.com/ome-labs/ome/commit/bfbaf2a0179268aaa32afa64b2efcd287e4e8240))
+* **keeper:** unreadable and full lobbies as error kinds with details ([8dbfffd](https://github.com/ome-labs/ome/commit/8dbfffd104e7c52ec96ce46640db9cdb806ee33d))
+* **keeper:** verify an approval's signature on every authwit the proposal grants ([264f449](https://github.com/ome-labs/ome/commit/264f449d5d4bc9e92cbd71078ba0f47db70b71b4))
+* **protocol:** an authwit's caller may be any contract the transaction reaches ([fc21c40](https://github.com/ome-labs/ome/commit/fc21c40ec6cc2fdac74858c577300814a684dd14))
+* **protocol:** an expired proposal's error carries its deadline ([350751b](https://github.com/ome-labs/ome/commit/350751b36b380149295f2f60ad2d9ab68afe11f7))
+* **protocol:** private authwits granted beside a vault transaction ([fc36c12](https://github.com/ome-labs/ome/commit/fc36c12e66e02c4f54e51e9caf7a5ed83637a013))
+* **protocol:** proposals carry when they were made ([4284733](https://github.com/ome-labs/ome/commit/4284733de6958536022113d62fd6d4e018c015d6))
+* **signer:** re-seal the signing key under a new passphrase ([844183d](https://github.com/ome-labs/ome/commit/844183d188ac70c48689ea0fc4989ecab3e4e461))
+* **signer:** sign every authwit a proposal grants with its approval ([438c400](https://github.com/ome-labs/ome/commit/438c40097971b2126ca70ed6a57d744c8c368d1f))
+* **wallet:** a simulation lists every contract it reaches, and a payload may carry them ([326c43c](https://github.com/ome-labs/ome/commit/326c43c2658e98c0aa550d012e87d28e2d1fe3e7))
+* **wallet:** grant private authwits with a vault transaction ([72763cd](https://github.com/ome-labs/ome/commit/72763cd6e97349295d4561a66f0b7cf615b1e413))
+* **wallet:** payloads name the contracts their calls need ([b20bf69](https://github.com/ome-labs/ome/commit/b20bf693f3018026bfddc8c83629d2884962b55d))
+* **wallet:** read a simulation's effects on the vault's notes ([efae693](https://github.com/ome-labs/ome/commit/efae69369fc935b24cab93710af59349bf2089e1))
+* **wallet:** read from a simulation which authwits the transaction uses ([ae0ce53](https://github.com/ome-labs/ome/commit/ae0ce5376983639b679daa502e019f0829562114))
+* **wallet:** stamp proposals with when they were made ([5941c36](https://github.com/ome-labs/ome/commit/5941c36ed32f40b16ca676b97b242da4f7cc12c5))
+* **wallet:** vault transaction errors carry the API's kind and details ([a8ed10b](https://github.com/ome-labs/ome/commit/a8ed10bb615716cf00ffe8c84fe602232ac5259f))
+* **wasm:** authwits in drafts, checked requests, approvals and the tally ([82c1f8d](https://github.com/ome-labs/ome/commit/82c1f8d8b72d41ad00711bad2b64088ea0535114))
+* **wasm:** expired and stale proposals as error kinds with details ([a534dfa](https://github.com/ome-labs/ome/commit/a534dfad6b097a85a7b7b47ebf09a3698be3c31d))
+* **wire:** approvals with one signature per authwit a proposal grants ([df3c29e](https://github.com/ome-labs/ome/commit/df3c29e44b728d8a2f85bb9b10b24c3ec4ae5be4))
+* **wire:** contract artifacts in chunks under the message limit ([a637d65](https://github.com/ome-labs/ome/commit/a637d65298bec38956a4307eeb38f65d15ff8588))
+* **wire:** member accounts, lobby size, LobbyRemoved and signed renames ([a5e4ff3](https://github.com/ome-labs/ome/commit/a5e4ff3de47a0fcbbb4198f585673ab327c9f96f))
+* **wire:** proposal times, signed execution receipts and execution claims ([4aee311](https://github.com/ome-labs/ome/commit/4aee311b8f1df92cccfb0bcae22f2b2be6ce0423))
+
+
+### Bug fixes
+
+* **cli:** read the current passphrase on every platform, not only macOS ([4e8310a](https://github.com/ome-labs/ome/commit/4e8310a7ff6f30b1530e3d30c1fb5286d40767cc))
+* **daemon:** accept requests as large as an artifact and fail calls on a closed connection ([0aef08e](https://github.com/ome-labs/ome/commit/0aef08ef573998d4efe71dff0bd46b97a7417468))
+* **wallet:** recognise token change notes by UintNote's partial-note hash ([666d093](https://github.com/ome-labs/ome/commit/666d093fdb12cbbd3fe7ce9c8acccee8494beada))
+
+
+### Documentation
+
+* **repo:** authwits checked by simulation, nested contracts, and app connections ([d191d23](https://github.com/ome-labs/ome/commit/d191d23522a648904e7c88955a97621e8d2a495b))
+* **repo:** contracts, typed calls and artifacts between members ([6ddf88c](https://github.com/ome-labs/ome/commit/6ddf88c165f6c03e4def537746671234e50091b6))
+* **repo:** error kinds, details, daemon events and what each makes stale ([16e9b6f](https://github.com/ome-labs/ome/commit/16e9b6f6883529f018064249a20c6cebfe3d4d1f))
+* **repo:** members, lobbies, shared names, passphrase change and profile deletion ([c3ee917](https://github.com/ome-labs/ome/commit/c3ee917566d7b0f6442e117aa5a52531a901fbf8))
+* **repo:** private authwits granted with a vault transaction ([d37d18a](https://github.com/ome-labs/ome/commit/d37d18ab91efa91c57fe6153f8e5de28fa5fb6e3))
+* **repo:** proposal lifecycle, claims, signed receipts and fees ([e72aa45](https://github.com/ome-labs/ome/commit/e72aa45ce5c15284b985a237caaad4d1c2ab6635))
+* **repo:** protocol v0 is frozen from 0.2.0 ([dbda2d6](https://github.com/ome-labs/ome/commit/dbda2d6bbc7acc8a72c7faae80bc5f79d39a9446))
+* **repo:** receiving, balances, custom tokens, paging and ome-pay links ([e7717b3](https://github.com/ome-labs/ome/commit/e7717b3f58e53e45cbb2c79fbe3ac954c2001505))
+* **repo:** simulation effects, failure kinds and threshold changes ([df5205c](https://github.com/ome-labs/ome/commit/df5205c48e8ee3750966b3cbddf5dde1bdabfced))
+
 ## 0.1.0 (2026-11-09)
 
 

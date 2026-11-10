@@ -1,6 +1,6 @@
 {
   "name": "@ome-labs/wasm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Ome's Rust core as WebAssembly for Node and browsers: threshold viewing, proposals, the signer and membership checks",
   "keywords": [
     "aztec",
