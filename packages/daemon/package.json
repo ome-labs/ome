@@ -62,6 +62,7 @@
     "@aztec-labs/kv-store": "catalog:",
     "@aztec-labs/noir-contracts.js": "catalog:",
     "@aztec-labs/stdlib": "catalog:",
+    "@aztec-labs/wallet-sdk": "catalog:",
     "@ome-labs/api": "workspace:*",
     "@ome-labs/wallet": "workspace:*",
     "@ome-labs/wasm": "workspace:*"

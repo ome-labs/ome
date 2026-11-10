@@ -330,6 +330,9 @@ importers:
       '@aztec-labs/stdlib':
         specifier: 'catalog:'
         version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
+      '@aztec-labs/wallet-sdk':
+        specifier: 'catalog:'
+        version: 6.0.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)(zod@4.4.3)
       '@ome-labs/api':
         specifier: workspace:*
         version: link:../api

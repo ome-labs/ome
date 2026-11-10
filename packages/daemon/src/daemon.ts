@@ -25,6 +25,7 @@ import {
 } from "@ome-labs/api";
 import { KeeperClient, OmeWallet } from "@ome-labs/wallet";
 
+import { AppPageServer } from "./apps/page-server.ts";
 import { AppService } from "./apps/service.ts";
 import { accountAddresses, addressNames, walletDir } from "./aztec/aliases.ts";
 import type { Context } from "./context.ts";
@@ -76,6 +77,11 @@ export interface DaemonOptions {
   readonly keeperListen?: readonly string[];
   /** Ends the process once a deleted profile's daemon has stopped (`omed` signals itself; tests do nothing). */
   readonly exit?: () => void;
+  /**
+   * Serves the app page on 127.0.0.1 at this port (0 picks one), a development and test transport for app
+   * connections (`OME_APPS_PORT`). Off when absent.
+   */
+  readonly appsPort?: number;
 }
 
 interface Account {
@@ -114,6 +120,7 @@ export class Daemon implements Context {
   /** The fee payer's last read status, refreshed in the background: `status` never waits on the node. */
   #fees: FeesStatus | null = null;
   #server: DaemonServer | undefined;
+  #appPage: AppPageServer | undefined;
   #sync: NodeJS.Timeout | undefined;
   #core: Promise<void> | undefined;
   #masterKey: Buffer | undefined;
@@ -259,6 +266,8 @@ export class Daemon implements Context {
     );
     await writePrivate(this.paths.token, `${token}\n`);
     await writePrivate(this.paths.addr, `${this.paths.socket}\n`);
+    if (this.#options.appsPort !== undefined)
+      this.#appPage = await AppPageServer.listen(this.#options.appsPort, this.apps);
     if (this.state.file.profile) {
       const key = await this.#keys.read();
       if (key) await this.#startCore(key);
@@ -269,12 +278,18 @@ export class Daemon implements Context {
     clearInterval(this.#sync);
     this.devices.stop();
     await this.#server?.close();
+    await this.#appPage?.close();
     await this.#wallet?.stop();
     await this.keeper.stop();
     this.signer.lock();
     await Promise.all(
       [this.paths.addr, this.paths.token, this.paths.lock].map((p) => rm(p, { force: true })),
     );
+  }
+
+  /** The app page's origin, when `appsPort` serves it. */
+  get appPage(): string | undefined {
+    return this.#appPage?.origin;
   }
 
   info(): DaemonInfo {
