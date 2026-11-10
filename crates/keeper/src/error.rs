@@ -1,4 +1,4 @@
-use ome_api::{ErrorKind, RpcError};
+use ome_api::{ErrorDetails, ErrorKind, RpcError};
 use ome_wire::IdentityPublic;
 
 /// Keeper errors. Messages never contain secret material.
@@ -44,6 +44,12 @@ pub enum Error {
         /// Members that answered with valid partials.
         received: usize,
     },
+    /// The lobby already has as many members as a vault can.
+    #[error("the lobby is full: a vault has at most {members} members")]
+    Full {
+        /// Members it takes.
+        members: usize,
+    },
     /// Invalid input: malformed points, an inconsistent manifest, bad parameters.
     #[error("invalid: {0}")]
     Invalid(String),
@@ -87,9 +93,9 @@ impl Error {
             | Self::Crypto(_)
             | Self::Wire(_)
             | Self::Protocol(_) => ErrorKind::Invalid,
-            Self::RateLimited | Self::Unavailable { .. } | Self::Transport(_) => {
-                ErrorKind::NotReady
-            }
+            Self::Unavailable { .. } => ErrorKind::Unreadable,
+            Self::Full { .. } => ErrorKind::Full,
+            Self::RateLimited | Self::Transport(_) => ErrorKind::NotReady,
             Self::DataDir(_)
             | Self::Unseal(_)
             | Self::MissingSecret(_)
@@ -100,9 +106,30 @@ impl Error {
     }
 }
 
+impl Error {
+    /// The numbers behind the kind, for the kinds that have them.
+    #[must_use]
+    pub fn details(&self) -> Option<ErrorDetails> {
+        let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+        match self {
+            Self::Unavailable { needed, received } => Some(ErrorDetails::Unreadable {
+                answered: count(*received),
+                needed: count(*needed),
+            }),
+            Self::Full { members } => Some(ErrorDetails::Full {
+                members: count(*members),
+            }),
+            _ => None,
+        }
+    }
+}
+
 impl From<Error> for RpcError {
     fn from(error: Error) -> Self {
-        Self::new(error.kind(), error.to_string())
+        match error.details() {
+            Some(details) => Self::detailed(details, error.to_string()),
+            None => Self::new(error.kind(), error.to_string()),
+        }
     }
 }
 

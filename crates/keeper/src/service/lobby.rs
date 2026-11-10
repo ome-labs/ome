@@ -760,7 +760,9 @@ impl Keeper {
             }
         }
         if count > MAX_MEMBERS {
-            return Err(Error::Invalid("the lobby is full".into()));
+            return Err(Error::Full {
+                members: MAX_MEMBERS,
+            });
         }
         let mut record = record.clone();
         match record
