@@ -37,6 +37,8 @@ export interface SimulationFacts {
   /** Return values of the payload's private calls, in order, then of its public calls, in order. */
   readonly privateReturns: bigint[][];
   readonly publicReturns: bigint[][];
+  /** Every contract the private calls run, nested ones included, in first-reached order. */
+  readonly contracts: string[];
 }
 
 /** Every private call of the simulation, depth first. */
@@ -126,5 +128,8 @@ export async function simulationFacts(
   const publicReturns = result
     .getPublicReturnValues()
     .map((values) => (values.values ?? []).map((f) => f.toBigInt()));
-  return { spent, created, noteHashes, nullifiers, privateReturns, publicReturns };
+  const contracts = [
+    ...new Set(all.map((call) => call.publicInputs.callContext.contractAddress.toString())),
+  ];
+  return { spent, created, noteHashes, nullifiers, privateReturns, publicReturns, contracts };
 }

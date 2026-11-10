@@ -30,6 +30,11 @@ interface Extras {
  */
 export interface PayloadContracts {
   readonly classIds: string[];
+  /**
+   * Every contract the proposer's simulation reached, nested calls included, so members register their instances
+   * before simulating. Absent when only the calls' own targets are needed.
+   */
+  readonly addresses?: string[];
   /** `SerializableContractInstance` bytes with the address, as hex, for targets whose instance isn't published. */
   readonly instances: { readonly address: string; readonly instance: HexBytes }[];
 }
@@ -66,7 +71,11 @@ export function toVaultRequest(
     capsules: payload.capsules.map((c) => c.toString()),
     extraHashedArgs: payload.extraHashedArgs.map((h) => hex(h.toBuffer())),
     feePayer: payload.feePayer?.toString() ?? null,
-    ...(contracts.classIds.length > 0 || contracts.instances.length > 0 ? { contracts } : {}),
+    ...(contracts.classIds.length > 0 ||
+    contracts.instances.length > 0 ||
+    (contracts.addresses?.length ?? 0) > 0
+      ? { contracts }
+      : {}),
   };
   return {
     calls,
