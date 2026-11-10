@@ -2,6 +2,7 @@
 //! replication, sync, mailboxes, lobbies, paired devices and peer reachability.
 
 pub(crate) mod artifacts;
+pub(crate) mod capabilities;
 pub(crate) mod ceremonies;
 pub(crate) mod claims;
 pub(crate) mod devices;

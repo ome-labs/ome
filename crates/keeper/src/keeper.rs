@@ -12,7 +12,7 @@ use ome_crypto::threshold::ecdh::AddressSecretShare;
 use ome_net::{Channel, Inbound, Mailbox, Peer, Transport};
 use ome_wire::{
     Header, IdentityPublic, Message, ReplayGuard, SignedMessage, decode, encode,
-    messages::ecdh::EcdhResponse, version::PROTOCOL_VERSION,
+    messages::ecdh::EcdhResponse, version,
 };
 use tokio::sync::{Mutex, broadcast, mpsc};
 
@@ -117,6 +117,8 @@ pub(crate) struct Inner {
     pub(crate) state: Mutex<State>,
     pub(crate) pending: SyncMutex<HashMap<[u8; 16], Waiting>>,
     pub(crate) events: broadcast::Sender<KeeperEvent>,
+    /// The protocol version each vault's messages are signed in (the first one until its members said more).
+    pub(crate) versions: SyncMutex<HashMap<[u8; 32], u16>>,
 }
 
 pub(crate) struct State {
@@ -241,6 +243,7 @@ impl Keeper {
             state: Mutex::new(state),
             pending: SyncMutex::new(HashMap::new()),
             events,
+            versions: SyncMutex::new(HashMap::new()),
         }));
         keeper.load_lobbies()?;
         keeper.load_vaults()?;
@@ -311,7 +314,17 @@ impl Keeper {
             id,
             created_at: self.now(),
         };
-        let message = SignedMessage::sign(&self.0.keys.identity, PROTOCOL_VERSION, header, body)?;
+        // A vault's messages go out in the version all its members speak; anything else (a lobby, a ceremony before
+        // the vault exists) in the first version.
+        let version = self
+            .0
+            .versions
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&scope)
+            .copied()
+            .unwrap_or(version::FIRST.max);
+        let message = SignedMessage::sign(&self.0.keys.identity, version, header, body)?;
         Ok((encode(&message)?, id))
     }
 
@@ -591,5 +604,6 @@ fn is_replicated(body: &Message) -> bool {
             | Message::Rejection(_)
             | Message::ExecutionReceipt(_)
             | Message::NameChange(_)
+            | Message::Capabilities(_)
     )
 }

@@ -241,6 +241,12 @@ impl Keeper {
                 self.on_name(&header, change).await;
                 Ok(())
             }
+            Message::Capabilities(record) => {
+                if record.vault == header.scope {
+                    self.on_capabilities(record).await;
+                }
+                Ok(())
+            }
             _ => Ok(()),
         };
         if let Err(error) = result {

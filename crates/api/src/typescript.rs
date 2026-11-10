@@ -43,6 +43,7 @@ fn types(cfg: &Config) -> Vec<Declared> {
         ErrorDetails, ErrorData, RpcError,
         // Keeper.
         k::KeeperInfo, k::KeeperContact, k::Member, k::Manifest, k::VaultStatus, k::Vault, k::VaultConfig,
+        k::VaultProtocol, k::MemberProtocol, k::ProtocolRange,
         k::Observation, k::Observed, k::Reachability, k::AuditEntry, k::VaultParams, k::SessionParams,
         k::RegisterParams, k::ObserveConfigParams, k::RetireParams, k::AuditParams, k::NewMember, k::CeremonyKind,
         k::CeremonyStatus, k::Failure, k::DkgResult, k::ReshareResult, k::CeremonyResult, k::Ceremony,

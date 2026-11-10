@@ -14,8 +14,8 @@ use ome_api::{
         LobbyList, LobbyOpen, LobbyRemove, LobbyStart, LobbyStatusGet, LobbyUpdate, MailboxPoll,
         NamesList, NamesPut, PayloadsGet, PayloadsPut, PeersStatus, ProposalsGet, ProposalsList,
         ProposalsPut, ReceiptsList, ReceiptsPut, RejectionsList, RejectionsPut, VaultList,
-        VaultObserveConfig, VaultObserveTx, VaultRegister, VaultRetire, VaultStatusGet, VaultSync,
-        VaultUpdateSigners,
+        VaultObserveConfig, VaultObserveTx, VaultProtocolGet, VaultRegister, VaultRetire,
+        VaultStatusGet, VaultSync, VaultUpdateSigners,
     },
 };
 use ome_protocol::vault::Config;
@@ -88,6 +88,7 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
         };
         VaultList => |_| async { Ok(keeper.vaults().await.iter().map(convert::vault).collect()) };
         VaultStatusGet => |p: api::VaultParams| async move { Ok(convert::vault(&keeper.vault(p.vault.0).await?)) };
+        VaultProtocolGet => |p: api::VaultParams| async move { keeper.vault_protocol(p.vault.0).await };
         VaultRegister => |p: api::RegisterParams| async move {
             let manifest = p.manifest.try_into()?;
             Ok(convert::vault(&keeper.register_vault(p.session.0, manifest).await?))

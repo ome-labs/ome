@@ -670,6 +670,40 @@ impl Store {
         })
     }
 
+    /// Stores a member keeper's capabilities record. Returns whether it was new.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn put_capabilities(
+        &self,
+        vault: &[u8; 32],
+        by: &[u8; 32],
+        at: u64,
+        body: &[u8],
+    ) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "INSERT OR IGNORE INTO capabilities (vault, by, at, body) VALUES (?1, ?2, ?3, ?4)",
+                params![vault, by, ts(at), body],
+            )
+            .map(|n| n > 0)
+        })
+    }
+
+    /// Every capabilities record of `vault`, oldest first.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn capabilities(&self, vault: &[u8; 32]) -> Result<Vec<Vec<u8>>> {
+        self.with(|c| {
+            let mut statement =
+                c.prepare("SELECT body FROM capabilities WHERE vault = ?1 ORDER BY at, by")?;
+            statement
+                .query_map(params![vault], |row| row.get(0))?
+                .collect()
+        })
+    }
+
     // --- Lobbies -----------------------------------------------------------------------------------------------------
 
     /// Inserts or replaces a lobby with its role, status and record (JSON).

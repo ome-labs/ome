@@ -128,4 +128,14 @@ pub(super) const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (vault, subject, by, at)
     );
     ",
+    // 7: what each member's keeper speaks in a vault (protocol versions, release); the newest per member counts.
+    "
+    CREATE TABLE capabilities (
+        vault BLOB NOT NULL,
+        by BLOB NOT NULL,
+        at INTEGER NOT NULL,
+        body BLOB NOT NULL,
+        PRIMARY KEY (vault, by, at)
+    );
+    ",
 ];

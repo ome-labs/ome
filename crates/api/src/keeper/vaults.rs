@@ -100,6 +100,35 @@ pub struct Vault {
     pub serving: bool,
 }
 
+/// The protocol a vault's keepers write in, and what each member's keeper speaks.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct VaultProtocol {
+    /// The version every member speaks, which the vault's messages are written in.
+    pub version: u16,
+    /// Each current member, in member order.
+    pub members: Vec<MemberProtocol>,
+}
+
+/// What one member's keeper said it speaks; `None` until its record arrives (it then counts as the first version).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct MemberProtocol {
+    /// Member index.
+    pub member: u32,
+    /// Its keeper's release.
+    pub release: Option<String>,
+    /// The protocol versions it reads and writes.
+    pub versions: Option<ProtocolRange>,
+}
+
+/// An inclusive range of protocol versions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ProtocolRange {
+    /// Oldest.
+    pub min: u16,
+    /// Newest.
+    pub max: u16,
+}
+
 /// The vault's config note, as the daemon read it from the chain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

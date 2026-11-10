@@ -418,6 +418,52 @@ export type VaultConfig = {
 };
 
 /**
+ * The protocol a vault's keepers write in, and what each member's keeper speaks.
+ */
+export type VaultProtocol = {
+  /**
+   * The version every member speaks, which the vault's messages are written in.
+   */
+  version: number;
+  /**
+   * Each current member, in member order.
+   */
+  members: Array<MemberProtocol>;
+};
+
+/**
+ * What one member's keeper said it speaks; `None` until its record arrives (it then counts as the first version).
+ */
+export type MemberProtocol = {
+  /**
+   * Member index.
+   */
+  member: number;
+  /**
+   * Its keeper's release.
+   */
+  release: string | null;
+  /**
+   * The protocol versions it reads and writes.
+   */
+  versions: ProtocolRange | null;
+};
+
+/**
+ * An inclusive range of protocol versions.
+ */
+export type ProtocolRange = {
+  /**
+   * Oldest.
+   */
+  min: number;
+  /**
+   * Newest.
+   */
+  max: number;
+};
+
+/**
  * What an observed config meant to the keeper.
  */
 export type Observation = "current" | "outdated" | "activated" | "removed" | "unknown";
@@ -2538,6 +2584,10 @@ export type CommitteeMember = {
    */
   addresses: Array<string>;
   /**
+   * The release its keeper runs, once its keeper said.
+   */
+  release: string | null;
+  /**
    * Whether it is this member.
    */
   you: boolean;
@@ -2563,6 +2613,10 @@ export type CommitteeView = {
    * Members.
    */
   members: Array<CommitteeMember>;
+  /**
+   * The protocol version the vault's keepers write in: the newest every member's keeper speaks.
+   */
+  protocolVersion: number;
   /**
    * Whether the keeper holds its share.
    */
@@ -5573,6 +5627,7 @@ export interface KeeperMethods {
   "keeper.joinRequest": { params: LobbyMemberParams; result: JoinRequestText };
   "vault.list": { params: Empty; result: Array<Vault> };
   "vault.status": { params: VaultParams; result: Vault };
+  "vault.protocol": { params: VaultParams; result: VaultProtocol };
   "vault.register": { params: RegisterParams; result: Vault };
   "vault.observeConfig": { params: ObserveConfigParams; result: Observed };
   "vault.retire": { params: RetireParams; result: Vault };

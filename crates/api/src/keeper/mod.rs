@@ -35,8 +35,8 @@ pub use records::{
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 pub use vaults::{
-    AuditEntry, KeeperContact, KeeperInfo, Manifest, Member, Observation, Observed, Reachability,
-    Vault, VaultConfig, VaultStatus,
+    AuditEntry, KeeperContact, KeeperInfo, Manifest, Member, MemberProtocol, Observation, Observed,
+    ProtocolRange, Reachability, Vault, VaultConfig, VaultProtocol, VaultStatus,
 };
 
 use crate::{AuthParams, Empty, Hex32, HexBytes, jsonrpc::methods};
@@ -114,6 +114,8 @@ methods! {
     VaultList = "vault.list" (Empty) -> Vec<Vault>;
     /// One vault.
     VaultStatusGet = "vault.status" (VaultParams) -> Vault;
+    /// The protocol version the vault's keepers write in, and each member keeper's release and versions.
+    VaultProtocolGet = "vault.protocol" (VaultParams) -> VaultProtocol;
     /// Registers a founded vault, binding the DKG's share to its manifest.
     VaultRegister = "vault.register" (RegisterParams) -> Vault;
     /// Tells the keeper what the chain says the vault's config is.

@@ -158,11 +158,16 @@ impl Keeper {
                 records.push(decode_body(&body)?);
             }
         }
-        // Names are few: every member gets the current ones, whatever it holds.
+        // Names and capabilities are few: every member gets the current ones, whatever it holds.
         records.extend(
             self.latest_names(*vault)?
                 .into_iter()
                 .map(Message::NameChange),
+        );
+        records.extend(
+            self.latest_capabilities(*vault)?
+                .into_iter()
+                .map(Message::Capabilities),
         );
         records.truncate(MAX_SYNC_RECORDS);
         Ok(records)
@@ -185,6 +190,13 @@ impl Keeper {
                 .collect()
         };
         for vault in due {
+            // This keeper says what it speaks (once per release), and the vault's version follows its members'.
+            if let Err(error) = self.announce_capabilities(vault).await {
+                tracing::debug!(%error, "capabilities not sent");
+            }
+            if let Err(error) = self.refresh_vault_version(vault).await {
+                tracing::debug!(%error, "vault version not refreshed");
+            }
             if let Err(error) = self.sync(vault).await {
                 tracing::debug!(%error, "sync skipped");
             }

@@ -107,6 +107,8 @@ pub struct CommitteeMember {
     pub peer_id: String,
     /// Keeper addresses.
     pub addresses: Vec<String>,
+    /// The release its keeper runs, once its keeper said.
+    pub release: Option<String>,
     /// Whether it is this member.
     pub you: bool,
 }
@@ -123,6 +125,8 @@ pub struct CommitteeView {
     pub group_key: Point,
     /// Members.
     pub members: Vec<CommitteeMember>,
+    /// The protocol version the vault's keepers write in: the newest every member's keeper speaks.
+    pub protocol_version: u16,
     /// Whether the keeper holds its share.
     pub serving: bool,
     /// `active`, `retired` or `removed`.
