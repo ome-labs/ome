@@ -2,16 +2,22 @@
 //
 // - Spent: each private call's nullifiers, siloed with its contract, are matched against the vault's notes in this
 //   PXE (`siloedNullifier`).
-// - Created for the vault: aztec-nr v6 hashes a note as `poseidon2([storage_slot, ...note, owner, randomness],
-//   NOTE_HASH)`; recomputed with the vault as owner, a new note whose hash the call emitted is the vault's (its change),
-//   and any other is someone else's.
+// - Created for the vault: a new note's hash is recomputed with the vault as owner; one the call emitted is the vault's
+//   (its change), and any other is someone else's. aztec-nr v6 hashes a note one of two ways:
+//   - the `#[note]` macro: `poseidon2([storage_slot, ...note, owner, randomness], NOTE_HASH)`;
+//   - `UintNote` (token balances), as a completed partial note: `poseidon2([storage_slot, commitment, value],
+//     NOTE_HASH)` with `commitment = poseidon2([owner, randomness], PARTIAL_NOTE_COMMITMENT)`.
 import { DomainSeparator } from "@aztec-labs/constants";
 import { poseidon2HashWithSeparator } from "@aztec-labs/foundation/crypto/poseidon";
 import type { Fr } from "@aztec-labs/foundation/curves/bn254";
 import type { PXE } from "@aztec-labs/pxe/server";
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import { siloNullifier } from "@aztec-labs/stdlib/hash";
-import type { PrivateCallExecutionResult, TxSimulationResult } from "@aztec-labs/stdlib/tx";
+import type {
+  NoteAndSlot,
+  PrivateCallExecutionResult,
+  TxSimulationResult,
+} from "@aztec-labs/stdlib/tx";
 
 /** One of the vault's notes, as fields: the contract it belongs to and its packed content. */
 export interface VaultNote {
@@ -40,6 +46,33 @@ function calls(root: PrivateCallExecutionResult): PrivateCallExecutionResult[] {
 
 const used = <T>(array: { array: readonly T[]; claimedLength: number }) =>
   array.array.slice(0, array.claimedLength);
+
+/** `DOM_SEP__PARTIAL_NOTE_COMMITMENT` in aztec-nr v6 (`aztec/src/note/partial_note.nr`); not a protocol constant. */
+const PARTIAL_NOTE_COMMITMENT = 568_912_195;
+
+/** The hashes a note would have if `owner` owned it, one per note shape aztec-nr v6 hashes. */
+async function ownedHashes(
+  { note, storageSlot, randomness }: NoteAndSlot,
+  owner: AztecAddress,
+): Promise<string[]> {
+  const hashes = [
+    await poseidon2HashWithSeparator(
+      [storageSlot, ...note.items, owner, randomness],
+      DomainSeparator.NOTE_HASH,
+    ),
+  ];
+  const [value] = note.items;
+  if (note.items.length === 1 && value) {
+    const commitment = await poseidon2HashWithSeparator(
+      [owner, randomness],
+      PARTIAL_NOTE_COMMITMENT,
+    );
+    hashes.push(
+      await poseidon2HashWithSeparator([storageSlot, commitment, value], DomainSeparator.NOTE_HASH),
+    );
+  }
+  return hashes.map((hash) => hash.toString());
+}
 
 export async function simulationFacts(
   pxe: PXE,
@@ -75,17 +108,14 @@ export async function simulationFacts(
         });
     }
 
-    const hashes = new Set(emittedHashes.map((h) => h.value.toString()));
-    for (const { note, storageSlot, randomness } of call.newNotes) {
+    const hashes = new Set<string>(emittedHashes.map((h) => h.value.toString()));
+    for (const note of call.newNotes) {
       // oxlint-disable-next-line no-await-in-loop
-      const hash = await poseidon2HashWithSeparator(
-        [storageSlot, ...note.items, vault, randomness],
-        DomainSeparator.NOTE_HASH,
-      );
-      if (hashes.has(hash.toString()))
+      const owned = await ownedHashes(note, vault);
+      if (owned.some((hash) => hashes.has(hash)))
         created.push({
           contract: contract.toString(),
-          items: note.items.map((f: Fr) => f.toBigInt()),
+          items: note.note.items.map((f: Fr) => f.toBigInt()),
         });
     }
   }
