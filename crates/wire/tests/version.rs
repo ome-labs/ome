@@ -76,3 +76,32 @@ fn a_capabilities_record_verifies_only_as_signed() {
     assert!(Capabilities::sign(&identity, [7; 32], SUPPORTED, String::new(), 10).is_err());
     assert!(Capabilities::sign(&identity, [7; 32], SUPPORTED, "x".repeat(33), 10).is_err());
 }
+
+#[test]
+fn a_pasted_string_in_a_newer_format_asks_for_an_update() {
+    use ome_wire::version::strip_prefix;
+    assert_eq!(
+        strip_prefix("ome-invite-v0:abc", "ome-invite-v0:", "invite"),
+        Ok("abc")
+    );
+    assert_eq!(
+        strip_prefix("ome-invite-v3:abc", "ome-invite-v0:", "invite"),
+        Err(Error::NewerFormat {
+            what: "invite",
+            version: 3
+        })
+    );
+    assert_eq!(
+        strip_prefix("ome-join-v0:abc", "ome-invite-v0:", "invite"),
+        Err(Error::Malformed)
+    );
+    assert_eq!(
+        strip_prefix("ome-invite-vx:abc", "ome-invite-v0:", "invite"),
+        Err(Error::Malformed)
+    );
+    let error = ome_wire::messages::lobby::Invite::decode("ome-invite-v2:AAAA").unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "this invite needs a newer release of Ome (format v2)"
+    );
+}

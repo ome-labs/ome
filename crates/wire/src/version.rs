@@ -110,3 +110,26 @@ pub fn holding_back<K: Clone>(needed: u16, members: &[(K, Option<VersionRange>)]
         .map(|(key, _)| key.clone())
         .collect()
 }
+
+/// The body of a pasted string `text` with `prefix` (`ome-invite-v0:`). A string of the same kind in a newer format
+/// (`ome-invite-v1:`) is refused as needing a newer release, anything else as malformed.
+///
+/// # Errors
+/// [`Error::NewerFormat`] or [`Error::Malformed`].
+pub fn strip_prefix<'a>(text: &'a str, prefix: &str, what: &'static str) -> Result<&'a str, Error> {
+    if let Some(body) = text.strip_prefix(prefix) {
+        return Ok(body);
+    }
+    // `ome-invite-v0:` → `ome-invite-v`, then the version up to `:`.
+    let stem = prefix
+        .trim_end_matches(':')
+        .trim_end_matches(|c: char| c.is_ascii_digit());
+    let newer = text
+        .strip_prefix(stem)
+        .and_then(|rest| rest.split_once(':'))
+        .and_then(|(version, _)| version.parse::<u16>().ok());
+    match newer {
+        Some(version) => Err(Error::NewerFormat { what, version }),
+        None => Err(Error::Malformed),
+    }
+}

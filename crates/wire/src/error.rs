@@ -39,6 +39,14 @@ pub enum Error {
     /// The message timestamp is outside the accepted window.
     #[error("stale or future message")]
     Stale,
+    /// A pasted string (an invite, a join request, a pairing offer) is in a newer format than this build reads.
+    #[error("this {what} needs a newer release of Ome (format v{version})")]
+    NewerFormat {
+        /// What it is.
+        what: &'static str,
+        /// Its format version.
+        version: u16,
+    },
     /// A record carries a critical extension this build doesn't know: it needs a newer release to be understood.
     #[error("needs a newer release: unknown critical extension {0}")]
     UnknownCriticalExtension(u16),

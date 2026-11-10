@@ -20,7 +20,7 @@ use crate::{
         MAX_SUMMARY_BYTES,
     },
     types::{WireField, WirePoint},
-    version::VersionRange,
+    version::{self, VersionRange},
 };
 
 /// Prefix of a pairing offer's string form.
@@ -116,9 +116,7 @@ impl PairOffer {
         if text.len() > MAX_INVITE_CHARS {
             return Err(Error::TooLarge(text.len()));
         }
-        let body = text
-            .strip_prefix(PAIR_OFFER_PREFIX)
-            .ok_or(Error::Malformed)?;
+        let body = version::strip_prefix(text, PAIR_OFFER_PREFIX, "pairing offer")?;
         let bytes = URL_SAFE_NO_PAD.decode(body).map_err(|_| Error::Malformed)?;
         let offer: Self = from_canonical(&bytes, MAX_INVITE_CHARS)?;
         offer.validate()?;

@@ -166,7 +166,7 @@ impl Invite {
         if text.len() > MAX_INVITE_CHARS {
             return Err(Error::TooLarge(text.len()));
         }
-        let body = text.strip_prefix(INVITE_PREFIX).ok_or(Error::Malformed)?;
+        let body = version::strip_prefix(text, INVITE_PREFIX, "invite")?;
         let bytes = URL_SAFE_NO_PAD.decode(body).map_err(|_| Error::Malformed)?;
         let invite: Self = from_canonical(&bytes, MAX_INVITE_CHARS)?;
         invite.validate()?;
@@ -236,9 +236,7 @@ impl JoinRequest {
         if text.len() > MAX_INVITE_CHARS {
             return Err(Error::TooLarge(text.len()));
         }
-        let body = text
-            .strip_prefix(JOIN_REQUEST_PREFIX)
-            .ok_or(Error::Malformed)?;
+        let body = version::strip_prefix(text, JOIN_REQUEST_PREFIX, "join request")?;
         let bytes = URL_SAFE_NO_PAD.decode(body).map_err(|_| Error::Malformed)?;
         let request: Self = from_canonical(&bytes, MAX_INVITE_CHARS)?;
         request.verify()?;
