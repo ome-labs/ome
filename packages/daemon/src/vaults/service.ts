@@ -8,6 +8,7 @@ import type {
   Manifest,
   MemberReachability,
   MemberRef,
+  ProposalCounts,
   VaultConfig,
   VaultDetails,
   VaultSummary,
@@ -213,6 +214,13 @@ export class VaultService {
     return false;
   }
 
+  /** Each vault's open proposals at a glance, refreshed in the background for `summary`. */
+  readonly #counts = new Map<Hex32, ProposalCounts>();
+
+  setCounts(vault: Hex32, counts: ProposalCounts): void {
+    this.#counts.set(vault, counts);
+  }
+
   /** Member `index` of `vault`, named as this member knows them. */
   memberRef(vault: Hex32, index: number): MemberRef {
     const record = this.record(vault);
@@ -237,6 +245,7 @@ export class VaultService {
       members: manifest?.members.length ?? record.deployment.signerKeys.length,
       myIndex: manifest ? this.myIndex(vault) : 0,
       foundedAt: record.foundedAt,
+      counts: this.#counts.get(record.address) ?? { open: 0, ready: 0, needsMe: 0 },
     };
   }
 

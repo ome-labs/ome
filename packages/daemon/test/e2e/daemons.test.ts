@@ -40,9 +40,7 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
 
   const balance = async (m: Member) => {
     const [entry] = await m.client.call("tokens.list", { vault });
-    return entry?.balance === null || entry?.balance === undefined
-      ? undefined
-      : BigInt(entry.balance);
+    return entry?.private.state === "known" ? BigInt(entry.private.amount) : undefined;
   };
 
   beforeAll(async () => {
@@ -151,10 +149,12 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
         .send({ from: AztecAddress.fromStringUnsafe(bobAccount), fee: bob.daemon.fee() });
       const received = await until(async () => {
         const entries = await alice.client.call("vault.activity", { vault });
-        return entries.find((e) => e.kind === "received" && e.from === bobAccount);
+        return entries.items.find((e) => e.kind === "received" && e.from === bobAccount);
       }, "Bob's transfer in Alice's activity");
       expect(received).toMatchObject({ kind: "received", amount: "10" });
-      const [counterparty] = await alice.client.call("vault.counterparties", { vault });
+      const {
+        items: [counterparty],
+      } = await alice.client.call("vault.counterparties", { vault });
       expect(counterparty).toMatchObject({ address: bobAccount, label: "bob", exposed: false });
 
       await expect(
@@ -171,6 +171,31 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
           },
         }),
       ).rejects.toThrow(/another address/u);
+    });
+
+    it("finds a payment from a sender nobody registered, through its non-interactive handshake", async () => {
+      // Carol is no alias on any member's machine. Her wallet pays with Aztec's default strategy, a non-interactive
+      // handshake, which the vault's sync finds in the handshake registry through threshold ECDH.
+      const aliceAccount = AztecAddress.fromStringUnsafe(
+        (await alice.client.call("status", {})).profile?.account as Hex32,
+      );
+      const carolAccount = (await carol.client.call("status", {})).profile?.account as Hex32;
+      await TokenContract.at(AztecAddress.fromStringUnsafe(token), alice.daemon.wallet())
+        .methods.mint_to_private(AztecAddress.fromStringUnsafe(carolAccount), 50n)
+        .send({ from: aliceAccount, fee: alice.daemon.fee() });
+      await TokenContract.at(AztecAddress.fromStringUnsafe(token), carol.daemon.wallet())
+        .methods.transfer(AztecAddress.fromStringUnsafe(vault), 7n)
+        .send({ from: AztecAddress.fromStringUnsafe(carolAccount), fee: carol.daemon.fee() });
+      const received = await until(
+        async () => {
+          const entries = await bob.client.call("vault.activity", { vault });
+          return entries.items.find((e) => e.kind === "received" && e.from === carolAccount);
+        },
+        "Carol's payment in Bob's activity",
+        240_000,
+        2000,
+      );
+      expect(received).toMatchObject({ kind: "received", amount: "7" });
     });
 
     it("calls a contract only the proposer has: the others fetch its code, review it decoded, and execute it", async () => {
@@ -490,8 +515,8 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
 
       // Bob paid the vault while Carol was a member: she can still tell when he pays it again, so Alice is advised to
       // ask him to handshake with the vault anew.
-      const [exposed] = await alice.client.call("vault.counterparties", { vault });
-      expect(exposed).toMatchObject({ address: bobAccount, exposed: true });
+      const { items } = await alice.client.call("vault.counterparties", { vault });
+      expect(items.find((c) => c.address === bobAccount)).toMatchObject({ exposed: true });
       expect(alice.events.some((e) => e.type === "handshakeAdvised" && e.vault === vault)).toBe(
         true,
       );
@@ -500,12 +525,50 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       // (at most what it knew before she left). She retires the share her keeper kept.
       await carol.client.call("tokens.add", { vault, token }).catch(() => undefined);
       const [carols] = await carol.client.call("tokens.list", { vault }).catch(() => [undefined]);
-      expect(
-        carols?.balance === null ||
-          carols?.balance === undefined ||
-          BigInt(carols.balance) !== after,
-      ).toBe(true);
+      expect(carols?.private.state !== "known" || BigInt(carols.private.amount) !== after).toBe(
+        true,
+      );
       expect(await carol.client.call("vault.retire", { vault })).toEqual([]);
+    });
+  });
+
+  describe("reading", () => {
+    it("pages proposals, filters what needs a vote, and counts it for the vault", async () => {
+      const first = await alice.client.call("proposals.list", { vault, limit: 2 });
+      expect(first.items).toHaveLength(2);
+      expect(first.next).not.toBeNull();
+      const rest = await alice.client.call("proposals.list", {
+        vault,
+        limit: 500,
+        before: first.next ?? undefined,
+      });
+      const all = await alice.client.call("proposals.list", { vault, limit: 500 });
+      expect([...first.items, ...rest.items].map((p) => p.id)).toEqual(all.items.map((p) => p.id));
+      expect(all.items.map((p) => p.createdAt)).toEqual(
+        all.items.map((p) => p.createdAt).toSorted((a, b) => b - a),
+      );
+      const needs = await alice.client.call("proposals.list", { vault, filter: "needsMe" });
+      const summary = (await alice.client.call("status", {})).vaults.find(
+        (v) => v.address === vault,
+      );
+      expect(summary?.counts.needsMe).toBe(needs.items.length);
+      const request = await alice.client.call("vault.request", { vault, token, amount: "25" });
+      expect(request.uri).toMatch(/^ome-pay:0x[0-9a-f]{64}\?network=aztec/u);
+      expect((await alice.client.call("vault.receiving", { vault })).handshakes).toBe(true);
+    });
+
+    it("says how many keepers answered when too few can read, and still shows the public balance", async () => {
+      // Two of the three members' keepers go offline; a new note to the vault then needs t_v = 2 of them to read.
+      await Promise.all([bob, dave].map((m) => m.daemon.keeper.stop()));
+      const aliceAccount = AztecAddress.fromStringUnsafe(
+        (await alice.client.call("status", {})).profile?.account as Hex32,
+      );
+      await TokenContract.at(AztecAddress.fromStringUnsafe(token), alice.daemon.wallet())
+        .methods.mint_to_private(AztecAddress.fromStringUnsafe(vault), 3n)
+        .send({ from: aliceAccount, fee: alice.daemon.fee() });
+      const [read] = (await alice.client.call("tokens.list", { vault })) ?? [];
+      expect(read?.private).toEqual({ state: "unreadable", answered: 1, needed: 2 });
+      expect(read?.public).toEqual({ state: "known", amount: "0" });
     });
   });
 });

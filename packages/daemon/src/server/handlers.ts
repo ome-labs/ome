@@ -10,7 +10,10 @@ import type {
 import { listAliases, setAlias, walletDir } from "../aztec/aliases.ts";
 import type { Daemon } from "../daemon.ts";
 import { DaemonError, require } from "../errors.ts";
+import { page } from "../paging.ts";
+import { matches } from "../proposals/filters.ts";
 import { counterparties, receivedTransfers } from "../vaults/activity.ts";
+import { paymentRequest } from "../vaults/request.ts";
 import { balances, deployTestToken, tokenInfo } from "../vaults/tokens.ts";
 
 type Served = Exclude<DaemonMethod, "session.auth" | "events.subscribe">;
@@ -19,6 +22,8 @@ type Handlers = {
 };
 
 const ALIAS = /^[a-z0-9][a-z0-9_-]{0,31}$/u;
+/** The audit entries a page is cut from: the keeper's most recent. */
+const AUDIT_WINDOW = 10_000;
 const RELAY = /^\/(ip4|ip6|dns4|dns6|dns)\/.+\/p2p\/[1-9A-HJ-NP-Za-km-z]+$/u;
 const HEX32 = /^0x[0-9a-f]{64}$/u;
 
@@ -110,27 +115,60 @@ export const handlers: Handlers = {
   "vault.details": async (d, p) => d.vaults.details(lower(p.vault)),
   "vault.peers": async (d, p) => d.vaults.peers(lower(p.vault)),
   "vault.audit": async (d, p) => {
-    require(p.limit >= 1 && p.limit <= 500, "the limit is 1 to 500");
-    return d.vaults.audit(lower(p.vault), p.limit);
+    // The keeper keeps its most recent entries; entries of the same second are told apart by their order in it.
+    const entries = (await d.vaults.audit(lower(p.vault), AUDIT_WINDOW)).toReversed();
+    const seen = new Map<number, number>();
+    const keyed = entries.map((entry) => {
+      const n = seen.get(entry.at) ?? 0;
+      seen.set(entry.at, n + 1);
+      return { entry, key: { at: entry.at, id: String(n).padStart(6, "0") } };
+    });
+    const result = page(keyed, (k) => k.key, p);
+    return { items: result.items.map((k) => k.entry), next: result.next };
   },
   "vault.activity": async (d, p) => {
     const vault = lower(p.vault);
+    const kinds = new Set(p.kinds ?? ["proposal", "received"]);
+    const token = p.token === undefined ? undefined : lower(p.token);
     const [proposals, received] = await Promise.all([
-      d.proposals.list(vault),
-      receivedTransfers(d, vault),
+      kinds.has("proposal") ? d.proposals.list(vault) : Promise.resolve([]),
+      kinds.has("received") ? receivedTransfers(d, vault) : Promise.resolve([]),
     ]);
     const entries: ActivityEntry[] = [
-      ...proposals.map((proposal) => ({
-        kind: "proposal" as const,
-        at: proposal.execution?.at ?? proposal.expiresAt,
-        proposal,
-      })),
-      ...received.map((r) => r.entry),
+      ...proposals
+        .filter((proposal) => !token || proposal.token?.address === token)
+        .map((proposal) => ({
+          kind: "proposal" as const,
+          at: proposal.execution?.at ?? proposal.createdAt,
+          proposal,
+        })),
+      ...received.map((r) => r.entry).filter((entry) => !token || entry.token.address === token),
     ];
-    return entries.toSorted((a, b) => b.at - a.at);
+    return page(
+      entries,
+      (e) => ({
+        at: e.at,
+        id: e.kind === "proposal" ? e.proposal.id : `${e.txHash}:${e.token.address}`,
+      }),
+      p,
+    );
   },
   "vault.counterparties": async (d, p) =>
-    counterparties(d, d.vaults.record(lower(p.vault)).address),
+    page(
+      await counterparties(d, d.vaults.record(lower(p.vault)).address),
+      (c) => ({ at: c.lastAt, id: c.address }),
+      p,
+    ),
+  "vault.receiving": async (d, p) => {
+    const vault = d.vaults.record(lower(p.vault)).address;
+    const received = await receivedTransfers(d, vault);
+    return {
+      handshakes: true,
+      senders: d.senderCount,
+      lastReceivedAt: received.at(-1)?.entry.at ?? null,
+    };
+  },
+  "vault.request": async (d, p) => paymentRequest(d, { ...p, vault: lower(p.vault) }),
   "vault.alias": async (d, p) => {
     const vault = d.vaults.record(lower(p.vault)).address;
     require(ALIAS.test(p.alias), "aliases are lowercase letters, digits, - and _");
@@ -197,7 +235,11 @@ export const handlers: Handlers = {
     return info;
   },
 
-  "proposals.list": async (d, p) => d.proposals.list(lower(p.vault)),
+  "proposals.list": async (d, p) => {
+    const filter = p.filter ?? "all";
+    const proposals = (await d.proposals.list(lower(p.vault))).filter((v) => matches(v, filter));
+    return page(proposals, (v) => ({ at: v.createdAt, id: v.id }), p);
+  },
   "proposals.get": async (d, p) => d.proposals.get({ vault: lower(p.vault), id: lower(p.id) }),
   "proposals.preview": async (d, p) => d.proposals.preview({ ...p, vault: lower(p.vault) }),
   "proposals.create": async (d, p) => d.proposals.create({ ...p, vault: lower(p.vault) }),

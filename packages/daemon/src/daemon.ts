@@ -38,6 +38,7 @@ import { privateDir, writePrivate } from "./profile/files.ts";
 import { type ProfilePaths, omeHome, profilePaths } from "./profile/paths.ts";
 import { ProfileState } from "./profile/state.ts";
 import { ProposalEvents } from "./proposals/events.ts";
+import { countsOf } from "./proposals/filters.ts";
 import { ProposalService } from "./proposals/service.ts";
 import { type MasterKeyStore, masterKeyStore } from "./secrets/master-key.ts";
 import { SecretsStore } from "./secrets/store.ts";
@@ -51,6 +52,14 @@ import { VaultService } from "./vaults/service.ts";
 export const DAEMON_VERSION = "0.1.0"; // x-release-please-version
 
 const SYNC_INTERVAL_MS = 15_000;
+/** Keeper events after which a vault's proposal counts change. */
+const RECOUNT: ReadonlySet<string> = new Set([
+  "proposal",
+  "payload",
+  "approval",
+  "rejection",
+  "receipt",
+]);
 const ACCOUNT_SECRET = "account";
 const REMOTE_KEEPER_TOKEN = "remote-keeper-token";
 
@@ -125,7 +134,11 @@ export class Daemon implements Context {
       (event) => this.emit(event),
       (ref) => this.proposals.ensureContracts(ref),
       {
-        list: (vault) => this.proposals.list(vault),
+        list: async (vault) => {
+          const views = await this.proposals.list(vault);
+          this.vaults.setCounts(vault, countsOf(views));
+          return views;
+        },
         member: (vault, index) => this.vaults.memberRef(vault, index),
         now: () => this.wallet().chainTime(),
       },
@@ -299,6 +312,17 @@ export class Daemon implements Context {
       .map((r) => r.address);
   }
 
+  /** Senders registered with the PXE from `aztec-wallet`'s accounts. */
+  get senderCount(): number {
+    return this.#senders.size;
+  }
+
+  /** Recounts `vault`'s open proposals for `status`; a failed read keeps the last counts. */
+  async refreshCounts(vault: Hex32): Promise<void> {
+    const views = await this.proposals.list(vault).catch(() => undefined);
+    if (views) this.vaults.setCounts(vault, countsOf(views));
+  }
+
   /** Reads the fee payer's Fee Juice now and keeps it for `status`. */
   async refreshFees(): Promise<FeesStatus> {
     this.#fees = await feesStatus(this);
@@ -381,6 +405,8 @@ export class Daemon implements Context {
     await this.keeper.subscribe((event) => {
       this.emit({ type: "keeperEvent", event });
       void this.#proposalEvents.onKeeperEvent(event);
+      if (RECOUNT.has(event.type) && "vault" in event)
+        void this.refreshCounts(event.vault).catch(() => undefined);
       if (event.type === "artifact" && event.complete)
         void this.#artifactArrived(event.vault, event.classId);
       this.devices.onKeeperEvent(event);
