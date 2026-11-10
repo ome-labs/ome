@@ -85,6 +85,7 @@ fn proposal(id: &str, status: ProposalStatus) -> ProposalView {
         approval_message: hex("0e7a"),
         fee_method: "external".into(),
         calls: vec![],
+        authwits: vec![],
         token: Some(TokenInfo {
             address: hex("05dc"),
             name: "USD Coin".into(),

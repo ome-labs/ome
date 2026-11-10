@@ -5,9 +5,9 @@ use std::fmt::Write;
 use ome_api::{
     Amount, Hex32,
     daemon::{
-        BalanceChange, BalanceState, DaemonEvent, Effects, ExecutionPhase, FeeEstimate,
-        FeePayerKind, FeesStatus, GovernanceChange, Intent, PolicyWarning, ProposalStatus,
-        ProposalView, SimulationError, SimulationFailure, TokenInfo,
+        BalanceChange, BalanceState, DaemonEvent, DecodedAuthwit, Effects, ExecutionPhase,
+        FeeEstimate, FeePayerKind, FeesStatus, GovernanceChange, Intent, PolicyWarning,
+        ProposalStatus, ProposalView, SimulationError, SimulationFailure, TokenInfo,
     },
 };
 
@@ -75,6 +75,36 @@ pub(crate) fn target(call: &ome_api::daemon::DecodedCall, labels: Labels<'_>) ->
         .or_else(|| labels(&call.to))
         .or_else(|| (call.function == "sponsor_unconditionally").then(|| "SponsoredFPC".to_owned()))
         .unwrap_or_else(|| format::short(&call.to))
+}
+
+/// The authwits a proposal grants, one sentence each with the call's arguments beneath: what a contract may do with
+/// the vault's assets inside this transaction.
+pub(crate) fn authwits(
+    authwits: &[DecodedAuthwit],
+    labels: Labels<'_>,
+    verbose: bool,
+) -> Vec<String> {
+    authwits
+        .iter()
+        .flat_map(|a| {
+            let caller = a
+                .caller_label
+                .clone()
+                .or_else(|| labels(&a.caller))
+                .unwrap_or_else(|| format::short(&a.caller));
+            let mut lines = vec![format!(
+                "{caller} may call {} on {} for the vault, once, in this transaction",
+                theme::name(&a.call.function),
+                target(&a.call, labels)
+            )];
+            lines.extend(
+                format::limited(crate::ui::abi::decoded(&a.call.args, verbose), verbose, 8)
+                    .into_iter()
+                    .map(|arg| format!("     {}", theme::dim(arg))),
+            );
+            lines
+        })
+        .collect()
 }
 
 /// Who pays the fee, as a sentence. The vault never pays in public; `external` is a sponsored fee payer.

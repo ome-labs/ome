@@ -5,8 +5,8 @@ use ome_api::{
     Amount,
     daemon::ContractFunctionsParams,
     daemon::{
-        ContractsFunctions, Intent, IntentCall, ProposalPreview, ProposalsCreate, ProposalsPreview,
-        ProposeParams, TokensList, VaultSummary,
+        ContractsFunctions, Intent, IntentAuthwit, IntentCall, ProposalPreview, ProposalsCreate,
+        ProposalsPreview, ProposeParams, TokensList, VaultSummary,
     },
     keeper::VaultParams,
 };
@@ -32,8 +32,9 @@ pub(crate) async fn run(ctx: &Ctx, command: ProposeCommand) -> Result<()> {
             function,
             contract,
             args,
+            authwits,
             options,
-        } => call(ctx, &vault, function, contract, args, options).await,
+        } => call(ctx, &vault, function, contract, args, authwits, options).await,
         ProposeCommand::Threshold { approvals, options } => {
             ctx.intro(&format!("Propose a new threshold · {}", vault.name));
             let intent = Intent::SetThreshold {
@@ -217,6 +218,7 @@ async fn call(
     function: Option<String>,
     contract: Option<String>,
     args: Vec<String>,
+    authwits: Vec<String>,
     options: ProposeOptions,
 ) -> Result<()> {
     ctx.intro(&format!("Propose a call · {}", vault.name));
@@ -309,11 +311,59 @@ async fn call(
         args.join(" ")
     );
     let args = args.iter().map(|arg| abi::parse(arg)).collect();
+    let mut lines = vec![summary];
+    let granted = grants(ctx, &book, &label, to, &authwits, &mut lines)?;
     let intent = Intent::Calls {
         calls: vec![IntentCall { to, function, args }],
+        authwits: granted,
         memo: options.memo.clone(),
     };
-    submit(ctx, vault, intent, &options, vec![summary]).await
+    submit(ctx, vault, intent, &options, lines).await
+}
+
+/// The authwits of `--authwit`, each granted to `caller` (the called contract), with a line saying what it allows.
+fn grants(
+    ctx: &Ctx,
+    book: &Book,
+    label: &str,
+    caller: ome_api::Hex32,
+    specs: &[String],
+    lines: &mut Vec<String>,
+) -> Result<Vec<IntentAuthwit>> {
+    specs
+        .iter()
+        .map(|spec| {
+            let call = authwit_call(ctx, book, spec)?;
+            lines.push(format!(
+                "Let {label} call {} on {} for the vault, once, in this transaction",
+                theme::name(&call.function),
+                book.label(&call.to)
+                    .unwrap_or_else(|| format::short(&call.to))
+            ));
+            Ok(IntentAuthwit { caller, call })
+        })
+        .collect()
+}
+
+/// An `--authwit` value, `<contract> <function> [args…]`: the call the called contract may make for the vault.
+fn authwit_call(ctx: &Ctx, book: &Book, spec: &str) -> Result<IntentCall> {
+    let mut words = spec.split_whitespace();
+    let (Some(contract), Some(function)) = (words.next(), words.next()) else {
+        return Err(Error::usage(format!(
+            "--authwit {spec:?}: give the contract, the function and its arguments, e.g. \
+             \"contracts:token transfer_to_public vault: contracts:amm 100 0\"."
+        )));
+    };
+    let args: Vec<String> = words.map(str::to_owned).collect();
+    Ok(IntentCall {
+        to: book.address(ctx, contract)?,
+        function: function.to_owned(),
+        args: book
+            .call_args(ctx, &args)?
+            .iter()
+            .map(|arg| abi::parse(arg))
+            .collect(),
+    })
 }
 
 /// Validity in whole hours, 1 to 720.
@@ -342,6 +392,7 @@ fn preview_lines(preview: &ProposalPreview, labels: describe::Labels<'_>) -> Vec
             )
         })
         .collect();
+    lines.extend(describe::authwits(&preview.authwits, labels, false));
     lines.push(match (&preview.gas, &preview.error) {
         (Some(gas), _) if preview.ok => format!(
             "{} it simulates: {} L2 gas, {} DA gas",

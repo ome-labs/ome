@@ -95,6 +95,7 @@ pub(crate) fn proposal() -> ProposalView {
             is_static: false,
             decoded: true,
         }],
+        authwits: vec![],
         token: Some(usdc()),
         execution: None,
         executing: None,

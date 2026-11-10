@@ -636,6 +636,11 @@ pub(crate) enum ProposeCommand {
         /// The function's arguments; references such as accounts:<name> are resolved.
         #[arg(long, num_args = 0.., allow_hyphen_values = true, value_name = "ARG")]
         args: Vec<String>,
+        /// Let the called contract make one private call for the vault in this transaction (a private authwit), given
+        /// as "<contract> <function> [args…]" with references resolved. Repeat for each; members approve it with the
+        /// call.
+        #[arg(long = "authwit", value_name = "CALL")]
+        authwits: Vec<String>,
         #[command(flatten)]
         options: ProposeOptions,
     },
@@ -859,6 +864,36 @@ mod tests {
         assert_eq!(function.as_deref(), Some("transfer_in_public"));
         assert_eq!(contract.as_deref(), Some("contracts:usdc"));
         assert_eq!(args, ["accounts:bob", "10", "0"]);
+    }
+
+    #[test]
+    fn propose_call_grants_authwits() {
+        let cli = Cli::try_parse_from([
+            "ome",
+            "propose",
+            "call",
+            "swap_exact_tokens_for_tokens",
+            "--contract-address",
+            "contracts:amm",
+            "--authwit",
+            "contracts:jade transfer_to_public vault: contracts:amm 100 0",
+            "--args",
+            "contracts:jade",
+            "contracts:opal",
+            "100",
+            "90",
+            "0",
+        ])
+        .unwrap();
+        let Some(Command::Propose(ProposeCommand::Call { args, authwits, .. })) = cli.command
+        else {
+            panic!("not a call");
+        };
+        assert_eq!(
+            authwits,
+            ["contracts:jade transfer_to_public vault: contracts:amm 100 0"]
+        );
+        assert_eq!(args.len(), 5);
     }
 
     #[test]

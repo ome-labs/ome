@@ -89,6 +89,12 @@ pub(crate) fn render(
         })
         .collect();
     out.push(section("The calls you sign, rebuilt on this device", calls));
+    if !p.authwits.is_empty() {
+        out.push(section(
+            "What the vault lets a contract do, signed with the calls",
+            describe::authwits(&p.authwits, &|_| None, verbose),
+        ));
+    }
 
     let c = &review.checks;
     let mut checks = vec![
@@ -157,14 +163,23 @@ pub(crate) fn render(
 
     out.push(section("Votes", votes(p)));
 
-    out.push(section(
-        "You sign",
-        vec![format!(
-            "{}  =  {}",
-            signing.formula,
-            theme::bold(full(&signing.message))
-        )],
-    ));
+    let mut signs = vec![format!(
+        "{}  =  {}",
+        signing.formula,
+        theme::bold(full(&signing.message))
+    )];
+    // An approval signs each authwit too; a rejection signs only the proposal.
+    if signing.message == p.approval_message {
+        signs.extend(p.authwits.iter().enumerate().map(|(i, a)| {
+            format!(
+                "and for authwit {}, the same with its hash {}  =  {}",
+                i + 1,
+                theme::dim(full(&a.message_hash)),
+                theme::bold(full(&a.approval_message))
+            )
+        }));
+    }
+    out.push(section("You sign", signs));
     out
 }
 
