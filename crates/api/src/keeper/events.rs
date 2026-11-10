@@ -66,6 +66,17 @@ pub enum KeeperEvent {
         /// Proposal id.
         id: Hex32,
     },
+    /// An artifact fetch ended: complete, or given up with a reason.
+    Artifact {
+        /// The vault whose members were asked.
+        vault: Hex32,
+        /// The contract class.
+        class_id: Hex32,
+        /// Every chunk arrived and matched the manifest.
+        complete: bool,
+        /// Why it stopped, when not complete.
+        error: Option<String>,
+    },
     /// A proposal's payload was stored.
     Payload {
         /// Vault.

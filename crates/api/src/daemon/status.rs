@@ -24,6 +24,8 @@ pub struct DaemonInfo {
     pub started_at: u64,
     /// Aztec node URL.
     pub node: String,
+    /// What the daemon accepts.
+    pub limits: super::Limits,
 }
 
 /// Daemon settings.

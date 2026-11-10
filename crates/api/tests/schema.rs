@@ -213,6 +213,62 @@ fn daemon_events_arrive_numbered_and_name_their_vault() {
 }
 
 #[test]
+fn typed_values_and_types_have_one_json_form_each() {
+    use daemon::{AbiType, AbiValue, KnownType};
+    let value: AbiValue = serde_json::from_value(json!({
+        "amount": "1000", "path": ["1", "0x02"], "exact": true,
+    }))
+    .unwrap();
+    let AbiValue::Object(fields) = &value else {
+        panic!("a struct value is an object");
+    };
+    assert_eq!(fields["exact"], AbiValue::Bool(true));
+    assert_eq!(
+        fields["path"],
+        AbiValue::List(vec![
+            AbiValue::Text("1".into()),
+            AbiValue::Text("0x02".into())
+        ])
+    );
+    assert_eq!(
+        serde_json::from_value::<AbiValue>(serde_json::to_value(&value).unwrap()).unwrap(),
+        value
+    );
+
+    let address = AbiType::Struct {
+        path: "aztec::protocol_types::address::aztec_address::AztecAddress".into(),
+        fields: vec![],
+        known: Some(KnownType::AztecAddress),
+    };
+    let array = AbiType::Array {
+        length: 2,
+        item: Box::new(AbiType::Integer {
+            signed: false,
+            width: 128,
+        }),
+    };
+    assert_eq!(
+        serde_json::to_value(&array).unwrap(),
+        json!({ "kind": "array", "length": 2, "item": { "kind": "integer", "signed": false, "width": 128 } })
+    );
+    assert_eq!(
+        serde_json::to_value(&address).unwrap()["known"],
+        "aztecAddress"
+    );
+    let unknown = AbiType::Struct {
+        path: "amm::Order".into(),
+        fields: vec![],
+        known: None,
+    };
+    assert!(
+        serde_json::to_value(unknown)
+            .unwrap()
+            .get("known")
+            .is_none()
+    );
+}
+
+#[test]
 fn ceremony_results_decode_by_shape() {
     let point = json!({ "x": format!("0x{}", "00".repeat(32)), "y": format!("0x{}", "00".repeat(31) + "02") });
     let dkg = json!({

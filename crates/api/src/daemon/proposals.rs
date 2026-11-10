@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::{Secret, TokenInfo};
+use super::{AbiValue, DecodedArg, FunctionKind, Secret, TokenInfo};
 use crate::{Amount, Hex32};
 
 /// One call of a `calls` intent.
@@ -14,8 +14,8 @@ pub struct IntentCall {
     /// Function name.
     #[serde(rename = "fn")]
     pub function: String,
-    /// Arguments as the CLI parses them.
-    pub args: Vec<String>,
+    /// Arguments, one per parameter, each checked against its type (`contracts.functions`).
+    pub args: Vec<AbiValue>,
 }
 
 /// What a proposal is for. Carried as JSON in the proposal's summary (at most 4 KiB).
@@ -33,7 +33,7 @@ pub enum Intent {
         /// Note for the members, at most 280 characters.
         memo: Option<String>,
     },
-    /// Up to 8 contract calls.
+    /// Up to `daemon.info.limits.maxCalls` contract calls.
     Calls {
         /// Calls.
         calls: Vec<IntentCall>,
@@ -84,21 +84,27 @@ pub struct Vote {
     pub reason: Option<String>,
 }
 
-/// A call as the payload encodes it.
+/// A call as the payload encodes it, decoded with the contract's artifact when this member has it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DecodedCall {
     /// Contract.
     pub to: Hex32,
-    /// Its label, from the address book, tokens or members.
+    /// Its label: a token, the vault, or an aztec-wallet alias.
     pub to_label: Option<String>,
     /// Function.
     #[serde(rename = "fn")]
     pub function: String,
-    /// Arguments.
-    pub args: Vec<String>,
+    /// Selector, `0x` and 8 hex characters.
+    pub selector: String,
+    /// Where it runs.
+    pub kind: FunctionKind,
+    /// Arguments, named and typed when `decoded`.
+    pub args: Vec<DecodedArg>,
     /// Static call.
     pub is_static: bool,
+    /// Whether the arguments were decoded with the contract's artifact; until it arrives they are raw fields.
+    pub decoded: bool,
 }
 
 /// The proposer.
@@ -356,40 +362,4 @@ pub struct ExecutionProgress {
     pub error: Option<String>,
     /// Transaction, once sent.
     pub tx_hash: Option<Hex32>,
-}
-
-/// A function of a contract, for building `calls` intents.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct ContractFunction {
-    /// Name.
-    pub name: String,
-    /// `private`, `public` or `utility`.
-    pub kind: FunctionKind,
-    /// Static.
-    pub is_static: bool,
-    /// Parameters.
-    pub params: Vec<FunctionParam>,
-}
-
-/// Where a function runs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-pub enum FunctionKind {
-    /// Private.
-    Private,
-    /// Public.
-    Public,
-    /// Utility (unconstrained).
-    Utility,
-}
-
-/// A function parameter.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct FunctionParam {
-    /// Name.
-    pub name: String,
-    /// ABI type, as text.
-    #[serde(rename = "type")]
-    pub kind: String,
 }

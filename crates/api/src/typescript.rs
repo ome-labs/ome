@@ -53,6 +53,7 @@ fn types(cfg: &Config) -> Vec<Declared> {
         k::InviteParams, k::Invite, k::JoinRequestText, k::LobbyParams, k::LobbyStartParams, k::LobbyRole, k::LobbyStatus,
         k::LobbyMember, k::LobbyPlan, k::Lobby, k::DeviceOfferParams, k::DeviceOffer, k::Device, k::DeviceParams,
         k::Chain, k::DeviceLabel, k::DeviceRotation, k::DeviceReviewParams, k::DeviceReviewSent, k::UpdateSignersParams,
+        k::ArtifactPutParams, k::ArtifactChunkParams, k::ArtifactChunk, k::ArtifactParams, k::ArtifactStatus,
         k::KeeperEvent,
         // Daemon.
         d::DaemonInfo, d::Settings, d::SettingsPatch, d::RelaysParams, d::Profile, d::ProfileCreateParams,
@@ -64,7 +65,9 @@ fn types(cfg: &Config) -> Vec<Declared> {
         d::StartLobbyParams, d::FoundingStepId, d::StepStatus, d::FoundingStep, d::FoundingError,
         d::FoundingState, d::IntentCall, d::Intent, d::ProposalStatus, d::Vote, d::DecodedCall, d::Proposer,
         d::Execution, d::ProposalView, d::Gas, d::ReviewChecks, d::LabelSource, d::Recipient, d::Simulation,
-        d::Signs, d::Review, d::ProposalPreview, d::ProposalRef, d::ProposeParams, d::ApproveParams,
+        d::Signs, d::Review, d::ProposalPreview, d::ProposalRef, d::ProposeParams, d::ApproveParams, d::AbiType, d::KnownType,
+        d::AbiField, d::AbiValue, d::DecodedArg, d::ContractFunctionsParams, d::ContractSource, d::ContractView,
+        d::ContractInstanceInput, d::ContractRegisterParams, d::Limits,
         d::RejectParams, d::ExecutionPhase, d::ExecutionProgress, d::ContractFunction, d::FunctionKind,
         d::FunctionParam, d::Joiner, d::MembershipParams, d::CommitteeShape, d::MembershipPlan,
         d::RotationRef, d::RotationPlanText, d::RotationStepId, d::RotationStep, d::RotationState, d::DaemonEvent,

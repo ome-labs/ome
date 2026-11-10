@@ -1443,6 +1443,88 @@ export type UpdateSignersParams = {
 };
 
 /**
+ * Params of `artifacts.put`: one chunk of an artifact this member's daemon holds.
+ */
+export type ArtifactPutParams = {
+  /**
+   * The contract class.
+   */
+  classId: Hex32;
+  /**
+   * Chunk index, from 0.
+   */
+  index: number;
+  /**
+   * Chunks in the artifact.
+   */
+  count: number;
+  /**
+   * The chunk: a slice of the gzip-compressed artifact JSON.
+   */
+  bytes: HexBytes;
+};
+
+/**
+ * Params of `artifacts.get`.
+ */
+export type ArtifactChunkParams = {
+  /**
+   * The contract class.
+   */
+  classId: Hex32;
+  /**
+   * Chunk index, from 0.
+   */
+  index: number;
+};
+
+/**
+ * One stored chunk.
+ */
+export type ArtifactChunk = {
+  /**
+   * Chunks in the artifact.
+   */
+  count: number;
+  /**
+   * The chunk.
+   */
+  bytes: HexBytes;
+};
+
+/**
+ * Params of `artifacts.fetch` and `artifacts.status`.
+ */
+export type ArtifactParams = {
+  /**
+   * The vault whose members are asked for it.
+   */
+  vault: Hex32;
+  /**
+   * The contract class.
+   */
+  classId: Hex32;
+};
+
+/**
+ * How much of an artifact this keeper holds.
+ */
+export type ArtifactStatus = {
+  /**
+   * Every chunk is here.
+   */
+  complete: boolean;
+  /**
+   * Chunks held.
+   */
+  have: number;
+  /**
+   * Chunks in the artifact, once known.
+   */
+  count: number | null;
+};
+
+/**
  * Something the member's daemon should know about.
  */
 export type KeeperEvent =
@@ -1526,6 +1608,25 @@ export type KeeperEvent =
        * Proposal id.
        */
       id: Hex32;
+    }
+  | {
+      type: "artifact";
+      /**
+       * The vault whose members were asked.
+       */
+      vault: Hex32;
+      /**
+       * The contract class.
+       */
+      classId: Hex32;
+      /**
+       * Every chunk arrived and matched the manifest.
+       */
+      complete: boolean;
+      /**
+       * Why it stopped, when not complete.
+       */
+      error: string | null;
     }
   | {
       type: "payload";
@@ -1690,6 +1791,10 @@ export type DaemonInfo = {
    * Aztec node URL.
    */
   node: string;
+  /**
+   * What the daemon accepts.
+   */
+  limits: Limits;
 };
 
 /**
@@ -2674,9 +2779,9 @@ export type IntentCall = {
    */
   fn: string;
   /**
-   * Arguments as the CLI parses them.
+   * Arguments, one per parameter, each checked against its type (`contracts.functions`).
    */
-  args: Array<string>;
+  args: Array<AbiValue>;
 };
 
 /**
@@ -2764,7 +2869,7 @@ export type Vote = {
 };
 
 /**
- * A call as the payload encodes it.
+ * A call as the payload encodes it, decoded with the contract's artifact when this member has it.
  */
 export type DecodedCall = {
   /**
@@ -2772,7 +2877,7 @@ export type DecodedCall = {
    */
   to: Hex32;
   /**
-   * Its label, from the address book, tokens or members.
+   * Its label: a token, the vault, or an aztec-wallet alias.
    */
   toLabel: string | null;
   /**
@@ -2780,13 +2885,25 @@ export type DecodedCall = {
    */
   fn: string;
   /**
-   * Arguments.
+   * Selector, `0x` and 8 hex characters.
    */
-  args: Array<string>;
+  selector: string;
+  /**
+   * Where it runs.
+   */
+  kind: FunctionKind;
+  /**
+   * Arguments, named and typed when `decoded`.
+   */
+  args: Array<DecodedArg>;
   /**
    * Static call.
    */
   isStatic: boolean;
+  /**
+   * Whether the arguments were decoded with the contract's artifact; until it arrives they are raw fields.
+   */
+  decoded: boolean;
 };
 
 /**
@@ -3125,6 +3242,231 @@ export type ApproveParams = {
 };
 
 /**
+ * A Noir ABI type, complete enough to draw a form for any parameter and to check a value against it.
+ */
+export type AbiType =
+  | { kind: "field" }
+  | { kind: "boolean" }
+  | {
+      kind: "integer";
+      /**
+       * Signed.
+       */
+      signed: boolean;
+      /**
+       * Bits.
+       */
+      width: number;
+    }
+  | {
+      kind: "array";
+      /**
+       * Elements.
+       */
+      length: number;
+      /**
+       * Element type.
+       */
+      item: AbiType;
+    }
+  | {
+      kind: "string";
+      /**
+       * Most characters.
+       */
+      length: number;
+    }
+  | {
+      kind: "struct";
+      /**
+       * Its Noir path, e.g. `aztec::protocol_types::address::aztec_address::AztecAddress`.
+       */
+      path: string;
+      /**
+       * Its fields, in order.
+       */
+      fields: Array<AbiField>;
+      /**
+       * Set for structs that are one value to a person (an address, a selector), so forms and reviews show them as
+       * one value.
+       */
+      known?: KnownType;
+    }
+  | {
+      kind: "tuple";
+      /**
+       * Its items, in order.
+       */
+      items: Array<AbiType>;
+    };
+
+/**
+ * A struct that is one value to a person.
+ */
+export type KnownType = "aztecAddress" | "ethAddress" | "functionSelector";
+
+/**
+ * A struct field.
+ */
+export type AbiField = {
+  /**
+   * Name.
+   */
+  name: string;
+  /**
+   * Type.
+   */
+  type: AbiType;
+};
+
+/**
+ * An argument value, checked against its [`AbiType`]: text for fields, integers (decimal, or `0x` hex), addresses and
+ * strings; a boolean; a list for arrays and tuples; an object for structs. A known struct takes text.
+ */
+export type AbiValue = boolean | string | Array<AbiValue> | { [key in string]: AbiValue };
+
+/**
+ * One argument of a decoded call.
+ */
+export type DecodedArg = {
+  /**
+   * Parameter name; `arg0`, `arg1`… when the call couldn't be decoded.
+   */
+  name: string;
+  /**
+   * Parameter type; a field when the call couldn't be decoded.
+   */
+  type: AbiType;
+  /**
+   * The value.
+   */
+  value: AbiValue;
+  /**
+   * How a person reads it, when the daemon knows better than the raw value: `bob (alias)`, `75.5 OMET`.
+   */
+  display: string | null;
+};
+
+/**
+ * Params of `contracts.functions`.
+ */
+export type ContractFunctionsParams = {
+  /**
+   * Contract.
+   */
+  contract: Hex32;
+  /**
+   * Include utility (read-only) functions, which a proposal can't call. Off when absent.
+   */
+  includeUtility?: boolean;
+};
+
+/**
+ * Where this member's knowledge of a contract comes from.
+ */
+export type ContractSource = "registered" | "token" | "vault";
+
+/**
+ * A contract this member can call.
+ */
+export type ContractView = {
+  /**
+   * Address.
+   */
+  address: Hex32;
+  /**
+   * The artifact's name.
+   */
+  name: string;
+  /**
+   * Contract class.
+   */
+  classId: Hex32;
+  /**
+   * Where it comes from.
+   */
+  source: ContractSource;
+  /**
+   * Functions a proposal can call.
+   */
+  functions: number;
+};
+
+/**
+ * What an unpublished contract instance derives from, to register it.
+ */
+export type ContractInstanceInput = {
+  /**
+   * Deployment salt.
+   */
+  salt: Hex32;
+  /**
+   * Deployer, zero for a universal deployment.
+   */
+  deployer: Hex32;
+  /**
+   * Initialization hash.
+   */
+  initializationHash: Hex32;
+  /**
+   * Hash of the immutable values the contract was deployed with.
+   */
+  immutablesHash: Hex32;
+  /**
+   * Public keys, serialized as Aztec does.
+   */
+  publicKeys: HexBytes;
+};
+
+/**
+ * Params of `contracts.register`.
+ */
+export type ContractRegisterParams = {
+  /**
+   * The artifact, as JSON text.
+   */
+  artifact: string;
+  /**
+   * The contract's address.
+   */
+  address: Hex32;
+  /**
+   * Needed only when the node has no published instance at `address`.
+   */
+  instance?: ContractInstanceInput;
+};
+
+/**
+ * What the daemon accepts, so clients don't hard-code it.
+ */
+export type Limits = {
+  /**
+   * Calls per proposal besides the fee payer's.
+   */
+  maxCalls: number;
+  /**
+   * Bytes of a proposal's summary, which carries its intent.
+   */
+  maxSummaryBytes: number;
+  /**
+   * Bytes of a contract artifact, uncompressed.
+   */
+  maxArtifactBytes: number;
+  /**
+   * Characters of a memo or rejection reason.
+   */
+  memoChars: number;
+  /**
+   * Fewest hours a proposal can last.
+   */
+  minExpiryHours: number;
+  /**
+   * Most hours a proposal can last.
+   */
+  maxExpiryHours: number;
+};
+
+/**
  * Params of `proposals.reject`.
  */
 export type RejectParams = {
@@ -3186,6 +3528,10 @@ export type ContractFunction = {
    */
   name: string;
   /**
+   * Selector, `0x` and 8 hex characters.
+   */
+  selector: string;
+  /**
    * `private`, `public` or `utility`.
    */
   kind: FunctionKind;
@@ -3197,6 +3543,10 @@ export type ContractFunction = {
    * Parameters.
    */
   params: Array<FunctionParam>;
+  /**
+   * Return types.
+   */
+  returns: Array<AbiType>;
 };
 
 /**
@@ -3213,9 +3563,9 @@ export type FunctionParam = {
    */
   name: string;
   /**
-   * ABI type, as text.
+   * Type.
    */
-  type: string;
+  type: AbiType;
 };
 
 /**
@@ -3583,6 +3933,17 @@ export type DaemonEvent =
       token: Hex32;
     }
   | {
+      type: "contractAvailable";
+      /**
+       * Vault.
+       */
+      vault: Hex32;
+      /**
+       * The contract class.
+       */
+      classId: Hex32;
+    }
+  | {
       type: "tokenAdded";
       /**
        * Vault.
@@ -3756,7 +4117,7 @@ export type TokenParams = {
 };
 
 /**
- * Params of `contracts.functions`.
+ * Params naming a contract (`contracts.remove`).
  */
 export type ContractParams = {
   /**
@@ -3983,6 +4344,10 @@ export interface KeeperMethods {
   "proposals.get": { params: IdParams; result: HexBytes | null };
   "payloads.put": { params: BodyParams; result: PayloadStored };
   "payloads.get": { params: PayloadParams; result: HexBytes | null };
+  "artifacts.put": { params: ArtifactPutParams; result: ArtifactStatus };
+  "artifacts.get": { params: ArtifactChunkParams; result: ArtifactChunk | null };
+  "artifacts.status": { params: ArtifactParams; result: ArtifactStatus };
+  "artifacts.fetch": { params: ArtifactParams; result: ArtifactStatus };
   "approvals.put": { params: BodyParams; result: null };
   "approvals.list": { params: ProposalParams; result: Array<HexBytes> };
   "rejections.put": { params: BodyParams; result: null };
@@ -4052,7 +4417,10 @@ export interface DaemonMethods {
   "proposals.reject": { params: RejectParams; result: ProposalView };
   "proposals.execute": { params: ProposalRef; result: ProposalView };
   "proposals.cancel": { params: ProposalRef; result: ProposalView };
-  "contracts.functions": { params: ContractParams; result: Array<ContractFunction> };
+  "contracts.functions": { params: ContractFunctionsParams; result: Array<ContractFunction> };
+  "contracts.register": { params: ContractRegisterParams; result: ContractView };
+  "contracts.list": { params: Empty; result: Array<ContractView> };
+  "contracts.remove": { params: ContractParams; result: null };
   "aztec.aliases": { params: Empty; result: Array<AztecAlias> };
   "aztec.alias": { params: AztecAlias; result: null };
   "membership.request": { params: Empty; result: JoinRequestText };

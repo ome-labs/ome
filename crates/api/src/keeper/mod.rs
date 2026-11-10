@@ -1,5 +1,6 @@
 //! The keeper's API: what a member's daemon calls on its own keeper.
 
+mod artifacts;
 mod ceremonies;
 mod devices;
 mod events;
@@ -7,6 +8,9 @@ mod lobby;
 mod records;
 mod vaults;
 
+pub use artifacts::{
+    ArtifactChunk, ArtifactChunkParams, ArtifactParams, ArtifactPutParams, ArtifactStatus,
+};
 pub use ceremonies::{
     Ceremony, CeremonyKind, CeremonyResult, CeremonyStatus, DkgParams, DkgResult, EcdhParams,
     EcdhPurpose, EcdhResult, Failure, MemberPartials, NewMember, Partial, ReshareParams,
@@ -142,6 +146,14 @@ methods! {
     PayloadsPut = "payloads.put" (BodyParams) -> PayloadStored;
     /// One payload.
     PayloadsGet = "payloads.get" (PayloadParams) -> Option<HexBytes>;
+    /// Stores one chunk of an artifact this member's daemon holds; members fetch it by class.
+    ArtifactsPut = "artifacts.put" (ArtifactPutParams) -> ArtifactStatus;
+    /// One chunk of a complete artifact.
+    ArtifactsGet = "artifacts.get" (ArtifactChunkParams) -> Option<ArtifactChunk>;
+    /// How much of an artifact this keeper holds.
+    ArtifactsStatus = "artifacts.status" (ArtifactParams) -> ArtifactStatus;
+    /// Starts fetching an artifact from the vault's members, unless it is here; `artifact` events report the end.
+    ArtifactsFetch = "artifacts.fetch" (ArtifactParams) -> ArtifactStatus;
     /// Stores and replicates an approval.
     ApprovalsPut = "approvals.put" (BodyParams) -> ();
     /// A proposal's approvals.

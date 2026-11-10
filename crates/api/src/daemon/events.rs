@@ -168,6 +168,14 @@ pub enum DaemonEvent {
         /// Token contract.
         token: Hex32,
     },
+    /// A contract's code arrived from another member and checked out: reviews of the vault's proposals that call it
+    /// can now decode and simulate them.
+    ContractAvailable {
+        /// Vault.
+        vault: Hex32,
+        /// The contract class.
+        class_id: Hex32,
+    },
     /// The vault started tracking a token.
     TokenAdded {
         /// Vault.
@@ -226,6 +234,7 @@ impl DaemonEvent {
             | Self::ProposalExecuted { vault, .. }
             | Self::Received { vault, .. }
             | Self::BalanceChanged { vault, .. }
+            | Self::ContractAvailable { vault, .. }
             | Self::TokenAdded { vault, .. }
             | Self::TokenRemoved { vault, .. }
             | Self::VaultUpdated { vault }

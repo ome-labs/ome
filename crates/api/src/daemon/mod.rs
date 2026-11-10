@@ -1,5 +1,6 @@
 //! The daemon's API: what the CLI and apps call on a member's `omed`.
 
+mod contracts;
 mod devices;
 mod events;
 mod founding;
@@ -8,6 +9,11 @@ mod proposals;
 mod status;
 mod vaults;
 
+pub use contracts::{
+    AbiField, AbiType, AbiValue, ContractFunction, ContractFunctionsParams, ContractInstanceInput,
+    ContractRegisterParams, ContractSource, ContractView, DecodedArg, FunctionKind, FunctionParam,
+    KnownType, Limits,
+};
 pub use devices::{DeviceView, EnrollParams, SwapSignerParams};
 pub use events::{DaemonEvent, EventEnvelope, EventSeq, SubscribeParams, Subscription};
 pub use founding::{
@@ -19,10 +25,10 @@ pub use membership::{
     RotationState, RotationStep, RotationStepId,
 };
 pub use proposals::{
-    ApproveParams, ContractFunction, DecodedCall, Execution, ExecutionPhase, ExecutionProgress,
-    FunctionKind, FunctionParam, Gas, Intent, IntentCall, LabelSource, ProposalPreview,
-    ProposalRef, ProposalStatus, ProposalView, ProposeParams, Proposer, Recipient, RejectParams,
-    Review, ReviewChecks, Signs, Simulation, Vote,
+    ApproveParams, DecodedCall, Execution, ExecutionPhase, ExecutionProgress, Gas, Intent,
+    IntentCall, LabelSource, ProposalPreview, ProposalRef, ProposalStatus, ProposalView,
+    ProposeParams, Proposer, Recipient, RejectParams, Review, ReviewChecks, Signs, Simulation,
+    Vote,
 };
 use serde::{Deserialize, Serialize};
 pub use status::{
@@ -110,7 +116,7 @@ pub struct TokenRefParams {
     pub token: Hex32,
 }
 
-/// Params of `contracts.functions`.
+/// Params naming a contract (`contracts.remove`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct ContractParams {
     /// Contract.
@@ -217,7 +223,13 @@ methods! {
     /// Proposes cancelling a proposal.
     ProposalsCancel = "proposals.cancel" (ProposalRef) -> ProposalView;
     /// A contract's functions.
-    ContractsFunctions = "contracts.functions" (ContractParams) -> Vec<ContractFunction>;
+    ContractsFunctions = "contracts.functions" (ContractFunctionsParams) -> Vec<ContractFunction>;
+    /// Registers a contract after checking its artifact is the code of the class at its address.
+    ContractsRegister = "contracts.register" (ContractRegisterParams) -> ContractView;
+    /// Every contract this member can call.
+    ContractsList = "contracts.list" (Empty) -> Vec<ContractView>;
+    /// Forgets a registered contract.
+    ContractsRemove = "contracts.remove" (ContractParams) -> ();
     /// `aztec-wallet`'s aliases (`accounts:…`, `contracts:…`, `artifacts:…`), read from its store.
     AztecAliases = "aztec.aliases" (Empty) -> Vec<AztecAlias>;
     /// Writes an alias into `aztec-wallet`'s store, when `aztecWalletSync` is on.

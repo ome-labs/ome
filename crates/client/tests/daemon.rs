@@ -8,8 +8,8 @@ use std::{ffi::OsString, os::unix::fs::PermissionsExt, path::Path, time::Duratio
 use ome_api::{
     API_VERSION, ErrorKind, Method, RpcError,
     daemon::{
-        DaemonEvent, DaemonInfo, DaemonInfoGet, EventEnvelope, EventSeq, Secret, SignerStatus,
-        SignerUnlock, UnlockParams,
+        DaemonEvent, DaemonInfo, DaemonInfoGet, EventEnvelope, EventSeq, Limits, Secret,
+        SignerStatus, SignerUnlock, UnlockParams,
     },
     jsonrpc::{Notification, Request, Response},
 };
@@ -31,6 +31,14 @@ fn info() -> DaemonInfo {
         profile_dir: "/tmp/alice".into(),
         started_at: 1_800_000_000,
         node: "http://localhost:8080".into(),
+        limits: Limits {
+            max_calls: 4,
+            max_summary_bytes: 4096,
+            max_artifact_bytes: 32 << 20,
+            memo_chars: 280,
+            min_expiry_hours: 1,
+            max_expiry_hours: 720,
+        },
     }
 }
 
