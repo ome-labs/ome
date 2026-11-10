@@ -1,5 +1,6 @@
 // Three members use Ome through `ome` only, against `aztec start --local-network`: each sets up a profile, they found
-// a 2-of-3 vault, pay from it with two approvals, and remove a member (a reshare, then `rotate_membership`). Every
+// a 2-of-3 vault, pay from it with two approvals, swap through an AMM granting it an authwit, and remove a member (a
+// reshare, then `rotate_membership`). The AMM and its liquidity are set up with aztec.js, as the world outside Ome. Every
 // step is a command a person would type, with prompts off (`--no-input`, `--yes`) and the passphrase from
 // OME_PASSPHRASE_FILE.
 //
@@ -16,6 +17,14 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OME = join(root, "crates", "target", "debug", "ome");
 const NODE = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
+
+/** The wallet package's pool fixture, loaded at run time so this script's type check stays out of its sources. */
+const POOL = "../packages/wallet/test/e2e/pool.ts";
+const { deployPool } = (await import(POOL)) as {
+  deployPool: (
+    vault: string,
+  ) => Promise<{ amm: string; artifact: string; jade: string; opal: string }>;
+};
 
 let home = "";
 const env = () => ({
@@ -197,6 +206,58 @@ test("they pay from it: proposed, reviewed and approved by two, executed", async
     token.symbol,
   ]);
   assert.deepEqual(balance?.private, { state: "known", amount: String(975n * 10n ** 18n) });
+});
+
+test("they swap through an AMM, granting it an authwit with the swap", async () => {
+  const status = await json<{ vaults: { address: string }[] }>("alice", ["status"]);
+  const vaultAddress = status.vaults[0]?.address ?? "";
+  const pool = await deployPool(vaultAddress);
+  await ok("alice", ["contract", "add", pool.artifact, pool.amm]);
+  await ok("alice", ["token", "add", pool.jade]);
+
+  // The AMM pulls 100 JADE from the vault under the authwit; the vault gets OPAL back.
+  const nonce = "7";
+  const proposal = await json<{ id: string; authwits: { caller: string }[] }>("alice", [
+    "propose",
+    "call",
+    "swap_exact_tokens_for_tokens",
+    "-ca",
+    pool.amm,
+    "--authwit",
+    `${pool.jade} transfer_to_public ${vaultAddress} ${pool.amm} 100 ${nonce}`,
+    "--yes",
+    // --args takes everything after it.
+    "--args",
+    pool.jade,
+    pool.opal,
+    "100",
+    "1",
+    nonce,
+  ]);
+  assert.equal(proposal.authwits.length, 1);
+  assert.equal(proposal.authwits[0]?.caller, pool.amm);
+  const short = proposal.id.slice(2, 10);
+
+  // Bob's daemon fetches the AMM's code from Alice's keeper, and the tokens it reaches, before his review simulates.
+  let review: { checks: { rebuilt: boolean }; simulation: { ok: boolean } } | undefined;
+  for (let i = 0; i < 60 && !review?.simulation.ok; i++) {
+    // oxlint-disable-next-line no-await-in-loop
+    review = await json("bob", ["proposal", "review", short]);
+    // oxlint-disable-next-line no-await-in-loop
+    if (!review?.simulation.ok) await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  assert.equal(review?.checks.rebuilt, true);
+  assert.equal(review?.simulation.ok, true);
+
+  await ok("alice", ["approve", short, "--yes"]);
+  await ok("bob", ["approve", short, "--yes"]);
+  const executed = await json<{ status: string }>("alice", ["execute", short]);
+  assert.equal(executed.status, "executed");
+  const [jade] = await json<{ private: { state: string; amount?: string } }[]>("alice", [
+    "balance",
+    "JADE",
+  ]);
+  assert.deepEqual(jade?.private, { state: "known", amount: "900" });
 });
 
 test("they remove Carol: a reshare and rotate_membership, approved by the two who stay", async () => {
