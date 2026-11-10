@@ -129,6 +129,34 @@ pub(crate) fn new_passphrase(ctx: &Ctx) -> Result<Zeroizing<String>> {
     Ok(passphrase)
 }
 
+/// The passphrase that replaces the current one: from `OME_NEW_PASSPHRASE_FILE`, else typed twice. At least 8
+/// characters.
+pub(crate) fn replacement_passphrase(ctx: &Ctx) -> Result<Zeroizing<String>> {
+    let passphrase = match std::env::var_os("OME_NEW_PASSPHRASE_FILE") {
+        Some(file) => read_file(&PathBuf::from(file))?,
+        None if ctx.interactive => loop {
+            let first = prompt::password("New passphrase")?;
+            if first.chars().count() < 8 {
+                ctx.warn("Use at least 8 characters.");
+                continue;
+            }
+            let second = prompt::password("The same again")?;
+            if first == second {
+                break first;
+            }
+            ctx.warn("They did not match; once more.");
+        },
+        None => {
+            return Err(Error::usage("The new passphrase is needed.")
+                .hint("Set OME_NEW_PASSPHRASE_FILE to a file that holds it."));
+        }
+    };
+    if passphrase.chars().count() < 8 {
+        return Err(Error::usage("Use a passphrase of at least 8 characters."));
+    }
+    Ok(passphrase)
+}
+
 /// The secret for one signature, or `None` while the signer is unlocked.
 pub(crate) async fn for_signing(ctx: &Ctx, client: &DaemonClient) -> Result<Option<Secret>> {
     let status = client

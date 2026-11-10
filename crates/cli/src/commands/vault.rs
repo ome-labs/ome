@@ -8,16 +8,20 @@ use ome_api::{
     daemon::{
         ActivityEntry, AliasParams, ConfigGet, DaemonEvent, FoundingBegin, FoundingGet,
         FoundingState, FoundingStepId, LobbyCreate, LobbyCreateParams, LobbyGet, LobbyInspect,
-        LobbyJoin, LobbyList, LobbyStart, LobbyView, PaymentRequestParams, StartLobbyParams,
-        TokensList, VaultAlias, VaultDetailsGet, VaultList, VaultPeers, VaultReceiving,
-        VaultRequest, VaultRetire, VaultUse,
+        LobbyJoin, LobbyList, LobbyRemove, LobbyStart, LobbyUpdate, LobbyView,
+        PaymentRequestParams, RenameParams, StartLobbyParams, TokensList, VaultAlias,
+        VaultDetailsGet, VaultList, VaultPeers, VaultReceiving, VaultRename, VaultRequest,
+        VaultRetire, VaultUse,
     },
-    keeper::{InviteParams, LobbyParams, LobbyRole, LobbyStatus, VaultParams},
+    keeper::{
+        InviteParams, LobbyParams, LobbyRemoveParams, LobbyRole, LobbyStatus, LobbyUpdateParams,
+        VaultParams,
+    },
 };
 use ome_client::DaemonClient;
 
 use crate::{
-    args::{ActivityArgs, BalanceArgs, CreateArgs, RequestArgs, VaultCommand},
+    args::{ActivityArgs, BalanceArgs, CreateArgs, LobbyCommand, RequestArgs, VaultCommand},
     context::{Ctx, Mode},
     error::{Error, Result},
     lists, refs,
@@ -46,7 +50,148 @@ pub(crate) async fn run(ctx: &Ctx, command: VaultCommand) -> Result<()> {
         VaultCommand::Receive => receive(ctx).await,
         VaultCommand::Retire { confirm } => retire(ctx, confirm.as_deref()).await,
         VaultCommand::Balance(args) => balance(ctx, args).await,
+        VaultCommand::Lobby(command) => lobby(ctx, command).await,
+        VaultCommand::Rename { name } => rename(ctx, &name).await,
     }
+}
+
+/// `ome vault rename`: the vault's name for every member.
+async fn rename(ctx: &Ctx, name: &str) -> Result<()> {
+    let vault = refs::vault(ctx).await?;
+    let renamed = ctx
+        .client()
+        .await?
+        .call::<VaultRename>(&RenameParams {
+            vault: vault.address,
+            name: name.trim().to_owned(),
+        })
+        .await?;
+    if ctx.mode == Mode::Json {
+        return ctx.json(&renamed);
+    }
+    ctx.success(&format!(
+        "{} is {} to every member now",
+        vault.name, renamed.name
+    ));
+    Ok(())
+}
+
+/// `ome vault lobby`: the lobby this member hosts (or joined), a joiner removed, or the plan changed.
+async fn lobby(ctx: &Ctx, command: LobbyCommand) -> Result<()> {
+    let client = ctx.client().await?;
+    let open: Vec<LobbyView> = client
+        .call::<LobbyList>(&Empty {})
+        .await?
+        .into_iter()
+        .filter(|l| l.status == LobbyStatus::Open)
+        .collect();
+    let hosted = || {
+        open.iter()
+            .find(|l| l.role == LobbyRole::Host)
+            .cloned()
+            .ok_or_else(|| {
+                Error::usage("You host no open lobby.")
+                    .hint(format!("Start one with `{}`.", ctx.ome("vault create")))
+            })
+    };
+    let view = match command {
+        LobbyCommand::Show => {
+            if ctx.mode == Mode::Json {
+                return ctx.json(&open);
+            }
+            if open.is_empty() {
+                ctx.info("No open lobby.");
+                return Ok(());
+            }
+            for lobby in &open {
+                show_lobby(ctx, lobby);
+            }
+            return Ok(());
+        }
+        LobbyCommand::Remove { member } => {
+            let lobby = hosted()?;
+            let wanted = member.to_lowercase();
+            let found = lobby
+                .members
+                .iter()
+                .filter(|m| !m.you)
+                .find(|m| {
+                    m.name.to_lowercase() == wanted || m.identity.to_string().starts_with(&wanted)
+                })
+                .ok_or_else(|| {
+                    Error::usage(format!("No joiner {member:?} in {}.", lobby.name)).hint(format!(
+                        "See who joined with `{}`.",
+                        ctx.ome("vault lobby show")
+                    ))
+                })?;
+            prompt::proceed(ctx, &format!("Remove {} from {}?", found.name, lobby.name))?;
+            let view = client
+                .call::<LobbyRemove>(&LobbyRemoveParams {
+                    lobby: lobby.lobby,
+                    identity: found.identity,
+                })
+                .await?;
+            ctx.success(&format!(
+                "{} is out; the old invite no longer works",
+                found.name
+            ));
+            view
+        }
+        LobbyCommand::Update {
+            members,
+            approvals,
+            readers,
+        } => {
+            let lobby = hosted()?;
+            let total = members.unwrap_or(lobby.expected);
+            accept_risks(
+                ctx,
+                u32::from(approvals.unwrap_or(lobby.threshold)),
+                u32::from(readers.unwrap_or(lobby.viewing_threshold)),
+                u32::from(total),
+            )?;
+            client
+                .call::<LobbyUpdate>(&LobbyUpdateParams {
+                    lobby: lobby.lobby,
+                    members,
+                    threshold: approvals,
+                    viewing_threshold: readers,
+                })
+                .await?
+        }
+    };
+    if ctx.mode == Mode::Json {
+        return ctx.json(&view);
+    }
+    show_lobby(ctx, &view);
+    if let Some(invite) = &view.invite {
+        show_invite(ctx, invite);
+    }
+    Ok(())
+}
+
+fn show_lobby(ctx: &Ctx, lobby: &LobbyView) {
+    let mut lines = vec![format!(
+        "{} of {} joined · {} to spend, {} to read",
+        lobby.members.len(),
+        lobby.expected,
+        lobby.threshold,
+        lobby.viewing_threshold
+    )];
+    lines.extend(lobby.members.iter().map(|m| {
+        format!(
+            "{} {}{}  {}",
+            m.index,
+            m.name,
+            if m.you { " (you)" } else { "" },
+            theme::dim(format!(
+                "account {} · keeper {}",
+                format::short(&m.account),
+                format::short(&m.identity)
+            ))
+        )
+    }));
+    ctx.section(&format!("Lobby · {}", lobby.name), &lines);
 }
 
 // Founding.
@@ -69,14 +214,7 @@ async fn create(ctx: &Ctx, args: CreateArgs) -> Result<()> {
         _ => false,
     };
     let (lobby, total) = if let (true, Some(lobby)) = (resume, open) {
-        let total = prompt::number(
-            ctx,
-            args.members,
-            "--members",
-            "How many members found it, you included?",
-            2,
-            2..=8,
-        )?;
+        let total = lobby.expected.max(2);
         (lobby, total)
     } else {
         let name = prompt::text(ctx, args.name, "--name", "Name", None, |v| {
@@ -126,6 +264,7 @@ async fn create(ctx: &Ctx, args: CreateArgs) -> Result<()> {
                 name: name.trim().to_owned(),
                 threshold: approvals,
                 viewing_threshold: readers,
+                members: total,
             })
             .await?;
         (lobby, total)
@@ -138,10 +277,22 @@ async fn create(ctx: &Ctx, args: CreateArgs) -> Result<()> {
 
     let mut step = Step::start(ctx, "Waiting for co-founders");
     let mut seen: HashSet<String> = lobby.members.iter().map(|m| m.name.clone()).collect();
+    let mut shown = invite;
     let lobby = loop {
         let view = client
             .call::<LobbyGet>(&LobbyParams { lobby: lobby.lobby })
             .await?;
+        // A removal rotates the invite: the old one stops working.
+        if let Some(fresh) = view.invite.as_ref().filter(|i| **i != shown) {
+            step.clear();
+            ctx.warn(
+                "The invite changed after a removal: send the new one to anyone still to join.",
+            );
+            show_invite(ctx, fresh);
+            shown.clone_from(fresh);
+            step = Step::start(ctx, "Waiting for co-founders");
+        }
+        let total = view.expected.max(total);
         for member in &view.members {
             if seen.insert(member.name.clone()) {
                 step.clear();
@@ -618,7 +769,7 @@ async fn members(ctx: &Ctx) -> Result<()> {
     if ctx.mode == Mode::Json {
         return ctx.json(&details.committee.members);
     }
-    let mut t = table::Table::new(&["#", "member", "signing key", "keeper"]);
+    let mut t = table::Table::new(&["#", "member", "account", "signing key", "keeper"]);
     for m in &details.committee.members {
         t.row(vec![
             table::cell(m.index.to_string()),
@@ -629,6 +780,12 @@ async fn members(ctx: &Ctx) -> Result<()> {
                     m.name.clone()
                 },
                 Tone::Bold,
+            ),
+            table::toned(
+                m.account
+                    .as_ref()
+                    .map_or_else(|| "unknown".to_owned(), |a| address(ctx, a)),
+                Tone::Dim,
             ),
             table::toned(
                 if ctx.verbose || ctx.mode == Mode::Plain {

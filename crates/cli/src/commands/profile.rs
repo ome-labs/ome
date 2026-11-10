@@ -1,6 +1,9 @@
 //! `ome profile list|show|use|remove`. Each profile is one member with its own daemon, under `<home>/profiles/`.
 
-use ome_api::{Empty, daemon::StatusGet};
+use ome_api::{
+    Empty,
+    daemon::{ProfileDelete, ProfileDeleteParams, ProfileRename, ProfileRenameParams, StatusGet},
+};
 use ome_client::DaemonClient;
 
 use crate::{
@@ -33,6 +36,7 @@ pub(crate) async fn run(ctx: &mut Ctx, command: ProfileCommand) -> Result<()> {
             use_profile(ctx, &name)
         }
         ProfileCommand::Remove { name, confirm } => remove(ctx, &name, confirm.as_deref()).await,
+        ProfileCommand::Rename { name } => rename(ctx, &name).await,
     }
 }
 
@@ -168,24 +172,64 @@ fn use_profile(ctx: &Ctx, name: &str) -> Result<()> {
     Ok(())
 }
 
-async fn remove(ctx: &Ctx, name: &str, confirm: Option<&str>) -> Result<()> {
+/// `ome profile rename`: the member's name for every vault's members.
+async fn rename(ctx: &Ctx, name: &str) -> Result<()> {
     let profile = ctx
-        .home
-        .profile(name)
-        .map_err(|e| Error::usage(e.to_string()))?;
+        .client()
+        .await?
+        .call::<ProfileRename>(&ProfileRenameParams {
+            name: name.to_owned(),
+        })
+        .await?;
+    if ctx.mode == Mode::Json {
+        return ctx.json(&profile);
+    }
+    ctx.success(&format!("You are {} to every member now", profile.name));
+    Ok(())
+}
+
+/// `ome profile remove`: the profile's own daemon deletes it, and refuses while it is a member of a vault, which would
+/// lose a viewing share and a signer.
+async fn remove(ctx: &Ctx, name: &str, confirm: Option<&str>) -> Result<()> {
+    let target = ctx.with_profile(name)?;
+    let profile = target.profile.clone();
     if !profile.dir().is_dir() {
         return Err(Error::usage(format!("There is no profile {name:?}.")));
     }
     ctx.warn(&format!(
-        "Removing {name} deletes its signing key and its keeper's viewing shares. In each of its vaults the other \
-         members must then remove it with `ome member change`, or swap its key."
+        "Removing {name} deletes its signing key, its keeper and everything else it holds."
     ));
     prompt::typed(ctx, name, confirm, &format!("Removing profile {name}"))?;
-    let step = Step::start(ctx, "Stopping its daemon");
-    launch::stop(&profile).await?;
-    step.done("Daemon stopped");
+    let step = Step::start(ctx, "Asking its daemon to delete it");
+    if launch::profile_exists(&profile) {
+        launch::start(&target).await?;
+        let deleted = target
+            .client()
+            .await?
+            .call::<ProfileDelete>(&ProfileDeleteParams {
+                confirm: name.to_owned(),
+            })
+            .await;
+        if let Err(error) = deleted {
+            step.fail("Not removed");
+            return Err(Error::from(error).hint(
+                "Leave each vault first: a member change that removes you (`ome member change`).",
+            ));
+        }
+        // The daemon removes its directory as it stops.
+        for _ in 0..50 {
+            if !profile.dir().is_dir() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    } else {
+        // Never set up: nothing in it is a member of anything.
+        launch::stop(&profile).await?;
+        std::fs::remove_dir_all(profile.dir())?;
+    }
+    step.done("Deleted");
     secret::disable_touch_id(&profile)?;
-    std::fs::remove_dir_all(profile.dir())?;
     let current = ctx.home.root().join(CURRENT_PROFILE);
     if std::fs::read_to_string(&current).is_ok_and(|c| c.trim() == name) {
         std::fs::remove_file(current)?;

@@ -338,6 +338,13 @@ pub(crate) fn lifecycle_notice(event: &DaemonEvent) -> Option<String> {
         DaemonEvent::ProposalCancelled {
             proposal, summary, ..
         } => Some(format!("{} was cancelled: {summary}", format::id(proposal))),
+        DaemonEvent::VaultRenamed { name, by, .. } => {
+            Some(format!("{} renamed the vault to {name}", by.name))
+        }
+        DaemonEvent::MemberRenamed { member, .. } => Some(format!(
+            "member {} is now called {}",
+            member.index, member.name
+        )),
         _ => None,
     }
 }

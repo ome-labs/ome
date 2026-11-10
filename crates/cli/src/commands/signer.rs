@@ -3,7 +3,10 @@
 
 use ome_api::{
     Empty,
-    daemon::{ConfigGet, SignerLock, SignerStatus, SignerStatusGet, SignerUnlock, UnlockParams},
+    daemon::{
+        ChangePassphraseParams, ConfigGet, Secret, SignerChangePassphrase, SignerLock,
+        SignerStatus, SignerStatusGet, SignerUnlock, UnlockParams,
+    },
 };
 
 use crate::{
@@ -104,7 +107,44 @@ pub(crate) async fn run(ctx: &Ctx, command: SignerCommand) -> Result<()> {
             ctx.success("Touch ID is off; the key is gone from the keychain");
             Ok(())
         }
+        SignerCommand::Passphrase => change_passphrase(ctx).await,
     }
+}
+
+/// `ome signer passphrase`: the current passphrase, then the new one twice. The signing key stays the same; Touch ID,
+/// which keeps the old sealing key, is re-enrolled.
+async fn change_passphrase(ctx: &Ctx) -> Result<()> {
+    let client = ctx.client().await?;
+    let current = secret::passphrase(ctx)?;
+    let next = secret::replacement_passphrase(ctx)?;
+    let step = Step::start(ctx, "Re-sealing your signing key");
+    let status = client
+        .call::<SignerChangePassphrase>(&ChangePassphraseParams {
+            current: Secret::Passphrase {
+                passphrase: current.as_str().to_owned(),
+            },
+            next: next.as_str().to_owned(),
+        })
+        .await;
+    let status = match status {
+        Ok(status) => {
+            step.done("Re-sealed under the new passphrase");
+            status
+        }
+        Err(error) => {
+            step.fail("The passphrase is unchanged");
+            return Err(error.into());
+        }
+    };
+    if secret::touch_id_enabled(&ctx.profile) {
+        // The keychain holds the old sealing key, which no longer opens anything.
+        secret::enable_touch_id(ctx, client, Some(next.as_str())).await?;
+    }
+    if ctx.mode == Mode::Json {
+        return ctx.json(&status);
+    }
+    ctx.success("Passphrase changed: the old one no longer opens your signing key");
+    Ok(())
 }
 
 fn describe(status: SignerStatus) -> String {

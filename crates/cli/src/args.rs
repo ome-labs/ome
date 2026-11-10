@@ -296,7 +296,12 @@ pub(crate) enum ProfileCommand {
         /// The profile (asked for when left out).
         name: Option<String>,
     },
-    /// Stop a profile's daemon and delete everything it holds.
+    /// Your name, as every vault's members see it.
+    Rename {
+        /// The new name.
+        name: String,
+    },
+    /// Stop a profile's daemon and delete everything it holds; refused while it is in a vault.
     Remove {
         /// The profile.
         name: String,
@@ -382,12 +387,22 @@ pub(crate) enum SignerCommand {
         /// on or off.
         state: Toggle,
     },
+    /// Change the passphrase: the signing key and the keeper's sealed key are re-sealed, the key is unchanged.
+    Passphrase,
 }
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum VaultCommand {
     /// Create a vault with co-founders: a wizard that prints the invite and founds the vault.
     Create(CreateArgs),
+    /// The lobby you host: show it, remove a joiner, or change its size and thresholds before it starts.
+    #[command(subcommand)]
+    Lobby(LobbyCommand),
+    /// Rename the vault for every member (no proposal needed).
+    Rename {
+        /// The new name.
+        name: String,
+    },
     /// Join a vault a co-founder is creating.
     Join {
         /// The invite (ome-invite-v0:…).
@@ -450,6 +465,29 @@ pub(crate) struct CreateArgs {
     /// Members needed to read (`t_v`), at least 2.
     #[arg(long, short = 't')]
     pub(crate) readers: Option<u8>,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum LobbyCommand {
+    /// Your open lobbies: who has joined, and the invite.
+    Show,
+    /// Remove a joiner from the lobby you host; the old invite stops working and a new one is printed.
+    Remove {
+        /// The joiner's name or keeper identity.
+        member: String,
+    },
+    /// Change the lobby's size or thresholds before it starts.
+    Update {
+        /// How many members found it, you included.
+        #[arg(long)]
+        members: Option<u8>,
+        /// Approvals needed to spend (k).
+        #[arg(long, short = 'k')]
+        approvals: Option<u8>,
+        /// Members needed to read (`t_v`).
+        #[arg(long, short = 't')]
+        readers: Option<u8>,
+    },
 }
 
 #[derive(Debug, Args)]

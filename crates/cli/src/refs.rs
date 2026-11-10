@@ -692,6 +692,7 @@ mod tests {
         let member = |index: u32, name: &str| CommitteeMember {
             index,
             name: name.into(),
+            account: None,
             signer_key: ome_api::Point {
                 x: hex("1"),
                 y: hex("2"),

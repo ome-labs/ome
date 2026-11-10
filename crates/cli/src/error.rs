@@ -281,6 +281,9 @@ fn fix(details: &ErrorDetails) -> Option<String> {
             NotReadyReason::Keeper => "Check the keeper with `ome status`.",
             NotReadyReason::Node => "Check the node with `ome status`.",
             NotReadyReason::Payload => "Wait for it to arrive from the member who proposed it.",
+            NotReadyReason::Members => {
+                "Wait for everyone to join, or make the lobby smaller with `ome vault lobby update --members`."
+            }
             NotReadyReason::Starting
             | NotReadyReason::Sync
             | NotReadyReason::Vault

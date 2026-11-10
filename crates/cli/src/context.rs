@@ -102,6 +102,28 @@ impl Ctx {
         })
     }
 
+    /// The same context acting on profile `name`, with its own daemon session.
+    pub(crate) fn with_profile(&self, name: &str) -> Result<Self> {
+        let profile = self
+            .home
+            .profile(name)
+            .map_err(|e| Error::usage(e.to_string()))?;
+        Ok(Self {
+            home: self.home.clone(),
+            profile,
+            named_profile: true,
+            profile_given: true,
+            mode: self.mode,
+            interactive: self.interactive,
+            yes: self.yes,
+            quiet: self.quiet,
+            verbose: self.verbose,
+            vault: None,
+            client: OnceCell::new(),
+            nested: Cell::new(false),
+        })
+    }
+
     /// Steps, notes and prompts are shown.
     pub(crate) fn human(&self) -> bool {
         self.mode == Mode::Human && !self.quiet
