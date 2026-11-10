@@ -15,16 +15,18 @@ use sha2::{Digest, Sha256};
 
 use super::bounded;
 use crate::{
-    Error,
+    Error, IdentityPublic, KeeperIdentity,
     codec::canonical,
     limits::{MAX_PAYLOAD_BYTES, MAX_PAYLOAD_REQUESTS, MAX_REASON_BYTES, MAX_SUMMARY_BYTES},
-    types::{WireField, WireSignature},
+    types::{Bytes64, WireField, WireSignature},
 };
 
 /// Domain tag of proposal ids.
 pub const PROPOSAL_DOMAIN: &[u8] = b"ome.proposal.v0";
 /// Domain tag of payload hashes.
 pub const PAYLOAD_DOMAIN: &[u8] = b"ome.proposal.payload.v0";
+/// Domain tag of execution receipt signatures.
+pub const RECEIPT_DOMAIN: &str = "ome.receipt.v0";
 
 /// A proposal's payload, by hash and length.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -50,6 +52,9 @@ pub struct Proposal {
     pub config_version: u32,
     /// The hash members approve: the entrypoint payload hash, which each approver recomputes from the payload.
     pub outer_hash: WireField,
+    /// When the proposer made it (unix seconds, the clock `expires_at` uses). Part of the id, so every member shows
+    /// the same time.
+    pub created_at: u64,
     /// Approval deadline (unix seconds).
     pub expires_at: u64,
     /// Entrypoint `tx_nonce`; cancelling the proposal burns it.
@@ -74,6 +79,11 @@ impl Proposal {
     }
 
     pub(super) fn validate(&self) -> Result<(), Error> {
+        if self.created_at > self.expires_at {
+            return Err(Error::OutOfBounds {
+                field: "created_at",
+            });
+        }
         bounded(
             "payload.len",
             usize::try_from(self.payload.len).unwrap_or(usize::MAX),
@@ -174,13 +184,105 @@ impl Rejection {
     }
 }
 
-/// A proposal was executed in `tx_hash`.
+/// A proposal was executed in `tx_hash`, by the member whose keeper is `executor`. The executor's keeper signs it, so
+/// a receipt names its executor however it travels (sync re-sends other members' records under its own frames).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutionReceipt {
     /// Executed proposal id.
     pub proposal: [u8; 32],
     /// Aztec transaction hash.
     pub tx_hash: WireField,
+    /// Block that included it.
+    pub block: u64,
+    /// The executing member's keeper.
+    pub executor: IdentityPublic,
+    /// Ed25519 signature by `executor` over the domain, the vault and the fields above.
+    pub signature: Bytes64,
+}
+
+impl ExecutionReceipt {
+    /// A receipt for `vault`, signed by `identity`, the executing member's keeper.
+    ///
+    /// # Errors
+    /// [`Error::Malformed`] if it cannot be encoded.
+    pub fn sign(
+        identity: &KeeperIdentity,
+        vault: [u8; 32],
+        proposal: [u8; 32],
+        tx_hash: WireField,
+        block: u64,
+    ) -> Result<Self, Error> {
+        let executor = identity.public();
+        let signature = identity.sign(&canonical(&(
+            RECEIPT_DOMAIN,
+            vault,
+            proposal,
+            tx_hash,
+            block,
+            executor,
+        ))?);
+        Ok(Self {
+            proposal,
+            tx_hash,
+            block,
+            executor,
+            signature,
+        })
+    }
+
+    /// Checks that `executor` signed this receipt for `vault`.
+    ///
+    /// # Errors
+    /// [`Error::InvalidSignature`].
+    pub fn verify(&self, vault: [u8; 32]) -> Result<(), Error> {
+        self.executor.verify(
+            &canonical(&(
+                RECEIPT_DOMAIN,
+                vault,
+                self.proposal,
+                self.tx_hash,
+                self.block,
+                self.executor,
+            ))?,
+            &self.signature,
+        )
+    }
+}
+
+/// How far a member's execution of a proposal is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ClaimPhase {
+    /// Rebuilding the transaction.
+    Rebuilding,
+    /// Proving.
+    Proving,
+    /// Sending.
+    Sending,
+    /// Included in a block: the claim ends.
+    Mined,
+    /// Failed: the claim ends.
+    Failed,
+}
+
+impl ClaimPhase {
+    /// Whether the execution is over, so the claim no longer holds.
+    #[must_use]
+    pub fn is_final(self) -> bool {
+        matches!(self, Self::Mined | Self::Failed)
+    }
+}
+
+/// A member is executing a proposal: other members wait instead of proving the same transaction. Sent by the
+/// claimant's keeper on each phase change and never synced; a claim not refreshed for a while lapses. It is a
+/// courtesy, not a lock: the proposal's nonce is what lets only one execution land.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExecutionClaim {
+    /// Proposal being executed.
+    pub proposal: [u8; 32],
+    /// How far it is.
+    pub phase: ClaimPhase,
+    /// Unix seconds the execution started.
+    pub started_at: u64,
 }
 
 fn tagged_hash(domain: &[u8], bytes: &[u8]) -> [u8; 32] {

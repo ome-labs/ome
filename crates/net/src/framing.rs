@@ -59,6 +59,7 @@ impl Lane {
                 | Message::Approval(_)
                 | Message::Rejection(_)
                 | Message::ExecutionReceipt(_)
+                | Message::ExecutionClaim(_)
                 | Message::SyncRequest(_)
                 | Message::ArtifactRequest(_)
                 | Message::ArtifactManifest(_)

@@ -28,7 +28,8 @@ use ome_wire::{
         },
         mailbox::RelayEnvelope,
         proposals::{
-            Approval, ExecutionReceipt, PayloadRequest, Proposal, ProposalPayload, Rejection,
+            Approval, ClaimPhase, ExecutionClaim, ExecutionReceipt, PayloadRequest, Proposal,
+            ProposalPayload, Rejection,
         },
         sync::{SyncRequest, VoteRef},
     },
@@ -131,6 +132,7 @@ pub fn proposal() -> Proposal {
     Proposal {
         config_version: 3,
         outer_hash: [0x22; 32],
+        created_at: NOW,
         expires_at: NOW + 3600,
         tx_nonce: [0x01; 32],
         fee_method: 1,
@@ -274,10 +276,10 @@ pub fn samples() -> Vec<(&'static str, Message)> {
         ),
         (
             "execution_receipt",
-            Message::ExecutionReceipt(ExecutionReceipt {
-                proposal: proposal_id,
-                tx_hash: [0x0e; 32],
-            }),
+            Message::ExecutionReceipt(
+                ExecutionReceipt::sign(&identity(2), [0x0d; 32], proposal_id, [0x0e; 32], 42)
+                    .unwrap(),
+            ),
         ),
         (
             "sync_request",
@@ -390,6 +392,14 @@ pub fn samples() -> Vec<(&'static str, Message)> {
                 class_id: [0x1a; 32],
                 index: 1,
                 bytes: vec![0x1c; 4],
+            }),
+        ),
+        (
+            "execution_claim",
+            Message::ExecutionClaim(ExecutionClaim {
+                proposal: proposal_id,
+                phase: ClaimPhase::Proving,
+                started_at: NOW,
             }),
         ),
     ]

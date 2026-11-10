@@ -17,7 +17,7 @@ use ome_wire::{
         ceremony::{Ceremony, Complaint},
         ecdh::{EcdhPurpose, EcdhRequest},
         lobby::LobbyLeave,
-        proposals::ExecutionReceipt,
+        proposals::{ClaimPhase, ExecutionClaim},
     },
     types::WirePoint,
     version::PROTOCOL_VERSION,
@@ -74,9 +74,10 @@ pub fn ceremony_frame(from: u8) -> Vec<u8> {
 pub fn sync_frame(from: u8) -> Vec<u8> {
     frame(
         from,
-        Message::ExecutionReceipt(ExecutionReceipt {
+        Message::ExecutionClaim(ExecutionClaim {
             proposal: [3; 32],
-            tx_hash: [4; 32],
+            phase: ClaimPhase::Proving,
+            started_at: 4,
         }),
     )
 }

@@ -18,11 +18,11 @@ use ome_crypto::{
     },
 };
 use ome_wire::{
-    Error,
+    Error, Message, decode_body, encode_body,
     messages::{
         ceremony::{Ceremony, DkgRound1, Justification, Manifest, ReshareDeal, SealedShare},
         ecdh::EcdhResponse,
-        proposals::{Approval, ProposalPayload},
+        proposals::{Approval, ExecutionReceipt, ProposalPayload},
     },
     types::{WirePoint, field, parse_scalar, scalar},
 };
@@ -241,4 +241,38 @@ fn an_approval_carries_a_signature_that_still_verifies() {
         message,
         &received
     ));
+}
+
+#[test]
+fn a_receipt_names_the_keeper_that_signed_it_for_this_vault() {
+    let receipt = ExecutionReceipt::sign(
+        &support::identity(2),
+        [0x0d; 32],
+        [0x01; 32],
+        [0x0e; 32],
+        42,
+    )
+    .unwrap();
+    assert_eq!(receipt.executor, support::identity(2).public());
+    receipt.verify([0x0d; 32]).unwrap();
+    // Another vault, or any changed field, fails.
+    assert_eq!(receipt.verify([0x0c; 32]), Err(Error::InvalidSignature));
+    let moved = ExecutionReceipt {
+        block: 43,
+        ..receipt
+    };
+    assert_eq!(moved.verify([0x0d; 32]), Err(Error::InvalidSignature));
+    let claimed = ExecutionReceipt {
+        executor: support::identity(3).public(),
+        ..receipt
+    };
+    assert_eq!(claimed.verify([0x0d; 32]), Err(Error::InvalidSignature));
+}
+
+#[test]
+fn a_proposal_is_not_made_after_its_deadline() {
+    let mut proposal = support::proposal();
+    proposal.created_at = proposal.expires_at + 1;
+    let body = encode_body(&Message::Proposal(proposal.clone()));
+    assert!(body.is_err() || decode_body(&body.unwrap()).is_err());
 }

@@ -21,7 +21,10 @@ use ceremony::{
 use device::{DevicePair, DevicePaired, DeviceReview, DeviceUnpair, DeviceVote, DeviceVoted};
 use ecdh::{EcdhRequest, EcdhResponse};
 use lobby::{LobbyJoin, LobbyLeave, LobbyPlan, LobbyState, SealedSecrets};
-use proposals::{Approval, ExecutionReceipt, PayloadRequest, Proposal, ProposalPayload, Rejection};
+use proposals::{
+    Approval, ExecutionClaim, ExecutionReceipt, PayloadRequest, Proposal, ProposalPayload,
+    Rejection,
+};
 use sync::SyncRequest;
 
 /// Every message kind. Append new variants at the end only.
@@ -95,6 +98,8 @@ pub enum Message {
     ArtifactManifest(ArtifactManifest),
     /// One chunk of a contract artifact.
     ArtifactChunk(ArtifactChunk),
+    /// A member is executing a proposal.
+    ExecutionClaim(ExecutionClaim),
 }
 
 impl Message {
@@ -136,6 +141,7 @@ impl Message {
             | Self::Abort(_)
             | Self::Approval(_)
             | Self::ExecutionReceipt(_)
+            | Self::ExecutionClaim(_)
             | Self::LobbyLeave(_) => Ok(()),
         }
     }
