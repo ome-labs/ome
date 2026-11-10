@@ -29,10 +29,10 @@ pub use membership::{
     RotationState, RotationStep, RotationStepId,
 };
 pub use proposals::{
-    ApproveParams, DecodedCall, ExecuteParams, Execution, ExecutionPhase, ExecutionProgress,
-    ExecutionView, Gas, Intent, IntentCall, LabelSource, ProposalPreview, ProposalRef,
-    ProposalStatus, ProposalView, ProposeParams, Proposer, Recipient, RejectParams, Review,
-    ReviewChecks, Signs, Simulation, Vote,
+    ApproveParams, DecodedAuthwit, DecodedCall, ExecuteParams, Execution, ExecutionPhase,
+    ExecutionProgress, ExecutionView, Gas, Intent, IntentAuthwit, IntentCall, LabelSource,
+    ProposalPreview, ProposalRef, ProposalStatus, ProposalView, ProposeParams, Proposer, Recipient,
+    RejectParams, Review, ReviewChecks, Signs, Simulation, Vote,
 };
 pub use receiving::{
     ActivityKind, ActivityPage, ActivityParams, AuditPage, BalanceState, CounterpartyPage,

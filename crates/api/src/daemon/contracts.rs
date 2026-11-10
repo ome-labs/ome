@@ -224,6 +224,8 @@ pub struct ContractRegisterParams {
 pub struct Limits {
     /// Calls per proposal besides the fee payer's.
     pub max_calls: u32,
+    /// Private authwits a proposal grants.
+    pub max_authwits: u32,
     /// Bytes of a proposal's summary, which carries its intent.
     pub max_summary_bytes: u32,
     /// Bytes of a contract artifact, uncompressed.

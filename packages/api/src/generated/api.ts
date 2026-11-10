@@ -3077,6 +3077,21 @@ export type IntentCall = {
 };
 
 /**
+ * A private authwit a `calls` intent grants: `caller`, one of the intent's call targets, may make `call` on the
+ * vault's behalf inside the transaction (a swap pulling the vault's tokens, say).
+ */
+export type IntentAuthwit = {
+  /**
+   * The contract allowed to make the call.
+   */
+  caller: Hex32;
+  /**
+   * The private call it may make; its contract consumes the authwit.
+   */
+  call: IntentCall;
+};
+
+/**
  * What a proposal is for. Carried as JSON in the proposal's summary (at most 4 KiB).
  */
 export type Intent =
@@ -3105,6 +3120,10 @@ export type Intent =
        * Calls.
        */
       calls: Array<IntentCall>;
+      /**
+       * Private authwits granted with the calls, at most `daemon.info.limits.maxAuthwits`.
+       */
+      authwits?: Array<IntentAuthwit>;
       /**
        * Note.
        */
@@ -3222,6 +3241,32 @@ export type DecodedCall = {
    * Whether the arguments were decoded with the contract's artifact; until it arrives they are raw fields.
    */
   decoded: boolean;
+};
+
+/**
+ * A private authwit a proposal grants, decoded from its payload.
+ */
+export type DecodedAuthwit = {
+  /**
+   * The contract allowed to make the call.
+   */
+  caller: Hex32;
+  /**
+   * Its label, as for a call's target.
+   */
+  callerLabel: string | null;
+  /**
+   * The call it may make.
+   */
+  call: DecodedCall;
+  /**
+   * The authwit's message hash, which the vault approves.
+   */
+  messageHash: Hex32;
+  /**
+   * The message an approval signs for it.
+   */
+  approvalMessage: Hex32;
 };
 
 /**
@@ -3434,6 +3479,10 @@ export type ProposalView = {
    */
   calls: Array<DecodedCall>;
   /**
+   * The private authwits it grants, each signed with the transaction.
+   */
+  authwits: Array<DecodedAuthwit>;
+  /**
    * For transfers, the token as this member knows it.
    */
   token: TokenInfo | null;
@@ -3612,6 +3661,10 @@ export type ProposalPreview = {
    * Calls it would make.
    */
   calls: Array<DecodedCall>;
+  /**
+   * Authwits it would grant.
+   */
+  authwits: Array<DecodedAuthwit>;
   /**
    * Gas used.
    */
@@ -3883,6 +3936,10 @@ export type Limits = {
    * Calls per proposal besides the fee payer's.
    */
   maxCalls: number;
+  /**
+   * Private authwits a proposal grants.
+   */
+  maxAuthwits: number;
   /**
    * Bytes of a proposal's summary, which carries its intent.
    */

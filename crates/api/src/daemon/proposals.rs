@@ -21,6 +21,16 @@ pub struct IntentCall {
     pub args: Vec<AbiValue>,
 }
 
+/// A private authwit a `calls` intent grants: `caller`, one of the intent's call targets, may make `call` on the
+/// vault's behalf inside the transaction (a swap pulling the vault's tokens, say).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct IntentAuthwit {
+    /// The contract allowed to make the call.
+    pub caller: Hex32,
+    /// The private call it may make; its contract consumes the authwit.
+    pub call: IntentCall,
+}
+
 /// What a proposal is for. Carried as JSON in the proposal's summary (at most 4 KiB).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -40,6 +50,10 @@ pub enum Intent {
     Calls {
         /// Calls.
         calls: Vec<IntentCall>,
+        /// Private authwits granted with the calls, at most `daemon.info.limits.maxAuthwits`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(optional, as = "Option<Vec<IntentAuthwit>>")]
+        authwits: Vec<IntentAuthwit>,
         /// Note.
         memo: Option<String>,
     },
@@ -126,6 +140,22 @@ pub struct DecodedCall {
     pub decoded: bool,
 }
 
+/// A private authwit a proposal grants, decoded from its payload.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DecodedAuthwit {
+    /// The contract allowed to make the call.
+    pub caller: Hex32,
+    /// Its label, as for a call's target.
+    pub caller_label: Option<String>,
+    /// The call it may make.
+    pub call: DecodedCall,
+    /// The authwit's message hash, which the vault approves.
+    pub message_hash: Hex32,
+    /// The message an approval signs for it.
+    pub approval_message: Hex32,
+}
+
 /// The proposer.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct Proposer {
@@ -207,6 +237,8 @@ pub struct ProposalView {
     pub fee_method: String,
     /// Decoded calls.
     pub calls: Vec<DecodedCall>,
+    /// The private authwits it grants, each signed with the transaction.
+    pub authwits: Vec<DecodedAuthwit>,
     /// For transfers, the token as this member knows it.
     pub token: Option<TokenInfo>,
     /// The execution, once executed.
@@ -332,6 +364,8 @@ pub struct ProposalPreview {
     pub ok: bool,
     /// Calls it would make.
     pub calls: Vec<DecodedCall>,
+    /// Authwits it would grant.
+    pub authwits: Vec<DecodedAuthwit>,
     /// Gas used.
     pub gas: Option<Gas>,
     /// Why it failed.
