@@ -705,6 +705,7 @@ mod tests {
             transport: hex("4"),
             peer_id: String::new(),
             addresses: vec![],
+            release: None,
             you: false,
         };
         let members = [member(1, "Alice"), member(2, "Bob")];

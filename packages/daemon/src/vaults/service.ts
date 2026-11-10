@@ -310,10 +310,13 @@ export class VaultService {
     const record = this.record(vault);
     const deployment = this.deployment(vault);
     const manifest = this.manifest(vault);
-    const status = await this.#context.keeper.client.call("vault.status", {
-      vault: record.address,
-    });
+    const [status, protocol] = await Promise.all([
+      this.#context.keeper.client.call("vault.status", { vault: record.address }),
+      this.#context.keeper.client.call("vault.protocol", { vault: record.address }),
+    ]);
     const me = this.#context.keeper.state.identity;
+    const releaseOf = (index: number) =>
+      protocol.members.find((m) => m.member === index)?.release ?? null;
     const committee: CommitteeView = {
       epoch: manifest.epoch,
       viewingThreshold: manifest.viewingThreshold,
@@ -328,8 +331,10 @@ export class VaultService {
         transport: m.transport,
         peerId: peerId(m.identity),
         addresses: m.addresses,
+        release: releaseOf(m.index),
         you: m.identity === me,
       })),
+      protocolVersion: protocol.version,
       serving: status.serving,
       keeperStatus: status.status,
     };

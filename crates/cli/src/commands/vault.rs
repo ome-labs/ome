@@ -769,7 +769,7 @@ async fn members(ctx: &Ctx) -> Result<()> {
     if ctx.mode == Mode::Json {
         return ctx.json(&details.committee.members);
     }
-    let mut t = table::Table::new(&["#", "member", "account", "signing key", "keeper"]);
+    let mut t = table::Table::new(&["#", "member", "account", "signing key", "keeper", "release"]);
     for m in &details.committee.members {
         t.row(vec![
             table::cell(m.index.to_string()),
@@ -796,9 +796,24 @@ async fn members(ctx: &Ctx) -> Result<()> {
                 Tone::Dim,
             ),
             table::toned(address(ctx, &m.identity), Tone::Dim),
+            table::toned(m.release.as_deref().unwrap_or("not yet known"), Tone::Dim),
         ]);
     }
     t.print(ctx);
+    let mut releases: Vec<&str> = details
+        .committee
+        .members
+        .iter()
+        .filter_map(|m| m.release.as_deref())
+        .collect();
+    releases.sort_unstable();
+    releases.dedup();
+    if releases.len() > 1 {
+        ctx.info(&format!(
+            "Members run different releases; the vault speaks protocol v{}, which all of them read.",
+            details.committee.protocol_version
+        ));
+    }
     Ok(())
 }
 
