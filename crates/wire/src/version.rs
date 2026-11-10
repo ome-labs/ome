@@ -81,3 +81,32 @@ pub fn negotiate<'a>(ranges: impl IntoIterator<Item = &'a VersionRange>) -> Resu
         _ => Err(Error::NoCommonVersion),
     }
 }
+
+/// What a keeper that never sent its capabilities speaks: the first version.
+pub const FIRST: VersionRange = VersionRange { min: 0, max: 0 };
+
+/// The version a vault's keepers write in: the newest that this build and every member speaks. A member whose
+/// capabilities haven't arrived counts as [`FIRST`], so the vault moves only once every member can read the new
+/// version.
+///
+/// # Errors
+/// [`Error::NoCommonVersion`] when no version is shared (a member is past this build's oldest version).
+pub fn vault_version(
+    members: impl IntoIterator<Item = Option<VersionRange>>,
+) -> Result<u16, Error> {
+    let ranges: Vec<VersionRange> = members
+        .into_iter()
+        .map(|range| range.unwrap_or(FIRST))
+        .chain([SUPPORTED])
+        .collect();
+    negotiate(&ranges)
+}
+
+/// The members, by `key`, that keep a vault from writing `needed`: those that don't speak it (or never said).
+pub fn holding_back<K: Clone>(needed: u16, members: &[(K, Option<VersionRange>)]) -> Vec<K> {
+    members
+        .iter()
+        .filter(|(_, range)| !range.unwrap_or(FIRST).contains(needed))
+        .map(|(key, _)| key.clone())
+        .collect()
+}

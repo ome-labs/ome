@@ -3,6 +3,7 @@
 //! conversions to `ome-crypto` types that validate the cryptographic content.
 
 pub mod artifacts;
+pub mod capabilities;
 pub mod ceremony;
 pub mod device;
 pub mod ecdh;
@@ -16,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Error;
 use artifacts::{ArtifactChunk, ArtifactManifest, ArtifactRequest};
+use capabilities::Capabilities;
 use ceremony::{
     Abort, Complaint, Confirm, DkgRound1, Echo, Justification, Manifest, ReshareDeal, SealedShare,
 };
@@ -106,6 +108,8 @@ pub enum Message {
     LobbyRemoved(LobbyRemoved),
     /// A member renamed the vault, or themselves.
     NameChange(NameChange),
+    /// What a member's keeper speaks in a vault: its protocol versions and release.
+    Capabilities(Capabilities),
 }
 
 impl Message {
@@ -141,6 +145,7 @@ impl Message {
             Self::ArtifactManifest(m) => m.validate(),
             Self::ArtifactChunk(m) => m.validate(),
             Self::NameChange(m) => m.validate(),
+            Self::Capabilities(m) => m.validate(),
             Self::Approval(m) => m.validate(),
             Self::ExecutionReceipt(m) => m.extensions.validate(),
             Self::DkgConfirm(_)
