@@ -44,7 +44,14 @@ import {
   type UtilityExecutionResult,
 } from "@aztec-labs/stdlib/tx";
 import { BaseWallet, type FeeOptions } from "@aztec-labs/wallet-sdk/base-wallet";
-import type { Hex64, HexBytes, Manifest, VaultConfig } from "@ome-labs/api";
+import type {
+  ErrorDetails,
+  ErrorKind,
+  Hex64,
+  HexBytes,
+  Manifest,
+  VaultConfig,
+} from "@ome-labs/api";
 import {
   DEFAULT_TAGGING_SECRET_STRATEGY,
   type PXEConfig,
@@ -131,14 +138,21 @@ export interface VaultTx {
   readonly approvalMessage: string;
 }
 
-/** Why a vault transaction did not run. */
+/**
+ * Why a vault transaction did not run. `kind` and `details` are the API's error kind and its numbers, so a service that
+ * reports this error (the daemon) passes them on as they are.
+ */
 export class VaultTxError extends Error {
   readonly reason: "outer-hash" | "not-approved" | "stale-config";
+  readonly kind: ErrorKind;
+  readonly details: ErrorDetails | undefined;
 
-  constructor(reason: VaultTxError["reason"], message: string) {
+  constructor(reason: VaultTxError["reason"], message: string, details?: ErrorDetails) {
     super(message);
     this.name = "VaultTxError";
     this.reason = reason;
+    this.details = details;
+    this.kind = details?.kind ?? "invalid";
   }
 }
 
@@ -536,6 +550,7 @@ export class OmeWallet extends BaseWallet {
       throw new VaultTxError(
         "stale-config",
         `Approved under config version ${tx.configVersion}; the vault is at ${version}`,
+        { kind: "stale", made: tx.configVersion, current: version },
       );
     const result = await this.tallyVaultTx(tx, approvals);
     if (result.status !== "approved" || !result.witness) {
@@ -543,6 +558,7 @@ export class OmeWallet extends BaseWallet {
       throw new VaultTxError(
         "not-approved",
         `Proposal is ${result.status} with ${result.approvals} of ${result.needed} approvals${refused ? ` (refused ${refused})` : ""}`,
+        result.status === "expired" ? { kind: "expired", at: tx.expiresAt } : undefined,
       );
     }
     record.contract.witnesses.provide(
