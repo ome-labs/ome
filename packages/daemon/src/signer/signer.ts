@@ -1,7 +1,13 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rename } from "node:fs/promises";
 
 import type { Hex32, Point, Secret, SignerStatus } from "@ome-labs/api";
-import { UnlockedSigner, generateSigner, sealedPublicKey, sealingKey } from "@ome-labs/wasm";
+import {
+  UnlockedSigner,
+  generateSigner,
+  resealSigner,
+  sealedPublicKey,
+  sealingKey,
+} from "@ome-labs/wasm";
 
 import { DaemonError, notReady } from "../errors.ts";
 import { writePrivate } from "../profile/files.ts";
@@ -22,6 +28,8 @@ export class SignerService {
   }
 
   async load(): Promise<void> {
+    // A passphrase change writes the new file beside the old one first: finish one that was interrupted.
+    await rename(`${this.#path}.next`, this.#path).catch(() => undefined);
     try {
       this.#sealed = await readFile(this.#path, "utf8");
     } catch {
@@ -67,6 +75,22 @@ export class SignerService {
     this.#unlocked?.free();
     this.#unlocked = null;
     this.#until = null;
+  }
+
+  /** The sealed key under `next`, opened with `current`; nothing is written. */
+  resealed(current: Secret, next: string): { sealed: string; key: Hex32 } {
+    const sealed = resealSigner(this.#sealedOrThrow(), current, next);
+    return { sealed, key: sealingKey(sealed, next) };
+  }
+
+  /** Takes a resealed key the caller has written in place: the old passphrase stops working from here on. */
+  replaced(sealed: string): void {
+    this.lock();
+    this.#sealed = sealed;
+  }
+
+  get path(): string {
+    return this.#path;
   }
 
   sealingKey(passphrase: string): Hex32 {

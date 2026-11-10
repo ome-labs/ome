@@ -5,10 +5,12 @@ import type {
   FoundingStep,
   FoundingStepId,
   Hex16,
+  Hex32,
   InvitePreview,
   KeeperContact,
   Lobby,
   LobbyCreateParams,
+  LobbyUpdateParams,
   LobbyView,
   StartLobbyParams,
 } from "@ome-labs/api";
@@ -61,10 +63,13 @@ export class FoundingService {
       name: lobby.name,
       threshold: lobby.threshold,
       viewingThreshold: lobby.viewingThreshold,
+      expected: lobby.expected,
       network: lobby.network,
+      removed: lobby.removed,
       members: lobby.members.map((m) => ({
         index: m.index,
         name: m.name,
+        account: m.account,
         signerKey: m.signerKey,
         identity: m.identity,
         peerId: peerId(m.identity),
@@ -92,7 +97,7 @@ export class FoundingService {
   #member() {
     const profile = this.#context.state.file.profile;
     if (!profile) throw notReady("profile", "create a profile first");
-    return { name: profile.name, signerKey: profile.signerKey };
+    return { name: profile.name, account: profile.account, signerKey: profile.signerKey };
   }
 
   async create(params: LobbyCreateParams): Promise<LobbyView> {
@@ -117,6 +122,16 @@ export class FoundingService {
       member: this.#member(),
     });
     return this.get(lobby);
+  }
+
+  /** Removes a joiner (host): the invite it joined with stops working, and the view carries the new one. */
+  async remove(lobby: Hex16, identity: Hex32): Promise<LobbyView> {
+    return this.view(await this.#context.keeper.client.call("lobby.remove", { lobby, identity }));
+  }
+
+  /** Changes the lobby's size or thresholds before it starts (host). */
+  async update(params: LobbyUpdateParams): Promise<LobbyView> {
+    return this.view(await this.#context.keeper.client.call("lobby.update", params));
   }
 
   async get(lobby: Hex16): Promise<LobbyView> {
@@ -260,6 +275,7 @@ export class FoundingService {
             verificationShares: dkg.verificationShares,
           },
           names: Object.fromEntries(lobby.members.map((m) => [m.identity, m.name])),
+          accounts: Object.fromEntries(lobby.members.map((m) => [m.identity, m.account])),
           transcripts: { "0": dkg.transcript },
           config: null,
           status: "active",

@@ -63,6 +63,8 @@ interface PlanFile {
   readonly viewingThreshold: number;
   readonly newMembers: NewMember[];
   readonly names: Record<Hex32, string>;
+  /** Members' own Aztec accounts by keeper identity (absent in plans from older daemons). */
+  readonly accounts?: Record<Hex32, Hex32>;
   /** The committee and config the rotation starts from. */
   readonly current: Manifest;
   readonly config: VaultConfig;
@@ -132,6 +134,7 @@ export class MembershipService {
     if (!profile) throw notReady("profile", "create a profile first");
     return this.#context.keeper.client.call("keeper.joinRequest", {
       name: profile.name,
+      account: profile.account,
       signerKey: profile.signerKey,
     });
   }
@@ -177,6 +180,10 @@ export class MembershipService {
       ...record.names,
       ...Object.fromEntries(joiners.map((j) => [j.keeper.identity, j.name])),
     };
+    const accounts = {
+      ...record.accounts,
+      ...Object.fromEntries(joiners.map((j) => [j.keeper.identity, j.account])),
+    };
     const plan: PlanFile = {
       v: 0,
       vault: record.address,
@@ -191,6 +198,7 @@ export class MembershipService {
       viewingThreshold: params.viewingThreshold,
       newMembers,
       names,
+      accounts,
       current: manifest,
       config,
       deployment: record.deployment,
@@ -320,6 +328,7 @@ export class MembershipService {
       .filter((m) => !plan.current.members.some((c) => c.identity === m.identity))
       .map((m) => ({
         name: plan.names[m.identity] ?? "member",
+        account: plan.accounts?.[m.identity] ?? `0x${"00".repeat(32)}`,
         signerKey: m.signerKey,
         keeper: { identity: m.identity, transport: m.transport, addresses: m.addresses },
       }));
@@ -445,6 +454,7 @@ export class MembershipService {
         founding: { lobby: null, session: plan.session, deployTx: null },
         deployment: plan.deployment,
         names: plan.names,
+        accounts: plan.accounts ?? {},
         transcripts: { ...handoff.transcripts, [epoch]: result.transcript },
         config: null,
         status: "active",
@@ -455,6 +465,7 @@ export class MembershipService {
       const record = this.#context.vaults.record(plan.vault);
       record.transcripts[epoch] = result.transcript;
       record.names = { ...record.names, ...plan.names };
+      record.accounts = { ...record.accounts, ...plan.accounts };
       await this.#context.vaults.save(record);
     }
     this.#mark(rotating, "reshare", "done", result.committeeCommitment);

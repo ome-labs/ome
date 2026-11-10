@@ -28,6 +28,8 @@ export interface Member {
   readonly daemon: Daemon;
   readonly client: DaemonClient;
   readonly events: DaemonEvent[];
+  /** The profile's directory, which `profile.delete` removes. */
+  readonly profileDir: string;
   stop(): Promise<void>;
 }
 
@@ -39,6 +41,8 @@ export async function member(name: string, settings: Partial<Settings> = {}): Pr
     home,
     settings: { nodeUrl: NODE_URL, ...settings },
     keeperListen: ["/ip4/127.0.0.1/tcp/0"],
+    // A deleted profile's daemon stops; it must not signal the test process.
+    exit: () => undefined,
   });
   await daemon.start();
   const client = await DaemonClient.discover("default", home);
@@ -55,6 +59,7 @@ export async function member(name: string, settings: Partial<Settings> = {}): Pr
     daemon,
     client,
     events,
+    profileDir: join(home, "profiles", "default"),
     async stop() {
       client.close();
       await daemon.stop();
@@ -90,7 +95,12 @@ export async function found(
 ): Promise<Hex32> {
   const [host, ...guests] = members;
   if (!host) throw new Error("a vault needs members");
-  const lobby = await host.client.call("lobby.create", { name, threshold, viewingThreshold });
+  const lobby = await host.client.call("lobby.create", {
+    name,
+    threshold,
+    viewingThreshold,
+    members: members.length,
+  });
   for (const guest of guests)
     // oxlint-disable-next-line no-await-in-loop
     await guest.client.call("lobby.join", { invite: lobby.invite ?? "" });

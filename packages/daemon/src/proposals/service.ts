@@ -115,6 +115,7 @@ export class ProposalService {
       vaultName: this.#context.vaults.record(vault).name,
       tokens: this.#tokens(vault),
       names: await this.#context.names(),
+      members: this.#context.vaults.memberAccounts(vault),
     };
   }
 
@@ -239,8 +240,14 @@ export class ProposalService {
           fee: null,
         };
     const intent = proposal.intent;
-    const label =
+    // A member's own account is named as the member, ahead of an aztec-wallet alias nobody verified.
+    const member =
+      intent.kind === "transfer"
+        ? (this.#context.vaults.memberAccounts(ref.vault).get(intent.to) ?? null)
+        : null;
+    const alias =
       intent.kind === "transfer" ? ((await this.#context.names()).get(intent.to) ?? null) : null;
+    const label = member ?? alias;
     return {
       proposal,
       vaultName: record.name,
@@ -259,7 +266,7 @@ export class ProposalService {
           ? {
               address: intent.to,
               label,
-              source: label ? "aztecWallet" : null,
+              source: member ? "member" : alias ? "aztecWallet" : null,
             }
           : null,
       simulation,

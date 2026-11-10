@@ -21,6 +21,13 @@ export interface MasterKeyStore {
   read(sealingKey?: Uint8Array): Promise<Buffer | null>;
   /** Creates and stores a new key. */
   create(sealingKey: Uint8Array): Promise<Buffer>;
+  /**
+   * The sealed file's new content under `next`, opened with `current`; `null` when a keychain holds the key (the
+   * passphrase doesn't protect it). The caller writes it, so a passphrase change replaces both files together.
+   */
+  resealed(current: Uint8Array, next: Uint8Array): Promise<Buffer | null>;
+  /** Deletes the key: from the keychain, or (for a sealed file) nothing, since the profile directory goes with it. */
+  destroy(): Promise<void>;
 }
 
 class MacKeychain implements MasterKeyStore {
@@ -60,6 +67,16 @@ class MacKeychain implements MasterKeyStore {
       key.toString("hex"),
     ]);
     return key;
+  }
+
+  resealed(): Promise<Buffer | null> {
+    return Promise.resolve(null);
+  }
+
+  async destroy(): Promise<void> {
+    await run("security", ["delete-generic-password", "-a", this.#account, "-s", SERVICE]).catch(
+      () => undefined,
+    );
   }
 }
 
@@ -106,6 +123,16 @@ class SecretService implements MasterKeyStore {
     });
     return key;
   }
+
+  resealed(): Promise<Buffer | null> {
+    return Promise.resolve(null);
+  }
+
+  async destroy(): Promise<void> {
+    await run("secret-tool", ["clear", "service", SERVICE, "account", this.#account]).catch(
+      () => undefined,
+    );
+  }
 }
 
 class SealedFile implements MasterKeyStore {
@@ -130,6 +157,16 @@ class SealedFile implements MasterKeyStore {
     const key = randomBytes(32);
     await writePrivate(this.#path, seal(sealingKey, key));
     return key;
+  }
+
+  async resealed(current: Uint8Array, next: Uint8Array): Promise<Buffer | null> {
+    const key = await this.read(current);
+    // No file yet: the keeper has never started, and creates it under the new key when it does.
+    return key ? seal(next, key) : null;
+  }
+
+  destroy(): Promise<void> {
+    return Promise.resolve();
   }
 }
 

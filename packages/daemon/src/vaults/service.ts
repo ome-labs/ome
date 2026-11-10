@@ -4,10 +4,12 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import type {
   AuditView,
   CommitteeView,
+  DaemonEvent,
   Hex32,
   Manifest,
   MemberReachability,
   MemberRef,
+  Name,
   ProposalCounts,
   VaultConfig,
   VaultDetails,
@@ -135,6 +137,18 @@ export class VaultService {
     )) {
       // oxlint-disable-next-line no-await-in-loop
       await this.observe(record.address).catch(() => undefined);
+      // oxlint-disable-next-line no-await-in-loop
+      await this.syncNames(record.address).catch(() => undefined);
+    }
+  }
+
+  /** Applies the current names the keeper holds: renames made while this daemon was down. */
+  async syncNames(vault: Hex32): Promise<void> {
+    const names = await this.#context.keeper.client.call("names.list", { vault });
+    for (const name of names) {
+      // oxlint-disable-next-line no-await-in-loop
+      const event = await this.applyName(vault, name);
+      if (event) this.#context.emit(event);
     }
   }
 
@@ -221,6 +235,49 @@ export class VaultService {
     this.#counts.set(vault, counts);
   }
 
+  /** Members' accounts with their names: `account → name`, for labelling a recipient as a member. */
+  memberAccounts(vault: Hex32): Map<Hex32, string> {
+    const record = this.record(vault);
+    const manifest = this.#manifests.get(record.address);
+    const out = new Map<Hex32, string>();
+    for (const m of manifest?.members ?? []) {
+      const account = record.accounts?.[m.identity];
+      if (account) out.set(account, record.names[m.identity] ?? `member ${m.index}`);
+    }
+    return out;
+  }
+
+  /**
+   * Applies a rename the keeper reports: the vault's name, or a member's. Returns the event to announce, or nothing
+   * when it changes nothing here.
+   */
+  async applyName(vault: Hex32, name: Name): Promise<DaemonEvent | undefined> {
+    const record = this.record(vault);
+    if (name.subject === "vault") {
+      if (record.name === name.name) return undefined;
+      record.name = name.name;
+      await this.save(record);
+      return {
+        type: "vaultRenamed",
+        vault: record.address,
+        name: name.name,
+        by:
+          name.member === null
+            ? { index: 0, name: "a former member" }
+            : this.memberRef(vault, name.member),
+      };
+    }
+    if (record.names[name.by] === name.name) return undefined;
+    record.names = { ...record.names, [name.by]: name.name };
+    await this.save(record);
+    if (name.member === null) return undefined;
+    return {
+      type: "memberRenamed",
+      vault: record.address,
+      member: this.memberRef(vault, name.member),
+    };
+  }
+
   /** Member `index` of `vault`, named as this member knows them. */
   memberRef(vault: Hex32, index: number): MemberRef {
     const record = this.record(vault);
@@ -264,6 +321,7 @@ export class VaultService {
       members: manifest.members.map((m) => ({
         index: m.index,
         name: record.names[m.identity] ?? `member ${m.index}`,
+        account: record.accounts?.[m.identity] ?? null,
         signerKey: m.signerKey,
         verificationShare: m.verificationShare,
         identity: m.identity,
@@ -308,7 +366,10 @@ export class VaultService {
     const record = this.record(vault);
     const peers = await this.#context.keeper.client.call("peers.status", { vault: record.address });
     return peers.map((p) =>
-      Object.assign(p, { name: record.names[p.identity] ?? `member ${p.index}` }),
+      Object.assign(p, {
+        name: record.names[p.identity] ?? `member ${p.index}`,
+        account: record.accounts?.[p.identity] ?? null,
+      }),
     );
   }
 

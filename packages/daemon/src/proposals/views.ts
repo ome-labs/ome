@@ -145,6 +145,7 @@ export async function proposalView(
         vaultName: record.name,
         tokens,
         names: await context.names(),
+        members: context.vaults.memberAccounts(vault),
       });
     } catch {
       // A stale proposal no longer checks against the vault; its status says why.

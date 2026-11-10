@@ -118,6 +118,7 @@ describe.skipIf(!available)("a member's signing phone", () => {
       name: "Treasury",
       threshold: 2,
       viewingThreshold: 2,
+      members: 3,
     });
     await Promise.all(
       [bob, carol].map((m) => m.client.call("lobby.join", { invite: lobby.invite ?? "" })),

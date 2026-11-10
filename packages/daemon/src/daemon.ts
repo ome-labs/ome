@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rename, rm } from "node:fs/promises";
 
 import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee";
 import { Fr } from "@aztec-labs/foundation/curves/bn254";
@@ -13,10 +13,13 @@ import {
   type DaemonInfo,
   type FeesStatus,
   type Hex32,
+  type Name,
   type KeeperState,
   type ProfileCreateParams,
   type RemoteKeeperParams,
+  type Profile,
   type Secret,
+  type SignerStatus,
   type Settings,
   type Status,
 } from "@ome-labs/api";
@@ -70,6 +73,8 @@ export interface DaemonOptions {
   readonly settings?: Partial<Settings>;
   /** libp2p listen addresses for the keeper (tests listen on loopback). */
   readonly keeperListen?: readonly string[];
+  /** Ends the process once a deleted profile's daemon has stopped (`omed` signals itself; tests do nothing). */
+  readonly exit?: () => void;
 }
 
 interface Account {
@@ -232,6 +237,8 @@ export class Daemon implements Context {
     this.#state = await ProfileState.load(this.paths.state, this.#options.settings);
     this.#node = new NodeService(this.state.file.settings.nodeUrl);
     await this.node.check();
+    // A passphrase change writes both new files before swapping them in: finish one that was interrupted.
+    await rename(`${this.paths.masterKey}.next`, this.paths.masterKey).catch(() => undefined);
     await this.signer.load();
     this.#keys = await masterKeyStore(this.paths.name, this.paths.masterKey);
     const token = randomBytes(32).toString("hex");
@@ -304,6 +311,12 @@ export class Daemon implements Context {
     };
   }
 
+  /** A rename a member's keeper replicated, or this member made: applied, then announced. */
+  async #nameChanged(vault: Hex32, name: Name): Promise<void> {
+    const event = await this.vaults.applyName(vault, name).catch(() => undefined);
+    if (event) this.emit(event);
+  }
+
   /** The vaults this member is active in. */
   #activeVaults(): Hex32[] {
     return this.vaults
@@ -327,6 +340,75 @@ export class Daemon implements Context {
   async refreshFees(): Promise<FeesStatus> {
     this.#fees = await feesStatus(this);
     return this.#fees;
+  }
+
+  /**
+   * Re-seals the signing key under `next`, and the keeper's master key with it when a sealed file holds it. Both new
+   * files are written beside the old ones before either is swapped in, and `start` finishes an interrupted swap, so the
+   * passphrase never opens one and not the other.
+   */
+  async changePassphrase(current: Secret, next: string): Promise<SignerStatus> {
+    require(next.length >= 8, "use a passphrase of at least 8 characters");
+    const keys = this.#keys as MasterKeyStore;
+    const resealed = this.signer.resealed(current, next);
+    const currentKey = "key" in current ? current.key : this.signer.sealingKey(current.passphrase);
+    const master = await keys.resealed(
+      Buffer.from(currentKey.slice(2), "hex"),
+      Buffer.from(resealed.key.slice(2), "hex"),
+    );
+    if (master) await writePrivate(`${this.paths.masterKey}.next`, master);
+    await writePrivate(`${this.signer.path}.next`, resealed.sealed);
+    if (master) await rename(`${this.paths.masterKey}.next`, this.paths.masterKey);
+    await rename(`${this.signer.path}.next`, this.signer.path);
+    this.signer.replaced(resealed.sealed);
+    const status = this.signer.status();
+    this.emit({ type: "signer", signer: status });
+    this.emit({ type: "sealingKeyChanged" });
+    return status;
+  }
+
+  /** Renames the member: locally, and for every vault's members through a signed rename each keeper replicates. */
+  async renameProfile(name: string): Promise<Profile> {
+    require(name.trim().length >= 1 && name.length <= 48, "a name is 1 to 48 characters");
+    if (!this.state.file.profile) throw notReady("profile", "create a profile first");
+    await this.state.update((file) => {
+      if (file.profile) file.profile.name = name;
+    });
+    for (const vault of this.#activeVaults()) {
+      // oxlint-disable-next-line no-await-in-loop
+      const renamed = await this.keeper.client.call("names.put", {
+        vault,
+        subject: "member",
+        name,
+      });
+      // oxlint-disable-next-line no-await-in-loop
+      const event = await this.vaults.applyName(vault, renamed);
+      if (event) this.emit(event);
+    }
+    return this.state.file.profile as Profile;
+  }
+
+  /**
+   * Deletes this profile and stops: the keeper, its store and viewing shares, the signing key and every file.
+   * Refused while the profile is in a vault, since the vault would lose a viewing share and a signer; leave or be
+   * removed first (a removed member's vault is `removed`).
+   */
+  deleteProfile(confirm: string): void {
+    require(confirm === this.paths.name, `type the profile's name, ${this.paths.name}, to confirm`);
+    const vaults = this.vaults.list().filter((r) => r.status !== "removed");
+    if (vaults.length > 0)
+      throw new DaemonError(
+        "invalid",
+        `this profile is a member of ${vaults.map((v) => v.name).join(", ")}: leave ${vaults.length === 1 ? "it" : "them"} first (a change of members that removes you), then delete it`,
+      );
+    setImmediate(() => {
+      void (async () => {
+        await this.stop();
+        await (this.#keys as MasterKeyStore | undefined)?.destroy();
+        await rm(this.paths.dir, { recursive: true, force: true });
+        (this.#options.exit ?? (() => process.emit("SIGTERM")))();
+      })();
+    });
   }
 
   /** Creates the profile: the sealed signer, the keeper's master key, and the member's own Aztec account. */
@@ -407,6 +489,12 @@ export class Daemon implements Context {
       void this.#proposalEvents.onKeeperEvent(event);
       if (RECOUNT.has(event.type) && "vault" in event)
         void this.refreshCounts(event.vault).catch(() => undefined);
+      if (event.type === "lobby")
+        void this.founding
+          .get(event.lobby)
+          .then((lobby) => this.emit({ type: "lobby", lobby, change: event.change }))
+          .catch(() => undefined);
+      if (event.type === "name") void this.#nameChanged(event.vault, event.name);
       if (event.type === "artifact" && event.complete)
         void this.#artifactArrived(event.vault, event.classId);
       this.devices.onKeeperEvent(event);

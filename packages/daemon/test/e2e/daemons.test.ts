@@ -2,6 +2,7 @@
 // proposer registered, see a rejection block a proposal, and then rotate: Carol leaves and a newcomer joins with a join request, receiving the vault's protocol
 // secrets in the reshare. Everything goes through the daemons' sockets, as an app would; each daemon runs its own
 // keeper process and PXE against `aztec start --local-network`.
+import { existsSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,7 +15,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import type { FoundingState, Hex32, ProposalView, RotationState } from "@ome-labs/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { type Member, member, networkAvailable, until } from "./members.ts";
+import { type Member, PASSPHRASE, member, networkAvailable, until } from "./members.ts";
 
 const available = await networkAvailable();
 
@@ -57,8 +58,10 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
         name: "Treasury",
         threshold: 2,
         viewingThreshold: 2,
+        members: 3,
       });
       expect(lobby.invite).toMatch(/^ome-invite-v0:/u);
+      expect(lobby.expected).toBe(3);
       const preview = await bob.client.call("lobby.inspect", { invite: lobby.invite ?? "" });
       expect(preview.sameNetwork).toBe(true);
       await Promise.all(
@@ -97,6 +100,18 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
           members: 3,
         });
       }
+      // Every member knows every member's own account, from the lobby.
+      const accounts = await Promise.all(
+        [alice, bob, carol].map(async (m) => (await m.client.call("status", {})).profile?.account),
+      );
+      for (const m of [alice, bob, carol]) {
+        // oxlint-disable-next-line no-await-in-loop
+        const details = await m.client.call("vault.details", { vault });
+        // Slots follow the order members joined the lobby.
+        expect(details.committee.members.map((c) => c.account).toSorted()).toEqual(
+          accounts.toSorted(),
+        );
+      }
     });
   });
 
@@ -122,6 +137,8 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       await proposal(bob, created.id);
       const review = await bob.client.call("proposals.review", { vault, id: created.id });
       expect(review.checks).toMatchObject({ rebuilt: true, configCurrent: true, notExpired: true });
+      // The recipient is a member's own account: named as the member.
+      expect(review.recipient).toMatchObject({ label: "Bob", source: "member" });
       await bob.client.call("proposals.approve", { vault, id: created.id });
       await alice.client.call("proposals.approve", { vault, id: created.id });
       await status(alice, created.id, "ready");
@@ -423,6 +440,72 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
     });
   });
 
+  describe("members and profiles", () => {
+    it("renames the vault and a member for everyone", async () => {
+      await alice.client.call("vault.rename", { vault, name: "Operations" });
+      await until(async () => {
+        const [summary] = await bob.client.call("vault.list", {});
+        return summary?.name === "Operations" ? true : undefined;
+      }, "the new name at Bob");
+      expect(
+        bob.events.some(
+          (e) => e.type === "vaultRenamed" && e.name === "Operations" && e.by.name === "Alice",
+        ),
+      ).toBe(true);
+
+      const renamed = await bob.client.call("profile.rename", { name: "Robert" });
+      expect(renamed.name).toBe("Robert");
+      await until(async () => {
+        const details = await alice.client.call("vault.details", { vault });
+        return details.committee.members.some((m) => m.name === "Robert") ? true : undefined;
+      }, "Bob's new name at Alice");
+    });
+
+    it("changes the passphrase: the old one stops working, the new one opens the key and the keeper", async () => {
+      const before = (await alice.client.call("status", {})).profile?.signerKey;
+      await expect(
+        alice.client.call("signer.changePassphrase", {
+          current: { passphrase: "not the passphrase" },
+          next: "a much newer passphrase",
+        }),
+      ).rejects.toThrow();
+      await alice.client.call("signer.changePassphrase", {
+        current: { passphrase: PASSPHRASE },
+        next: "a much newer passphrase",
+      });
+      expect(alice.events.some((e) => e.type === "sealingKeyChanged")).toBe(true);
+      await expect(
+        alice.client.call("signer.unlock", { secret: { passphrase: PASSPHRASE }, ttlSecs: 60 }),
+      ).rejects.toThrow();
+      await alice.client.call("signer.unlock", {
+        secret: { passphrase: "a much newer passphrase" },
+        ttlSecs: 3600,
+      });
+      expect((await alice.client.call("status", {})).profile?.signerKey).toEqual(before);
+      // Back to the suite's passphrase for the tests that follow.
+      await alice.client.call("signer.changePassphrase", {
+        current: { passphrase: "a much newer passphrase" },
+        next: PASSPHRASE,
+      });
+      await alice.client.call("signer.unlock", {
+        secret: { passphrase: PASSPHRASE },
+        ttlSecs: 3600,
+      });
+    });
+
+    it("refuses to delete a profile that is in a vault, and deletes one that is not", async () => {
+      await expect(alice.client.call("profile.delete", { confirm: "default" })).rejects.toThrow(
+        /member of Operations/u,
+      );
+      const erin = await member("Erin");
+      await erin.client.call("profile.delete", { confirm: "default" });
+      await until(
+        async () => (existsSync(erin.profileDir) ? undefined : true),
+        "Erin's profile to be gone",
+      );
+    });
+  });
+
   describe("membership", () => {
     it("a newcomer joins and Carol leaves; the newcomer's approval then counts", async () => {
       dave = await member("Dave");
@@ -441,7 +524,8 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       });
       expect(plan.failure).toBeNull();
       expect(plan.joiners.map((j) => j.name)).toEqual(["Dave"]);
-      expect(plan.next.members).toEqual(["Alice", "Bob", "Dave"]);
+      // Bob renamed himself earlier: the plan carries his current name to the newcomer.
+      expect(plan.next.members).toEqual(["Alice", "Robert", "Dave"]);
       // The leaving member takes no part.
       await expect(
         carol.client.call("membership.begin", { plan: plan.share }),

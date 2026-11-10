@@ -101,6 +101,7 @@ describe.skipIf(!available)("a member's keeper on their own server", () => {
       name: "Studio",
       threshold: 2,
       viewingThreshold: 2,
+      members: 2,
     });
     await bob.client.call("lobby.join", { invite: lobby.invite ?? "" });
     await until(async () => {

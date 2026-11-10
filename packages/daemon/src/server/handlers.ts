@@ -42,6 +42,11 @@ export const handlers: Handlers = {
   },
   status: async (d) => d.status(),
   "profile.create": async (d, p) => d.createProfile(p),
+  "profile.rename": async (d, p) => d.renameProfile(p.name),
+  "profile.delete": async (d, p) => {
+    d.deleteProfile(p.confirm);
+    return null;
+  },
   "config.get": async (d) => d.state.file.settings,
   "config.set": async (d, p) => {
     if (p.unlockTimeoutSecs !== undefined)
@@ -95,6 +100,7 @@ export const handlers: Handlers = {
     return d.signer.status();
   },
   "signer.sealingKey": async (d, p) => ({ key: d.signer.sealingKey(p.passphrase) }),
+  "signer.changePassphrase": async (d, p) => d.changePassphrase(p.current, p.next),
   "node.status": async (d) => d.node.check(),
   "fees.status": async (d) => d.refreshFees(),
 
@@ -104,6 +110,8 @@ export const handlers: Handlers = {
   "lobby.get": async (d, p) => d.founding.get(p.lobby),
   "lobby.list": async (d) => d.founding.list(),
   "lobby.start": async (d, p) => d.founding.start(p),
+  "lobby.remove": async (d, p) => d.founding.remove(p.lobby, lower(p.identity)),
+  "lobby.update": async (d, p) => d.founding.update(p),
   "lobby.leave": async (d, p) => {
     await d.founding.leave(p.lobby);
     return null;
@@ -169,6 +177,18 @@ export const handlers: Handlers = {
     };
   },
   "vault.request": async (d, p) => paymentRequest(d, { ...p, vault: lower(p.vault) }),
+  "vault.rename": async (d, p) => {
+    const vault = d.vaults.record(lower(p.vault)).address;
+    require(p.name.trim().length >= 1 && p.name.length <= 48, "a name is 1 to 48 characters");
+    const renamed = await d.keeper.client.call("names.put", {
+      vault,
+      subject: "vault",
+      name: p.name,
+    });
+    const event = await d.vaults.applyName(vault, renamed);
+    if (event) d.emit(event);
+    return d.vaults.summary(vault);
+  },
   "vault.alias": async (d, p) => {
     const vault = d.vaults.record(lower(p.vault)).address;
     require(ALIAS.test(p.alias), "aliases are lowercase letters, digits, - and _");

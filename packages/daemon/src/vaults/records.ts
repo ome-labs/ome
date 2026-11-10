@@ -15,7 +15,8 @@ export interface DeploymentRecord {
 /** What a daemon keeps about one of its member's vaults. Its protocol secrets are sealed separately. */
 export interface VaultRecord {
   readonly address: Hex32;
-  readonly name: string;
+  /** The vault's name every member sees: the lobby's, until a member renames it. */
+  name: string;
   readonly foundedAt: number;
   readonly founding: {
     readonly lobby: Hex16 | null;
@@ -25,6 +26,8 @@ export interface VaultRecord {
   readonly deployment: DeploymentRecord;
   /** Display names by keeper identity. */
   names: Record<Hex32, string>;
+  /** Members' own Aztec accounts by keeper identity, from the lobby and join requests (absent in older records). */
+  accounts?: Record<Hex32, Hex32>;
   /** Each committee epoch's ceremony transcript, for its self-send tagging secret. */
   transcripts: Record<string, Hex64>;
   config: { config: VaultConfig; readAt: number; matchesCommittee: boolean } | null;

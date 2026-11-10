@@ -22,6 +22,8 @@ export interface Labels {
   readonly tokens: readonly TokenInfo[];
   /** aztec-wallet aliases, by address. */
   readonly names: ReadonlyMap<Hex32, string>;
+  /** Members' own accounts, by address: named ahead of aliases. */
+  readonly members?: ReadonlyMap<Hex32, string>;
 }
 
 const lower = (value: { toString(): string }) => value.toString().toLowerCase() as Hex32;
@@ -32,6 +34,8 @@ export function labelOf(address: Hex32, labels: Labels): string | null {
   if (address === labels.vault) return `${labels.vaultName} (this vault)`;
   const token = labels.tokens.find((t) => t.address === address);
   if (token) return token.symbol;
+  const member = labels.members?.get(address);
+  if (member) return `${member} (member)`;
   const alias = labels.names.get(address);
   return alias ? `${alias} (alias)` : null;
 }
