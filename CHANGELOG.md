@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.3.0](https://github.com/ome-labs/ome/compare/v0.2.0...v0.3.0) (2026-11-10)
+
+
+### Features
+
+* **api:** capabilities in daemon.info and keeper.info, and unknown values from newer releases ([144998e](https://github.com/ome-labs/ome/commit/144998ea094ccb23360e5380a247793a7cc4697f))
+* **cli:** each member's release in ome vault members ([855ccb9](https://github.com/ome-labs/ome/commit/855ccb980e2955d1f5a0e11047af1e0b8a9b9326))
+* **cli:** ome update, and a newer release in ome status and ome doctor ([f64ecb1](https://github.com/ome-labs/ome/commit/f64ecb1a6ab9b457486aa07570f0cf1c03e91318))
+* **daemon:** notice a newer release from GitHub's release feed ([73e9cce](https://github.com/ome-labs/ome/commit/73e9cceec337f06eefaf70da7bb790dee02e6242))
+* **daemon:** profile files carry a schema and upgrade themselves ([473f16c](https://github.com/ome-labs/ome/commit/473f16c33711806006e39da30315289dc9ea1d5e))
+* **daemon:** read newer intents, plans and payment links without failing ([fec8eab](https://github.com/ome-labs/ome/commit/fec8eab73eba975892f6b559578e6bb8833da0e4))
+* **ffi:** versioned phone files, and the protocol range a phone pairs with ([098aff0](https://github.com/ome-labs/ome/commit/098aff06ca4f403bec14c962a038f571bf968231))
+* **keeper:** each vault's protocol version follows what its members run ([d85349f](https://github.com/ome-labs/ome/commit/d85349f6ac7b39021f10f4aaf4381ae86943000b))
+* **keeper:** refuse a newer store, and keep each record's protocol version ([0918795](https://github.com/ome-labs/ome/commit/09187954169afa20cd723fa5d600aa07f6696413))
+* **wire:** a pasted string in a newer format asks for an update ([0cb983e](https://github.com/ome-labs/ome/commit/0cb983ea5fd42459b81f8567f5221ec3abce8dc8))
+* **wire:** capabilities records, and the version a vault writes in ([c02d825](https://github.com/ome-labs/ome/commit/c02d825ef60e4c12f8c232edd730ee86d0b3f640))
+* **wire:** each protocol version decodes its own body bytes ([f55f264](https://github.com/ome-labs/ome/commit/f55f264753ad181a58f7a937a8fa7c77c8678dd3))
+* **wire:** extensions on the envelope and every record stored on its own ([0e7c648](https://github.com/ome-labs/ome/commit/0e7c6489d4240439781ba2e70b2a2b0749f58da5))
+
+
+### Documentation
+
+* **repo:** compatibility, and how each release upgrades without user action ([350e6db](https://github.com/ome-labs/ome/commit/350e6db9ec61808eb5d94bd16719785ab855131d))
+* **repo:** protocol v0 stays open until the launch release ([9907174](https://github.com/ome-labs/ome/commit/99071746d3a4bf32bb572f867a91f37e212065e2))
+
 ## [0.2.0](https://github.com/ome-labs/ome/compare/v0.1.0...v0.2.0) (2026-11-10)
 
 

@@ -55,7 +55,7 @@ import { ReceivedWatcher } from "./vaults/received.ts";
 import { VaultService } from "./vaults/service.ts";
 
 /** Release of this daemon. */
-export const DAEMON_VERSION = "0.2.0"; // x-release-please-version
+export const DAEMON_VERSION = "0.3.0"; // x-release-please-version
 
 const SYNC_INTERVAL_MS = 15_000;
 /** Keeper events after which a vault's proposal counts change. */

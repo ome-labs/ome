@@ -1,6 +1,6 @@
 {
   "name": "@ome-labs/api",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Typed API of an Ome member's keeper and daemon: every method, event and error, generated from the Rust definitions",
   "keywords": [
     "api",
