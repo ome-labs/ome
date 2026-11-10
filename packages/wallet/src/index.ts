@@ -21,6 +21,7 @@ export {
 } from "./keys/threshold-key-store.ts";
 export { VaultAccountContract, VaultWitnessProvider } from "./vault/account.ts";
 export { vaultArtifact } from "./vault/artifact.ts";
+export type { SimulationFacts, VaultNote } from "./vault/effects.ts";
 export { readSignerKeys, readVaultConfig } from "./vault/config.ts";
 export {
   MAX_SIGNERS,

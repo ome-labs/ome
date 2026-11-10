@@ -80,6 +80,7 @@ import { VaultAccountContract } from "../vault/account.ts";
 import { vaultArtifact, vaultPreviewArtifact } from "../vault/artifact.ts";
 import { readVaultConfig } from "../vault/config.ts";
 import type { VaultDeployment } from "../vault/deployment.ts";
+import { type SimulationFacts, simulationFacts } from "../vault/effects.ts";
 import { thresholdAccountKeys } from "../vault/keys.ts";
 import { type PayloadContracts, fromVaultRequest, toVaultRequest } from "../vault/payload.ts";
 
@@ -534,6 +535,11 @@ export class OmeWallet extends BaseWallet {
       scopes: [tx.vault],
       senderForTags: tx.vault,
     });
+  }
+
+  /** What a simulation of `tx` (from {@link previewVaultTx}) does to the vault's notes, and what its calls return. */
+  simulationFacts(tx: VaultTx, result: TxSimulationResult): Promise<SimulationFacts> {
+    return simulationFacts(this.pxe, tx.vault, result);
   }
 
   /**

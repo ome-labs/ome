@@ -55,6 +55,7 @@
     "@aztec-foundation/bb.js": "catalog:",
     "@aztec-labs/accounts": "catalog:",
     "@aztec-labs/aztec.js": "catalog:",
+    "@aztec-labs/constants": "catalog:",
     "@aztec-labs/entrypoints": "catalog:",
     "@aztec-labs/foundation": "catalog:",
     "@aztec-labs/key-store": "catalog:",
