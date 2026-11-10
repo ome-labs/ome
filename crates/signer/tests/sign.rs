@@ -2,13 +2,15 @@
 
 mod support;
 
+use ome_crypto::Base;
 use ome_protocol::{
     Error as ProtocolError,
+    payload::{Authwit, Call},
     proposals::{Status, Tally, verify_approval, verify_rejection},
 };
 use ome_signer::{Error, SigningKey, approve, reject};
-use ome_wire::limits::MAX_REASON_BYTES;
-use support::{NOW, chain, fixture, propose, transfer};
+use ome_wire::{limits::MAX_REASON_BYTES, types::field};
+use support::{NOW, chain, fixture, propose, propose_with, transfer};
 
 #[test]
 fn two_members_approve_and_the_vault_is_authorized() {
@@ -65,6 +67,34 @@ fn an_approval_does_not_carry_over_to_another_proposal() {
         verify_approval(&f.vault, &other, &approval),
         Err(ProtocolError::WrongProposal)
     );
+}
+
+#[test]
+fn an_approval_signs_every_authwit_the_proposal_grants() {
+    let mut f = fixture();
+    let amm = transfer(1);
+    let authwit = Authwit {
+        caller: amm.to,
+        call: Call {
+            to: field(&Base::from(0x7001u64)),
+            ..transfer(10)
+        },
+    };
+    let (proposal, payload) = propose_with(&f, vec![amm], vec![authwit]);
+
+    let approval = approve(
+        &f.members[1],
+        &f.vault,
+        chain(),
+        &proposal,
+        &payload,
+        NOW,
+        &mut f.rng,
+    )
+    .unwrap();
+
+    assert_eq!(approval.signatures.len(), 2);
+    assert_eq!(verify_approval(&f.vault, &proposal, &approval), Ok(()));
 }
 
 #[test]

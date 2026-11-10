@@ -4,7 +4,7 @@
 use ome_protocol::{
     membership::{Rotation, Vault, check_rotation, check_signer_swap, is_rotation_call},
     payload::{Call, ChainInfo},
-    proposals::{approval_message_for, check_proposal},
+    proposals::{approval_messages_for, check_proposal},
     vault::rejection_message,
 };
 use ome_wire::{
@@ -17,8 +17,9 @@ use rand_core::CryptoRng;
 use crate::{Error, Message, Signer};
 
 /// Approves `proposal` after [`check_proposal`]: the payload is the one referenced and hashes to the proposal's outer
-/// hash on this vault and chain, the config is current, the deadline has not passed (`now` is unix seconds) and fees
-/// stay off the vault. A proposal that rotates the vault's membership is refused here; use [`approve_rotation`].
+/// hash and authwit hashes on this vault and chain, the config is current, the deadline has not passed (`now` is unix
+/// seconds) and fees stay off the vault. The approval signs the transaction and every authwit it grants. A proposal
+/// that rotates the vault's membership is refused here; use [`approve_rotation`].
 ///
 /// # Errors
 /// [`Error::NotASigner`], [`Error::RotationNeedsReview`], or the protocol error that refused the proposal.
@@ -53,8 +54,8 @@ pub fn approve<S: Signer>(
 /// a transfer.
 ///
 /// # Errors
-/// [`Error::NotASigner`], [`Error::NotARotation`], [`Error::UnexpectedCall`], [`Error::RotationMismatch`], or the
-/// protocol error that refused the proposal or rotation.
+/// [`Error::NotASigner`], [`Error::NotARotation`], [`Error::UnexpectedCall`], [`Error::RotationGrantsAuthwit`],
+/// [`Error::RotationMismatch`], or the protocol error that refused the proposal or rotation.
 #[allow(clippy::too_many_arguments)]
 pub fn approve_rotation<S: Signer>(
     signer: &S,
@@ -83,8 +84,8 @@ pub fn approve_rotation<S: Signer>(
 /// The committee stays, so there is no reshare to compare with: a swap needs only the contract's rules and its shape.
 ///
 /// # Errors
-/// [`Error::NotASigner`], [`Error::NotARotation`], [`Error::UnexpectedCall`], or the protocol error that refused the
-/// proposal or swap.
+/// [`Error::NotASigner`], [`Error::NotARotation`], [`Error::UnexpectedCall`], [`Error::RotationGrantsAuthwit`], or the
+/// protocol error that refused the proposal or swap.
 #[allow(clippy::too_many_arguments)]
 pub fn approve_signer_swap<S: Signer>(
     signer: &S,
@@ -102,7 +103,8 @@ pub fn approve_signer_swap<S: Signer>(
     Ok((sign_approval(signer, vault, proposal, slot, rng)?, swapped))
 }
 
-/// The proposal's one `rotate_membership` call, after [`check_proposal`]; any other call must go to a trusted fee payer.
+/// The proposal's one `rotate_membership` call, after [`check_proposal`]; any other call must go to a trusted fee payer,
+/// and the proposal grants no authwit.
 fn single_rotation(
     vault: &Vault,
     chain: ChainInfo,
@@ -112,6 +114,9 @@ fn single_rotation(
     now: u64,
 ) -> Result<Call, Error> {
     let request = check_proposal(vault, chain, proposal, payload, now)?;
+    if !request.authwits.is_empty() {
+        return Err(Error::RotationGrantsAuthwit);
+    }
     let (rotations, others): (Vec<_>, Vec<_>) = request
         .calls
         .into_iter()
@@ -155,12 +160,11 @@ fn sign_approval<S: Signer>(
     slot: u32,
     rng: &mut impl CryptoRng,
 ) -> Result<Approval, Error> {
-    let message = Message::new(approval_message_for(vault, proposal)?);
-    Ok(Approval::new(
-        proposal.id()?,
-        slot,
-        &signer.sign(&message, rng)?,
-    ))
+    let signatures = approval_messages_for(vault, proposal)?
+        .into_iter()
+        .map(|message| signer.sign(&Message::new(message), rng))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Approval::new(proposal.id()?, slot, &signatures))
 }
 
 /// The signer's slot in the vault's signer set.

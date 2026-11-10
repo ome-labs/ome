@@ -34,6 +34,9 @@ pub enum Error {
     /// A rotation proposal carries a call to this contract (hex), which is neither the rotation nor a trusted fee payer.
     #[error("a rotation may only also pay its fee; it calls 0x{0}")]
     UnexpectedCall(String),
+    /// A rotation proposal also grants an authwit, which no rotation needs.
+    #[error("a rotation grants no authwit")]
+    RotationGrantsAuthwit,
     /// The proposal performs a different rotation than the one reviewed.
     #[error("the proposal performs a different rotation than the one reviewed")]
     RotationMismatch,

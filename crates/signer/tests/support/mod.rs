@@ -17,7 +17,7 @@ use ome_crypto::{
 };
 use ome_protocol::{
     membership::{Rotation, Vault},
-    payload::{Call, CallKind, ChainInfo, ExecutionRequest, selector},
+    payload::{Authwit, Call, CallKind, ChainInfo, ExecutionRequest, selector},
     proposals::Draft,
     vault::{Committee, Config, SignerSet},
 };
@@ -184,9 +184,19 @@ pub fn transfer(amount: u64) -> Call {
 
 /// A proposal of `calls` on the fixture's vault.
 pub fn propose(f: &Fixture, calls: Vec<Call>) -> (Proposal, ProposalPayload) {
+    propose_with(f, calls, vec![])
+}
+
+/// A proposal of `calls` that also grants `authwits`.
+pub fn propose_with(
+    f: &Fixture,
+    calls: Vec<Call>,
+    authwits: Vec<Authwit>,
+) -> (Proposal, ProposalPayload) {
     Draft {
         request: ExecutionRequest {
             calls,
+            authwits,
             extras: vec![],
         },
         tx_nonce: Base::from(0xabcdu64),
