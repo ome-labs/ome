@@ -74,8 +74,21 @@ fn info(keeper: &Keeper) -> api::KeeperInfo {
         transport: keeper.transport_key().into(),
         peer_id: convert::identity_peer_id(&identity),
         addresses: keeper.addresses().to_vec(),
+        capabilities: CAPABILITIES.iter().map(|&c| c.to_owned()).collect(),
     }
 }
+
+/// What this keeper can do, as `keeper.info` reports it. A feature is added here when it lands, never removed within an
+/// API version.
+const CAPABILITIES: &[&str] = &[
+    "lobbies",
+    "proposals",
+    "devices",
+    "artifacts",
+    "names",
+    "capabilities",
+    "store-versions",
+];
 
 /// Runs one method.
 #[expect(clippy::too_many_lines, reason = "one route per method")]

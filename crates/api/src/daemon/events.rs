@@ -303,6 +303,9 @@ pub enum DaemonEvent {
         /// Exposed counterparties.
         counterparties: u32,
     },
+    /// An event a newer daemon sends; a client ignores it.
+    #[serde(other)]
+    Unknown,
 }
 
 impl DaemonEvent {
@@ -340,7 +343,8 @@ impl DaemonEvent {
             | Self::Lobby { .. }
             | Self::Founding { .. }
             | Self::Rotation { .. }
-            | Self::AppConnect { .. } => None,
+            | Self::AppConnect { .. }
+            | Self::Unknown => None,
         }
     }
 }

@@ -86,6 +86,9 @@ pub enum Intent {
         /// Note.
         memo: Option<String>,
     },
+    /// A kind a newer release made: shown by its decoded calls, which are what members sign.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Where a proposal is.
@@ -106,6 +109,9 @@ pub enum ProposalStatus {
     Expired,
     /// Made under an older config.
     Stale,
+    /// A status a newer release reports.
+    #[serde(other)]
+    Unknown,
 }
 
 /// A member's approval or rejection.

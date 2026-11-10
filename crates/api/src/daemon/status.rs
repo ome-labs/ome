@@ -26,6 +26,9 @@ pub struct DaemonInfo {
     pub node: String,
     /// What the daemon accepts.
     pub limits: super::Limits,
+    /// The features this daemon has (`authwits`, `apps`, …): a client checks for one instead of comparing versions,
+    /// and a client newer than its daemon hides what the daemon lacks.
+    pub capabilities: Vec<String>,
 }
 
 /// Daemon settings.

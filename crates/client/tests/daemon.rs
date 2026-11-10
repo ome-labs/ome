@@ -40,6 +40,7 @@ fn info() -> DaemonInfo {
             min_expiry_hours: 1,
             max_expiry_hours: 720,
         },
+        capabilities: vec!["proposals".into()],
     }
 }
 

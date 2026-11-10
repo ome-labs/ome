@@ -21,6 +21,8 @@ pub struct KeeperInfo {
     pub peer_id: String,
     /// Addresses the keeper advertises.
     pub addresses: Vec<String>,
+    /// The features this keeper has (`capabilities`, `devices`, …), for clients to check instead of its version.
+    pub capabilities: Vec<String>,
 }
 
 /// How to reach a keeper.

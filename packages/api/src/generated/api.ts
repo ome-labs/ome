@@ -272,6 +272,10 @@ export type KeeperInfo = {
    * Addresses the keeper advertises.
    */
   addresses: Array<string>;
+  /**
+   * The features this keeper has (`capabilities`, `devices`, …), for clients to check instead of its version.
+   */
+  capabilities: Array<string>;
 };
 
 /**
@@ -2093,6 +2097,11 @@ export type DaemonInfo = {
    * What the daemon accepts.
    */
   limits: Limits;
+  /**
+   * The features this daemon has (`authwits`, `apps`, …): a client checks for one instead of comparing versions,
+   * and a client newer than its daemon hides what the daemon lacks.
+   */
+  capabilities: Array<string>;
 };
 
 /**
@@ -3235,7 +3244,8 @@ export type Intent =
        * Note.
        */
       memo: string | null;
-    };
+    }
+  | { kind: "unknown" };
 
 /**
  * Where a proposal is.
@@ -3247,7 +3257,8 @@ export type ProposalStatus =
   | "executed"
   | "cancelled"
   | "expired"
-  | "stale";
+  | "stale"
+  | "unknown";
 
 /**
  * A member's approval or rejection.
@@ -4289,7 +4300,8 @@ export type SimulationFailure =
        */
       function: string | null;
     }
-  | { kind: "unavailable" };
+  | { kind: "unavailable" }
+  | { kind: "unknown" };
 
 /**
  * A simulation failure with its message.
@@ -5023,7 +5035,8 @@ export type DaemonEvent =
        * Exposed counterparties.
        */
       counterparties: number;
-    };
+    }
+  | { type: "unknown" };
 
 /**
  * Where an event sits in the daemon's stream: `epoch` changes each time the daemon starts, `n` counts up from 1.

@@ -144,6 +144,9 @@ pub enum SimulationFailure {
     },
     /// The simulation couldn't run: node, keepers or prover not ready.
     Unavailable,
+    /// A failure a newer release reports; its message says what.
+    #[serde(other)]
+    Unknown,
 }
 
 /// A simulation failure with its message.
