@@ -4,6 +4,16 @@ use ome_wire::IdentityPublic;
 /// Keeper errors. Messages never contain secret material.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// The store was written by a newer release, which may have stored what this one would misread.
+    #[error(
+        "this keeper's data was written by a newer Ome (schema {found}; this release knows {known}): update Ome"
+    )]
+    NewerStore {
+        /// The store's schema.
+        found: usize,
+        /// The newest schema this release knows.
+        known: usize,
+    },
     /// The data directory is missing, unreadable or not initialised.
     #[error("data directory: {0}")]
     DataDir(String),
@@ -105,6 +115,7 @@ impl Error {
             Self::Full { .. } => ErrorKind::Full,
             Self::RateLimited | Self::Transport(_) | Self::Incomplete { .. } => ErrorKind::NotReady,
             Self::DataDir(_)
+            | Self::NewerStore { .. }
             | Self::Unseal(_)
             | Self::MissingSecret(_)
             | Self::Storage(_)

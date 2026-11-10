@@ -138,4 +138,14 @@ pub(super) const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (vault, by, at)
     );
     ",
+    // 8: the protocol version each record was stored in; reads convert older ones to the current encoding.
+    "
+    ALTER TABLE manifests ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE proposals ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE approvals ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE rejections ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE receipts ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE names ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE capabilities ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+    ",
 ];

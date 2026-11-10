@@ -9,14 +9,28 @@ use std::{path::Path, sync::Mutex};
 
 use ome_protocol::vault::Config;
 use ome_wire::{
-    IdentityPublic, Message, decode_body, encode_body,
+    IdentityPublic, Message, decode_body, decode_body_in, encode_body, encode_body_in,
     messages::ceremony::Manifest,
     types::{WirePoint, field, parse_field},
 };
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, functions::FunctionFlags, params};
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{Error, Result};
+
+/// The protocol version this release stores records in: the newest it speaks, whose encoding is the model's.
+const STORE_VERSION: u16 = ome_wire::version::SUPPORTED.max;
+
+/// `body`, stored in protocol `version`, in [`STORE_VERSION`]'s encoding: an older record is converted as it is read,
+/// so the rest of the keeper only ever sees one encoding, and the stored bytes are never rewritten.
+fn current_body(version: i64, body: Vec<u8>) -> std::result::Result<Vec<u8>, ome_wire::Error> {
+    let version =
+        u16::try_from(version).map_err(|_| ome_wire::Error::UnsupportedVersion(u16::MAX))?;
+    if version == STORE_VERSION {
+        return Ok(body);
+    }
+    encode_body_in(STORE_VERSION, &decode_body_in(version, &body)?)
+}
 
 pub use artifacts::ArtifactRecord;
 
@@ -113,8 +127,24 @@ impl Store {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.pragma_update(None, "secure_delete", "ON")?;
+        conn.create_scalar_function(
+            "ome_body",
+            2,
+            FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+            |ctx| {
+                current_body(ctx.get(0)?, ctx.get(1)?)
+                    .map_err(|error| rusqlite::Error::UserFunctionError(Box::new(error)))
+            },
+        )?;
         let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        let version = usize::try_from(version).unwrap_or(0);
+        let version = usize::try_from(version).unwrap_or(usize::MAX);
+        // A store a newer release migrated may hold what this one would misread: refuse it.
+        if version > migrations::MIGRATIONS.len() {
+            return Err(Error::NewerStore {
+                found: version,
+                known: migrations::MIGRATIONS.len(),
+            });
+        }
         for (i, migration) in migrations::MIGRATIONS.iter().enumerate().skip(version) {
             conn.execute_batch(&format!(
                 "BEGIN; {migration} PRAGMA user_version = {}; COMMIT;",
@@ -149,10 +179,10 @@ impl Store {
         let body = encode_body(&Message::Manifest(manifest.clone()))?;
         self.with(|c| {
             c.execute(
-                "INSERT INTO manifests (vault, epoch, body, status, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT (vault, epoch) DO UPDATE SET body = excluded.body, status = excluded.status,
+                "INSERT INTO manifests (vault, epoch, body, status, updated_at, version) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT (vault, epoch) DO UPDATE SET body = excluded.body, status = excluded.status, version = excluded.version,
                  updated_at = excluded.updated_at",
-                params![manifest.vault, manifest.epoch, body, status.as_str(), ts(now)],
+                params![manifest.vault, manifest.epoch, body, status.as_str(), ts(now), STORE_VERSION],
             )
             .map(drop)
         })
@@ -190,7 +220,7 @@ impl Store {
     pub fn latest_manifest(&self, vault: &[u8; 32]) -> Result<Option<(Manifest, ManifestStatus)>> {
         let row: Option<(Vec<u8>, String)> = self.with(|c| {
             c.query_row(
-                "SELECT body, status FROM manifests WHERE vault = ?1 ORDER BY epoch DESC LIMIT 1",
+                "SELECT ome_body(version, body), status FROM manifests WHERE vault = ?1 ORDER BY epoch DESC LIMIT 1",
                 params![vault],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
@@ -207,7 +237,7 @@ impl Store {
     pub fn vaults(&self) -> Result<Vec<(Manifest, ManifestStatus)>> {
         let rows: Vec<(Vec<u8>, String)> = self.with(|c| {
             let mut statement = c.prepare(
-                "SELECT body, status FROM manifests m WHERE epoch = (SELECT MAX(epoch) FROM manifests WHERE vault = m.vault)",
+                "SELECT ome_body(version, body), status FROM manifests m WHERE epoch = (SELECT MAX(epoch) FROM manifests WHERE vault = m.vault)",
             )?;
             statement
                 .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -345,8 +375,8 @@ impl Store {
     ) -> Result<bool> {
         self.with(|c| {
             c.execute(
-                "INSERT OR IGNORE INTO proposals (id, vault, body, created_at) VALUES (?1, ?2, ?3, ?4)",
-                params![id, vault, body, ts(now)],
+                "INSERT OR IGNORE INTO proposals (id, vault, body, created_at, version) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![id, vault, body, ts(now), STORE_VERSION],
             )
             .map(|n| n > 0)
         })
@@ -359,7 +389,7 @@ impl Store {
     pub fn proposal(&self, id: &[u8; 32]) -> Result<Option<([u8; 32], Vec<u8>)>> {
         self.with(|c| {
             c.query_row(
-                "SELECT vault, body FROM proposals WHERE id = ?1",
+                "SELECT vault, ome_body(version, body) FROM proposals WHERE id = ?1",
                 params![id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
@@ -374,7 +404,7 @@ impl Store {
     pub fn proposals(&self, vault: &[u8; 32]) -> Result<Vec<Vec<u8>>> {
         self.with(|c| {
             let mut statement =
-                c.prepare("SELECT body FROM proposals WHERE vault = ?1 ORDER BY created_at, id")?;
+                c.prepare("SELECT ome_body(version, body) FROM proposals WHERE vault = ?1 ORDER BY created_at, id")?;
             statement
                 .query_map(params![vault], |row| row.get(0))?
                 .collect()
@@ -394,8 +424,8 @@ impl Store {
     ) -> Result<bool> {
         self.with(|c| {
             c.execute(
-                "INSERT OR IGNORE INTO approvals (proposal, slot, body, created_at) VALUES (?1, ?2, ?3, ?4)",
-                params![proposal, slot, body, ts(now)],
+                "INSERT OR IGNORE INTO approvals (proposal, slot, body, created_at, version) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![proposal, slot, body, ts(now), STORE_VERSION],
             )
             .map(|n| n > 0)
         })
@@ -407,8 +437,9 @@ impl Store {
     /// Storage errors.
     pub fn approvals(&self, proposal: &[u8; 32]) -> Result<Vec<Vec<u8>>> {
         self.with(|c| {
-            let mut statement =
-                c.prepare("SELECT body FROM approvals WHERE proposal = ?1 ORDER BY slot")?;
+            let mut statement = c.prepare(
+                "SELECT ome_body(version, body) FROM approvals WHERE proposal = ?1 ORDER BY slot",
+            )?;
             statement
                 .query_map(params![proposal], |row| row.get(0))?
                 .collect()
@@ -434,7 +465,7 @@ impl Store {
     fn vote_entries(&self, table: &str, proposal: &[u8; 32]) -> Result<Vec<(Vec<u8>, u64)>> {
         self.with(|c| {
             let mut statement = c.prepare(&format!(
-                "SELECT body, created_at FROM {table} WHERE proposal = ?1 ORDER BY slot"
+                "SELECT ome_body(version, body), created_at FROM {table} WHERE proposal = ?1 ORDER BY slot"
             ))?;
             statement
                 .query_map(params![proposal], |row| {
@@ -482,7 +513,7 @@ impl Store {
     pub fn approval(&self, proposal: &[u8; 32], slot: u32) -> Result<Option<Vec<u8>>> {
         self.with(|c| {
             c.query_row(
-                "SELECT body FROM approvals WHERE proposal = ?1 AND slot = ?2",
+                "SELECT ome_body(version, body) FROM approvals WHERE proposal = ?1 AND slot = ?2",
                 params![proposal, slot],
                 |row| row.get(0),
             )
@@ -503,8 +534,8 @@ impl Store {
     ) -> Result<bool> {
         self.with(|c| {
             c.execute(
-                "INSERT OR IGNORE INTO rejections (proposal, slot, body, created_at) VALUES (?1, ?2, ?3, ?4)",
-                params![proposal, slot, body, ts(now)],
+                "INSERT OR IGNORE INTO rejections (proposal, slot, body, created_at, version) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![proposal, slot, body, ts(now), STORE_VERSION],
             )
             .map(|n| n > 0)
         })
@@ -516,8 +547,9 @@ impl Store {
     /// Storage errors.
     pub fn rejections(&self, proposal: &[u8; 32]) -> Result<Vec<Vec<u8>>> {
         self.with(|c| {
-            let mut statement =
-                c.prepare("SELECT body FROM rejections WHERE proposal = ?1 ORDER BY slot")?;
+            let mut statement = c.prepare(
+                "SELECT ome_body(version, body) FROM rejections WHERE proposal = ?1 ORDER BY slot",
+            )?;
             statement
                 .query_map(params![proposal], |row| row.get(0))?
                 .collect()
@@ -545,7 +577,7 @@ impl Store {
     pub fn rejection(&self, proposal: &[u8; 32], slot: u32) -> Result<Option<Vec<u8>>> {
         self.with(|c| {
             c.query_row(
-                "SELECT body FROM rejections WHERE proposal = ?1 AND slot = ?2",
+                "SELECT ome_body(version, body) FROM rejections WHERE proposal = ?1 AND slot = ?2",
                 params![proposal, slot],
                 |row| row.get(0),
             )
@@ -560,7 +592,7 @@ impl Store {
     pub fn receipts(&self, vault: &[u8; 32]) -> Result<Vec<StoredReceipt>> {
         self.with(|c| {
             let mut statement = c.prepare(
-                "SELECT proposal, body FROM receipts WHERE vault = ?1 ORDER BY created_at",
+                "SELECT proposal, ome_body(version, body) FROM receipts WHERE vault = ?1 ORDER BY created_at",
             )?;
             statement
                 .query_map(params![vault], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -583,12 +615,12 @@ impl Store {
     ) -> Result<bool> {
         self.with(|c| {
             c.execute(
-                "INSERT INTO receipts (proposal, vault, tx_hash, body, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
+                "INSERT INTO receipts (proposal, vault, tx_hash, body, created_at, version) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                  ON CONFLICT (proposal) DO UPDATE SET
                     vault = excluded.vault, tx_hash = excluded.tx_hash, body = excluded.body,
                     created_at = excluded.created_at
                  WHERE receipts.vault IS NOT excluded.vault OR receipts.tx_hash IS NOT excluded.tx_hash",
-                params![proposal, vault, tx_hash, body, ts(now)],
+                params![proposal, vault, tx_hash, body, ts(now), STORE_VERSION],
             )
             .map(|n| n > 0)
         })
@@ -601,7 +633,7 @@ impl Store {
     pub fn receipt_entries(&self, vault: &[u8; 32]) -> Result<Vec<ReceiptEntry>> {
         self.with(|c| {
             let mut statement = c.prepare(
-                "SELECT proposal, tx_hash, created_at, body FROM receipts WHERE vault = ?1
+                "SELECT proposal, tx_hash, created_at, ome_body(version, body) FROM receipts WHERE vault = ?1
                  ORDER BY created_at DESC, rowid DESC",
             )?;
             statement
@@ -649,8 +681,8 @@ impl Store {
     ) -> Result<bool> {
         self.with(|c| {
             c.execute(
-                "INSERT OR IGNORE INTO names (vault, subject, by, at, body) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![vault, subject, by, ts(at), body],
+                "INSERT OR IGNORE INTO names (vault, subject, by, at, body, version) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![vault, subject, by, ts(at), body, STORE_VERSION],
             )
             .map(|n| n > 0)
         })
@@ -662,8 +694,9 @@ impl Store {
     /// Storage errors.
     pub fn names(&self, vault: &[u8; 32]) -> Result<Vec<Vec<u8>>> {
         self.with(|c| {
-            let mut statement =
-                c.prepare("SELECT body FROM names WHERE vault = ?1 ORDER BY at, by")?;
+            let mut statement = c.prepare(
+                "SELECT ome_body(version, body) FROM names WHERE vault = ?1 ORDER BY at, by",
+            )?;
             statement
                 .query_map(params![vault], |row| row.get(0))?
                 .collect()
@@ -683,8 +716,8 @@ impl Store {
     ) -> Result<bool> {
         self.with(|c| {
             c.execute(
-                "INSERT OR IGNORE INTO capabilities (vault, by, at, body) VALUES (?1, ?2, ?3, ?4)",
-                params![vault, by, ts(at), body],
+                "INSERT OR IGNORE INTO capabilities (vault, by, at, body, version) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![vault, by, ts(at), body, STORE_VERSION],
             )
             .map(|n| n > 0)
         })
@@ -696,8 +729,9 @@ impl Store {
     /// Storage errors.
     pub fn capabilities(&self, vault: &[u8; 32]) -> Result<Vec<Vec<u8>>> {
         self.with(|c| {
-            let mut statement =
-                c.prepare("SELECT body FROM capabilities WHERE vault = ?1 ORDER BY at, by")?;
+            let mut statement = c.prepare(
+                "SELECT ome_body(version, body) FROM capabilities WHERE vault = ?1 ORDER BY at, by",
+            )?;
             statement
                 .query_map(params![vault], |row| row.get(0))?
                 .collect()
