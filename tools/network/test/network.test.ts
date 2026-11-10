@@ -218,6 +218,7 @@ describe.skipIf(!available)("keepers on separate networks, joined by a relay", (
       { chainId: field(), version: field() },
       {
         calls: [],
+        authwits: [],
         extras: "0x",
         txNonce: field(),
         createdAt: Math.floor(Date.now() / 1000),

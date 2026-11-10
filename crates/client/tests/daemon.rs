@@ -33,6 +33,7 @@ fn info() -> DaemonInfo {
         node: "http://localhost:8080".into(),
         limits: Limits {
             max_calls: 4,
+            max_authwits: 4,
             max_summary_bytes: 4096,
             max_artifact_bytes: 32 << 20,
             memo_chars: 280,
