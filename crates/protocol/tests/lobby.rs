@@ -21,6 +21,7 @@ use support::seeded;
 fn member(n: u8) -> LobbyMember {
     LobbyMember {
         name: format!("member {n}"),
+        account: [n; 32],
         signer_key: WirePoint::from(&ome_crypto::Point::generator()),
         keeper: KeeperContact {
             identity: IdentityPublic([n; 32]),

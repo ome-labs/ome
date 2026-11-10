@@ -60,6 +60,7 @@ impl Lane {
                 | Message::Rejection(_)
                 | Message::ExecutionReceipt(_)
                 | Message::ExecutionClaim(_)
+                | Message::NameChange(_)
                 | Message::SyncRequest(_)
                 | Message::ArtifactRequest(_)
                 | Message::ArtifactManifest(_)
@@ -69,7 +70,8 @@ impl Lane {
                 Message::LobbyJoin(_)
                 | Message::LobbyState(_)
                 | Message::LobbyPlan(_)
-                | Message::LobbyLeave(_),
+                | Message::LobbyLeave(_)
+                | Message::LobbyRemoved(_),
             ) => Self::Lobby,
             _ => Self::Ceremony,
         }

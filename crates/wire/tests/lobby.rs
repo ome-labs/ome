@@ -113,3 +113,67 @@ fn a_join_request_is_signed_by_the_newcomers_keeper() {
     };
     assert_eq!(renamed.verify().err(), Some(Error::InvalidSignature));
 }
+
+#[test]
+fn an_invite_names_a_size_its_thresholds_fit() {
+    for (members, threshold, viewing, ok) in [
+        (3, 2, 2, true),
+        (1, 1, 2, false),
+        (2, 3, 2, false),
+        (2, 2, 3, false),
+    ] {
+        let mut invite = invite();
+        invite.members = members;
+        invite.threshold = threshold;
+        invite.viewing_threshold = viewing;
+        assert_eq!(
+            invite.validate().is_ok(),
+            ok,
+            "{members} {threshold} {viewing}"
+        );
+    }
+}
+
+#[test]
+fn a_rename_is_signed_by_the_member_who_made_it() {
+    use ome_wire::messages::names::{NameChange, NameSubject};
+    let rename = NameChange::sign(
+        &identity(2),
+        [0x0d; 32],
+        NameSubject::Vault,
+        "Ops".into(),
+        10,
+    )
+    .unwrap();
+    rename.verify().unwrap();
+    let claimed = NameChange {
+        by: identity(3).public(),
+        ..rename.clone()
+    };
+    assert_eq!(claimed.verify(), Err(Error::InvalidSignature));
+    let changed = NameChange {
+        name: "Payroll".into(),
+        ..rename.clone()
+    };
+    assert_eq!(changed.verify(), Err(Error::InvalidSignature));
+    assert!(
+        NameChange::sign(
+            &identity(2),
+            [0x0d; 32],
+            NameSubject::Member,
+            String::new(),
+            10
+        )
+        .is_err()
+    );
+    let later = NameChange::sign(
+        &identity(1),
+        [0x0d; 32],
+        NameSubject::Vault,
+        "Later".into(),
+        11,
+    )
+    .unwrap();
+    assert!(later.supersedes(&rename));
+    assert!(!rename.supersedes(&later));
+}

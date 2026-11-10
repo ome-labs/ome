@@ -55,11 +55,13 @@ impl KeeperContact {
     }
 }
 
-/// A lobby member: display name, signing key and keeper.
+/// A lobby member: display name, Aztec account, signing key and keeper.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LobbyMember {
     /// Display name.
     pub name: String,
+    /// The member's own Aztec account, which the other members can pay. Members see it; it never goes on chain.
+    pub account: WireField,
     /// Grumpkin key the member will sign approvals with.
     pub signer_key: WirePoint,
     /// The member's keeper.
@@ -95,6 +97,8 @@ pub struct Invite {
     pub threshold: u8,
     /// Proposed viewing threshold `t_v`.
     pub viewing_threshold: u8,
+    /// How many members the vault will have, host included.
+    pub members: u8,
     /// Network label set by the daemon (opaque to keepers).
     pub network: String,
 }
@@ -108,13 +112,15 @@ impl core::fmt::Debug for Invite {
             .field("name", &self.name)
             .field("threshold", &self.threshold)
             .field("viewing_threshold", &self.viewing_threshold)
+            .field("members", &self.members)
             .field("network", &self.network)
             .finish_non_exhaustive()
     }
 }
 
 impl Invite {
-    /// Structural bounds: names, the host contact and thresholds (`1 <= k <= 8`, `2 <= t_v <= 8`).
+    /// Structural bounds: names, the host contact, the size (`2 <= n <= 8`) and thresholds (`1 <= k <= n`,
+    /// `2 <= t_v <= n`).
     ///
     /// # Errors
     /// [`Error::OutOfBounds`] naming the field.
@@ -123,12 +129,14 @@ impl Invite {
         name("host_name", &self.host_name)?;
         name("network", &self.network)?;
         self.host.validate()?;
-        bounded("threshold", usize::from(self.threshold), 1, MAX_MEMBERS)?;
+        bounded("members", usize::from(self.members), 2, MAX_MEMBERS)?;
+        let n = usize::from(self.members);
+        bounded("threshold", usize::from(self.threshold), 1, n)?;
         bounded(
             "viewing_threshold",
             usize::from(self.viewing_threshold),
             2,
-            MAX_MEMBERS,
+            n,
         )
     }
 
@@ -268,6 +276,8 @@ pub struct LobbyState {
     pub threshold: u8,
     /// Proposed viewing threshold.
     pub viewing_threshold: u8,
+    /// How many members the vault will have, host included.
+    pub expected: u8,
     /// Members, host first.
     pub members: Vec<LobbyMember>,
     /// Whether the host started the lobby.
@@ -362,6 +372,14 @@ impl LobbyPlan {
 /// From a guest: it leaves an open lobby. From the host: the lobby is closed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LobbyLeave {
+    /// Lobby id.
+    pub lobby: [u8; 16],
+}
+
+/// From the host to a guest it removed: the guest is no longer in the lobby, and the invite it joined with no longer
+/// admits anyone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LobbyRemoved {
     /// Lobby id.
     pub lobby: [u8; 16],
 }

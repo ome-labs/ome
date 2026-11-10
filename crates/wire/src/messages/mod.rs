@@ -8,6 +8,7 @@ pub mod device;
 pub mod ecdh;
 pub mod lobby;
 pub mod mailbox;
+pub mod names;
 pub mod proposals;
 pub mod sync;
 
@@ -20,7 +21,8 @@ use ceremony::{
 };
 use device::{DevicePair, DevicePaired, DeviceReview, DeviceUnpair, DeviceVote, DeviceVoted};
 use ecdh::{EcdhRequest, EcdhResponse};
-use lobby::{LobbyJoin, LobbyLeave, LobbyPlan, LobbyState, SealedSecrets};
+use lobby::{LobbyJoin, LobbyLeave, LobbyPlan, LobbyRemoved, LobbyState, SealedSecrets};
+use names::NameChange;
 use proposals::{
     Approval, ExecutionClaim, ExecutionReceipt, PayloadRequest, Proposal, ProposalPayload,
     Rejection,
@@ -100,6 +102,10 @@ pub enum Message {
     ArtifactChunk(ArtifactChunk),
     /// A member is executing a proposal.
     ExecutionClaim(ExecutionClaim),
+    /// The host removed a guest from its lobby.
+    LobbyRemoved(LobbyRemoved),
+    /// A member renamed the vault, or themselves.
+    NameChange(NameChange),
 }
 
 impl Message {
@@ -134,6 +140,7 @@ impl Message {
             Self::ArtifactRequest(m) => m.validate(),
             Self::ArtifactManifest(m) => m.validate(),
             Self::ArtifactChunk(m) => m.validate(),
+            Self::NameChange(m) => m.validate(),
             Self::DkgConfirm(_)
             | Self::ReshareConfirm(_)
             | Self::Complaint(_)
@@ -142,6 +149,7 @@ impl Message {
             | Self::Approval(_)
             | Self::ExecutionReceipt(_)
             | Self::ExecutionClaim(_)
+            | Self::LobbyRemoved(_)
             | Self::LobbyLeave(_) => Ok(()),
         }
     }

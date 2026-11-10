@@ -24,9 +24,10 @@ use ome_wire::{
         ecdh::{EcdhPurpose, EcdhRequest, EcdhResponse, WirePartial},
         lobby::{
             Invite, JoinSecret, KeeperContact, LobbyJoin, LobbyLeave, LobbyMember, LobbyPlan,
-            LobbyState, SealedSecrets,
+            LobbyRemoved, LobbyState, SealedSecrets,
         },
         mailbox::RelayEnvelope,
+        names::{NameChange, NameSubject},
         proposals::{
             Approval, ClaimPhase, ExecutionClaim, ExecutionReceipt, PayloadRequest, Proposal,
             ProposalPayload, Rejection,
@@ -82,6 +83,7 @@ pub fn contact(n: u8) -> KeeperContact {
 pub fn lobby_member(n: u8) -> LobbyMember {
     LobbyMember {
         name: format!("member {n}"),
+        account: [n; 32],
         signer_key: wire_point(u64::from(n) + 20),
         keeper: contact(n),
     }
@@ -96,6 +98,7 @@ pub fn invite() -> Invite {
         name: "Treasury".to_owned(),
         threshold: 2,
         viewing_threshold: 2,
+        members: 3,
         network: "aztec-testnet".to_owned(),
     }
 }
@@ -309,6 +312,7 @@ pub fn samples() -> Vec<(&'static str, Message)> {
                 name: "Treasury".to_owned(),
                 threshold: 2,
                 viewing_threshold: 2,
+                expected: 3,
                 members: vec![lobby_member(1), lobby_member(2)],
                 started: false,
             }),
@@ -401,6 +405,23 @@ pub fn samples() -> Vec<(&'static str, Message)> {
                 phase: ClaimPhase::Proving,
                 started_at: NOW,
             }),
+        ),
+        (
+            "lobby_removed",
+            Message::LobbyRemoved(LobbyRemoved { lobby: [0x31; 16] }),
+        ),
+        (
+            "name_change",
+            Message::NameChange(
+                NameChange::sign(
+                    &identity(2),
+                    [0x0d; 32],
+                    NameSubject::Vault,
+                    "Ops".to_owned(),
+                    NOW,
+                )
+                .unwrap(),
+            ),
         ),
     ]
 }
