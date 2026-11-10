@@ -31,7 +31,8 @@
   "type": "module",
   "exports": {
     "./OmeVault.json": "./target/ome_vault-OmeVault.json",
-    "./OmeVaultPreview.json": "./target/ome_vault_preview-OmeVaultPreview.json"
+    "./OmeVaultPreview.json": "./target/ome_vault_preview-OmeVaultPreview.json",
+    "./TestRouter.json": "./target/test_router-TestRouter.json"
   },
   "publishConfig": {
     "access": "public"

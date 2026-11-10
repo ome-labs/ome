@@ -1,2 +1,2 @@
 [workspace]
-members = ["ome_vault", "ome_vault_preview", "test_signer"]
+members = ["ome_vault", "ome_vault_preview", "test_router", "test_signer"]
