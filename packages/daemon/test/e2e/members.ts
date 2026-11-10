@@ -43,6 +43,8 @@ export async function member(name: string, settings: Partial<Settings> = {}): Pr
     keeperListen: ["/ip4/127.0.0.1/tcp/0"],
     // A deleted profile's daemon stops; it must not signal the test process.
     exit: () => undefined,
+    // The app page, on a free port: apps connect through it in the app connection test.
+    appsPort: 0,
   });
   await daemon.start();
   const client = await DaemonClient.discover("default", home);

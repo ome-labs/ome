@@ -2,6 +2,7 @@
 // proposer registered, see a rejection block a proposal, and then rotate: Carol leaves and a newcomer joins with a join request, receiving the vault's protocol
 // secrets in the reshare. Everything goes through the daemons' sockets, as an app would; each daemon runs its own
 // keeper process and PXE against `aztec start --local-network`.
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,34 +18,120 @@ import { PrivateVotingContract } from "@aztec-labs/noir-contracts.js/PrivateVoti
 import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 import { contractArtifactToBuffer } from "@aztec-labs/stdlib/abi";
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
+import * as crypto from "@aztec-labs/wallet-sdk/crypto";
+import { WalletMessageType } from "@aztec-labs/wallet-sdk/types";
 import type { FoundingState, Hex32, ProposalView, RotationState } from "@ome-labs/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { createWalletPage } from "../../src/apps/page/wallet-page.js";
 import { type Member, PASSPHRASE, member, networkAvailable, until } from "./members.ts";
 
 const available = await networkAvailable();
 
 const hex = (c: { address: AztecAddress }) => c.address.toString() as Hex32;
 
-/** An aztec.js `Wallet` an app at `origin` uses: each call goes through `m`'s daemon as `apps.call`, as wallet-sdk's
- * transports forward them, and results are parsed as wallet-sdk's app side parses them. */
-const appWallet = (m: Member, origin: string): Wallet =>
-  new Proxy({} as Wallet, {
+/**
+ * An aztec.js `Wallet` an app at `origin` uses through `m`'s app page, as wallet-sdk's iframe transport does: it
+ * discovers the wallet, runs the key exchange, and sends each call encrypted to the page, which forwards it to the
+ * daemon over HTTP. Results are parsed as wallet-sdk's app side parses them.
+ */
+async function pageWallet(m: Member, origin: string): Promise<Wallet> {
+  const base = m.daemon.appPage;
+  if (!base) throw new Error("the daemon serves no app page");
+  const headers = { "content-type": "application/json", "x-ome-page": "1" };
+  const posted: Record<string, unknown>[] = [];
+  const page = createWalletPage({
+    crypto,
+    types: WalletMessageType,
+    wallet: { id: "ome", name: "Ome", version: "0.1.0" },
+    post: (message) => posted.push(message as Record<string, unknown>),
+    allowed: async (app) =>
+      (
+        (await (
+          await fetch(`${base}/api/allowed?origin=${encodeURIComponent(app)}`, { headers })
+        ).json()) as {
+          allowed: boolean;
+        }
+      ).allowed,
+    call: async (app, method, args) => {
+      const answer = (await (
+        await fetch(`${base}/api/call`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ origin: app, method, args }),
+        })
+      ).json()) as { result?: unknown; error?: string };
+      if (answer.error) throw new Error(answer.error);
+      return answer.result;
+    },
+  });
+  let session: { id: string; key: CryptoKey } | undefined;
+  const connect = async () => {
+    const requestId = randomUUID();
+    await page.handle({ type: WalletMessageType.DISCOVERY, requestId, appId: "swap" }, origin);
+    if (
+      !posted.some(
+        (p) => p.type === WalletMessageType.DISCOVERY_RESPONSE && p.requestId === requestId,
+      )
+    )
+      throw new Error(`${origin} isn't allowed`);
+    const keyPair = await crypto.generateKeyPair();
+    await page.handle(
+      {
+        type: WalletMessageType.KEY_EXCHANGE_REQUEST,
+        requestId,
+        publicKey: await crypto.exportPublicKey(keyPair.publicKey),
+      },
+      origin,
+    );
+    const reply = posted.find(
+      (p) => p.type === WalletMessageType.KEY_EXCHANGE_RESPONSE && p.requestId === requestId,
+    ) as { publicKey: never };
+    const keys = await crypto.deriveSessionKeys(
+      keyPair,
+      await crypto.importPublicKey(reply.publicKey),
+      true,
+    );
+    return { id: requestId, key: keys.encryptionKey };
+  };
+  return new Proxy({} as Wallet, {
     get: (_, prop) => {
       const method = prop.toString();
       if (!schemaHasMethod(WalletSchema, method)) return undefined;
       return async (...args: unknown[]) => {
-        const { result } = await m.client.call("apps.call", {
+        session ??= await connect();
+        const { id, key } = session;
+        const messageId = randomUUID();
+        const before = posted.length;
+        await page.handle(
+          {
+            type: WalletMessageType.SECURE_MESSAGE,
+            sessionId: id,
+            encrypted: await crypto.encrypt(
+              key,
+              jsonStringify({ messageId, type: method, args, appId: "swap" }),
+            ),
+          },
           origin,
-          method,
-          args: jsonStringify(args),
-        });
-        return getSchemaReturnType(WalletSchema[method as keyof typeof WalletSchema]).parseAsync(
-          JSON.parse(result),
         );
+        for (const message of posted.slice(before)) {
+          // oxlint-disable-next-line no-await-in-loop
+          const response = (await crypto.decrypt(key, message.encrypted as never)) as {
+            messageId: string;
+            result: unknown;
+            error?: string;
+          };
+          if (response.messageId !== messageId) continue;
+          if (response.error) throw new Error(response.error);
+          return getSchemaReturnType(WalletSchema[method as keyof typeof WalletSchema]).parseAsync(
+            response.result,
+          );
+        }
+        throw new Error(`no answer to ${method}`);
       };
     },
   });
+}
 
 describe.skipIf(!available)("members' daemons on a local network", () => {
   let alice: Member; // member 1: founds and proposes
@@ -449,15 +536,19 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       if (!swapPool) throw new Error("the swap test deploys the AMM");
       const { amm, jade, opal } = swapPool;
       const origin = "https://swap.example";
-      const app = appWallet(alice, origin);
       const vaultAddress = AztecAddress.fromStringUnsafe(vault);
 
       // Nothing answers until the member turns connections on and allows the app.
-      await expect(app.getAccounts()).rejects.toThrow(/app connections are off/u);
+      await expect((await pageWallet(alice, origin)).getAccounts()).rejects.toThrow(
+        /isn't allowed/u,
+      );
       await alice.client.call("config.set", { appsEnabled: true });
-      await expect(app.getAccounts()).rejects.toThrow(/isn't allowed/u);
+      await expect((await pageWallet(alice, origin)).getAccounts()).rejects.toThrow(
+        /isn't allowed/u,
+      );
       expect(alice.events.some((e) => e.type === "appConnect" && e.origin === origin)).toBe(true);
       await alice.client.call("apps.allow", { origin, vault, name: "Swap" });
+      const app = await pageWallet(alice, origin);
       expect(await alice.client.call("apps.list", {})).toMatchObject([
         { origin, vault, name: "Swap" },
       ]);
@@ -510,6 +601,9 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
 
       await alice.client.call("apps.revoke", { origin });
       await expect(app.getAccounts()).rejects.toThrow(/isn't allowed/u);
+      await expect((await pageWallet(alice, origin)).getAccounts()).rejects.toThrow(
+        /isn't allowed/u,
+      );
     });
 
     it("shows the vault's balance before and after, names a shortfall, and reviews a threshold change", async () => {
