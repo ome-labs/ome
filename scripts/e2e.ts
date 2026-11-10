@@ -4,6 +4,7 @@
 //   node scripts/e2e.ts e2e        the wallet and the daemons end to end (founding, paying, rotating, phone, server keeper)
 //   node scripts/e2e.ts removal    the member removal drill
 //   node scripts/e2e.ts cli        three members through `ome` only (founding, paying, removing a member)
+//   node scripts/e2e.ts compat     the same with one member on the previous published release
 //
 // It builds what the suites run (the contract artifact, @ome-labs/wasm, ome, ome-keeper, ome-relay, the test phone), checks
 // the local network at AZTEC_NODE_URL (default http://localhost:8080), and with `--start` starts it when it is not
@@ -28,6 +29,9 @@ const SUITES: Record<string, { name: string; command: string[] }[]> = {
     { name: "removal drill", command: ["pnpm", "--filter", "@ome-labs/daemon", "test:removal"] },
   ],
   cli: [{ name: "ome cli", command: ["node", "--test", join(root, "scripts", "test-cli.ts")] }],
+  compat: [
+    { name: "previous release", command: ["node", join(root, "scripts", "test-compat.ts")] },
+  ],
 };
 
 const args = process.argv.slice(2);

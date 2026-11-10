@@ -22,7 +22,9 @@
     "bench:proving": "pnpm --filter @ome-labs/daemon bench:proving",
     "drill:testnet": "pnpm --filter @ome-labs/daemon drill:testnet",
     "test:network": "pnpm --filter @ome-labs/wasm build && pnpm --filter @ome-labs/network test:network",
-    "typecheck": "tsc -p tsconfig.json && turbo run typecheck"
+    "typecheck": "tsc -p tsconfig.json && turbo run typecheck",
+    "test:compat": "node scripts/e2e.ts compat",
+    "compat:freeze": "node scripts/compat-freeze.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "catalog:",

@@ -40,9 +40,21 @@ interface Run {
 }
 
 /** Runs `ome` as `profile`; `watch` is called with stderr as it grows, for commands that print something to pass on. */
-function ome(profile: string, args: string[], watch?: (stderr: string) => void): Promise<Run> {
+/** Alice runs the previous release when the compat lane (`scripts/test-compat.ts`) names one; everyone else this build. */
+const binary = (profile: string) =>
+  profile === "alice" && process.env.OME_PREVIOUS_BIN ? process.env.OME_PREVIOUS_BIN : OME;
+
+function ome(
+  profile: string,
+  args: string[],
+  watch?: (stderr: string) => void,
+  timeout?: number,
+): Promise<Run> {
   return new Promise((resolve, reject) => {
-    const child = spawn(OME, ["--profile", profile, ...args], { env: env() });
+    const child = spawn(binary(profile), ["--profile", profile, ...args], {
+      env: env(),
+      ...(timeout ? { timeout, killSignal: "SIGKILL" as const } : {}),
+    });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -93,7 +105,8 @@ before(async () => {
 });
 
 after(async () => {
-  await Promise.all(PEOPLE.map(([profile]) => ome(profile, ["daemon", "stop"])));
+  // Bounded: a daemon that won't stop must not keep the suite open.
+  await Promise.all(PEOPLE.map(([profile]) => ome(profile, ["daemon", "stop"], undefined, 20_000)));
   await rm(home, { recursive: true, force: true });
 });
 

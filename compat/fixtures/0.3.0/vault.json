@@ -1,0 +1,31 @@
+{
+  "address": "0x0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+  "name": "Treasury",
+  "foundedAt": 1900000000,
+  "founding": {
+    "lobby": null,
+    "session": "0x5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+    "deployTx": null
+  },
+  "deployment": {
+    "salt": "0x5353535353535353535353535353535353535353535353535353535353535353",
+    "signerKeys": [
+      {
+        "x": "0x0101010101010101010101010101010101010101010101010101010101010101",
+        "y": "0x0202020202020202020202020202020202020202020202020202020202020202"
+      }
+    ],
+    "threshold": 1,
+    "viewingThreshold": 2,
+    "groupKey": {
+      "x": "0x0303030303030303030303030303030303030303030303030303030303030303",
+      "y": "0x0404040404040404040404040404040404040404040404040404040404040404"
+    },
+    "verificationShares": []
+  },
+  "names": {},
+  "transcripts": {},
+  "config": null,
+  "status": "active",
+  "schema": 1
+}
