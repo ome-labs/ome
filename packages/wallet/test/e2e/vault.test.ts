@@ -1,9 +1,11 @@
 // A 2-of-3 vault with a 2-of-3 viewing committee on a local network: three real `ome-keeper` processes run the DKG,
-// two members' wallets read and spend the vault through them, and a fourth keeper joins when member 3 is rotated out.
+// two members' wallets read and spend the vault through them (a swap through Aztec's AMM included, under an authwit
+// the members approve with it), and a fourth keeper joins when member 3 is rotated out.
 // No wallet ever holds the vault's incoming viewing secret (the key store throws if asked); every signature comes from
 // an `@ome-labs/wasm` signer, which signs only proposals it has checked.
 import { Contract } from "@aztec-labs/aztec.js/contracts";
 import { Fr } from "@aztec-labs/foundation/curves/bn254";
+import { AMMContract } from "@aztec-labs/noir-contracts.js/AMM";
 import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import { ExecutionPayload, mergeExecutionPayloads } from "@aztec-labs/stdlib/tx";
@@ -251,6 +253,87 @@ describe.skipIf(!available)("a vault on a local network with real keepers", () =
     expect(await balance(alice, vault)).toBe(900n);
   });
 
+  it("swaps through Aztec's AMM under a private authwit the members approve with the swap", async () => {
+    const send = { from: alice.account, fee: alice.fee };
+    const deployToken = async (name: string, symbol: string) =>
+      (await TokenContract.deploy(alice.wallet, alice.account, name, symbol, 18).send(send))
+        .contract;
+    const opal = await deployToken("Opal", "OPAL");
+    const shares = await deployToken("Ome LP", "OLP");
+    const { contract: amm } = await AMMContract.deploy(
+      alice.wallet,
+      token.address,
+      opal.address,
+      shares.address,
+    ).send(send);
+    await shares.methods.set_minter(amm.address, true).send(send);
+
+    // Alice provides the liquidity from her own account, under her own authwits.
+    await token.methods.mint_to_private(alice.account, 10_000n).send(send);
+    await opal.methods.mint_to_private(alice.account, 10_000n).send(send);
+    const liquidityNonce = Fr.random();
+    const authWitnesses = await Promise.all(
+      [token, opal].map(async (t) =>
+        alice.wallet.createAuthWit(alice.account, {
+          caller: amm.address,
+          call: await t.methods
+            .transfer_to_public_and_prepare_private_balance_increase(
+              alice.account,
+              amm.address,
+              10_000n,
+              liquidityNonce,
+            )
+            .getFunctionCall(),
+        }),
+      ),
+    );
+    await amm.methods
+      .add_liquidity(10_000n, 10_000n, 9_000n, 9_000n, liquidityNonce)
+      .with({ authWitnesses })
+      .send(send);
+
+    // The vault swaps 100 OME for OPAL; the AMM pulls the OME under an authwit granted with the swap.
+    const before = await balance(alice, vault);
+    const nonce = Fr.random();
+    const tx = await alice.wallet.prepareVaultTx(
+      vault,
+      await amm.methods
+        .swap_exact_tokens_for_tokens(token.address, opal.address, 100n, 1n, nonce)
+        .request({ fee: alice.fee }),
+      {
+        expiresAt: await expiry(alice),
+        summary: "swap 100 OME for OPAL",
+        proposer: 1,
+        authwits: [
+          {
+            caller: amm.address,
+            call: await token.methods
+              .transfer_to_public(vault, amm.address, 100n, nonce)
+              .getFunctionCall(),
+          },
+        ],
+      },
+    );
+    expect(tx.authwitHashes).toHaveLength(1);
+    expect(tx.approvalMessages).toHaveLength(2);
+
+    // Bob rebuilds the proposal in his own wallet, authwit included, and both sign the swap and the authwit.
+    const bobsTx = await bob.wallet.vaultTxOf(vault, tx.proposal, tx.payloadBody);
+    expect(bobsTx.authwitHashes).toEqual(tx.authwitHashes);
+    const approvals = [...(await approve(bob, bobsTx, [1])), ...(await approve(alice, tx, [0]))];
+    const receipt = await alice.wallet.executeVaultTx(tx, approvals);
+    expect(receipt.isMined()).toBe(true);
+
+    expect(await balance(alice, vault)).toBe(before - 100n);
+    const opals = await until(async () => {
+      const { result } = await TokenContract.at(opal.address, alice.wallet)
+        .methods.balance_of_private(vault)
+        .simulate({ from: vault });
+      return (result as bigint) > 0n ? (result as bigint) : undefined;
+    }, "the vault's OPAL");
+    expect(opals).toBeGreaterThan(0n);
+  });
+
   it("rotates member 3 out; stale approvals are refused and the new member's count", async () => {
     const [k1, k2, k3, k4] = keepers as [Keeper, Keeper, Keeper, Keeper];
     const stale = await transferFromVault(bob.account, 1n);
@@ -365,9 +448,10 @@ describe.skipIf(!available)("a vault on a local network with real keepers", () =
       reason: "stale-config",
     });
 
+    const before = await balance(alice, vault);
     const fresh = await transferFromVault(bob.account, 40n);
     await alice.wallet.executeVaultTx(fresh, await approve(alice, fresh, [0, 2]));
-    expect(await balance(alice, vault)).toBe(860n);
-    expect(await balance(bob, vault)).toBe(860n);
+    expect(await balance(alice, vault)).toBe(before - 40n);
+    expect(await balance(bob, vault)).toBe(before - 40n);
   });
 });
