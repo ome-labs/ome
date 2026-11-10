@@ -119,6 +119,8 @@ pub struct Draft {
     pub extras: HexBytes,
     /// Entrypoint nonce; cancelling burns it.
     pub tx_nonce: Hex32,
+    /// When it is made, Unix seconds (the clock `expires_at` uses).
+    pub created_at: u64,
     /// Approval deadline, Unix seconds.
     pub expires_at: u64,
     /// Summary shown to the members.
@@ -153,6 +155,8 @@ pub struct ProposalInfo {
     pub config_version: u32,
     /// Outer hash.
     pub outer_hash: Hex32,
+    /// When it was made, Unix seconds.
+    pub created_at: u64,
     /// Deadline, Unix seconds.
     pub expires_at: u64,
     /// Entrypoint nonce.

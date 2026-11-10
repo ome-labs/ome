@@ -220,6 +220,7 @@ describe.skipIf(!available)("keepers on separate networks, joined by a relay", (
         calls: [],
         extras: "0x",
         txNonce: field(),
+        createdAt: Math.floor(Date.now() / 1000),
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
         summary: "while keeper C was away",
         proposer: 1,

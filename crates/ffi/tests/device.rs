@@ -294,6 +294,7 @@ fn proposal(vault: &Vault, amount: u64, nonce: u64) -> (Proposal, ProposalPayloa
             extras: vec![],
         },
         tx_nonce: Base::from(nonce),
+        created_at: now(),
         expires_at: now() + 3600,
         summary: format!("pay {amount}"),
         proposer: 2,

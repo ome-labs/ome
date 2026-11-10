@@ -190,6 +190,7 @@ pub fn propose(f: &Fixture, calls: Vec<Call>) -> (Proposal, ProposalPayload) {
             extras: vec![],
         },
         tx_nonce: Base::from(0xabcdu64),
+        created_at: NOW,
         expires_at: NOW + 3600,
         summary: String::new(),
         proposer: 1,

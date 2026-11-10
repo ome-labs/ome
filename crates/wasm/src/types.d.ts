@@ -178,6 +178,10 @@ export type Draft = {
    */
   txNonce: Hex32;
   /**
+   * When it is made, Unix seconds (the clock `expires_at` uses).
+   */
+  createdAt: number;
+  /**
    * Approval deadline, Unix seconds.
    */
   expiresAt: number;
@@ -233,6 +237,10 @@ export type ProposalInfo = {
    * Outer hash.
    */
   outerHash: Hex32;
+  /**
+   * When it was made, Unix seconds.
+   */
+  createdAt: number;
   /**
    * Deadline, Unix seconds.
    */

@@ -21,6 +21,8 @@ pub struct Draft {
     pub request: ExecutionRequest,
     /// Entrypoint nonce; cancelling the proposal burns it.
     pub tx_nonce: Base,
+    /// When it is made (unix seconds, the clock `expires_at` uses).
+    pub created_at: u64,
     /// Approval deadline (unix seconds).
     pub expires_at: u64,
     /// Human-readable summary.
@@ -47,6 +49,7 @@ impl Draft {
                     .request
                     .outer_hash(vault.address(), chain, self.tx_nonce)?,
             ),
+            created_at: self.created_at,
             expires_at: self.expires_at,
             tx_nonce: field(&self.tx_nonce),
             fee_method: FEE_EXTERNAL,

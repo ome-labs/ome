@@ -196,6 +196,7 @@ pub fn draft(amount: u64) -> Draft {
     Draft {
         request: request(amount),
         tx_nonce: Base::from(0xabcdu64),
+        created_at: NOW,
         expires_at: NOW + 3600,
         summary: format!("transfer {amount}"),
         proposer: 1,
