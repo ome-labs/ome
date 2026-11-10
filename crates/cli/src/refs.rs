@@ -7,8 +7,8 @@
 use ome_api::{
     Empty, Hex32,
     daemon::{
-        AztecAlias, AztecAliases, CommitteeMember, DeviceView, DevicesList, ProposalView,
-        ProposalsList, ServiceStatus, SignerUnlock, StatusGet, TokenInfo, TokensList, UnlockParams,
+        AztecAlias, AztecAliases, CommitteeMember, DeviceView, DevicesList, ProposalFilter,
+        ProposalView, ServiceStatus, SignerUnlock, StatusGet, TokenInfo, TokensList, UnlockParams,
         VaultList, VaultSummary,
     },
     keeper::VaultParams,
@@ -419,11 +419,8 @@ pub(crate) async fn proposal(
     input: Option<&str>,
     wanted: impl Fn(&ProposalView) -> bool,
 ) -> Result<ProposalView> {
-    let proposals = ctx
-        .client()
-        .await?
-        .call::<ProposalsList>(&VaultParams { vault })
-        .await?;
+    let proposals =
+        crate::lists::proposals(ctx.client().await?, vault, ProposalFilter::All).await?;
     let Some(input) = input else {
         let open: Vec<_> = proposals.iter().filter(|p| wanted(p)).collect();
         if open.is_empty() {
@@ -582,6 +579,7 @@ mod tests {
             members: 3,
             my_index: 1,
             founded_at: 0,
+            counts: ome_api::daemon::ProposalCounts::default(),
         }
     }
 
@@ -677,6 +675,7 @@ mod tests {
             name: "USD Coin".into(),
             symbol: "USDC".into(),
             decimals: 6,
+            standard: true,
         };
         let tokens = [usdc.clone()];
         assert_eq!(match_tokens(&tokens, "usdc", None), [&usdc]);

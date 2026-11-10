@@ -8,6 +8,7 @@ mod error;
 #[cfg(test)]
 mod fixtures;
 mod launch;
+mod lists;
 mod refs;
 mod secret;
 mod service;

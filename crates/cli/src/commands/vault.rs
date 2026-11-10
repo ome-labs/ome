@@ -4,23 +4,23 @@
 use std::{collections::HashSet, time::Duration};
 
 use ome_api::{
-    Empty, Hex32,
+    Amount, Empty, Hex32,
     daemon::{
         ActivityEntry, AliasParams, ConfigGet, DaemonEvent, FoundingBegin, FoundingGet,
         FoundingState, FoundingStepId, LobbyCreate, LobbyCreateParams, LobbyGet, LobbyInspect,
-        LobbyJoin, LobbyList, LobbyStart, LobbyView, StartLobbyParams, TokensList, VaultActivity,
-        VaultAlias, VaultAudit, VaultAuditParams, VaultCounterparties, VaultDetailsGet, VaultList,
-        VaultPeers, VaultRetire, VaultUse,
+        LobbyJoin, LobbyList, LobbyStart, LobbyView, PaymentRequestParams, StartLobbyParams,
+        TokensList, VaultAlias, VaultDetailsGet, VaultList, VaultPeers, VaultReceiving,
+        VaultRequest, VaultRetire, VaultUse,
     },
     keeper::{InviteParams, LobbyParams, LobbyRole, LobbyStatus, VaultParams},
 };
 use ome_client::DaemonClient;
 
 use crate::{
-    args::{ActivityArgs, BalanceArgs, CreateArgs, VaultCommand},
+    args::{ActivityArgs, BalanceArgs, CreateArgs, RequestArgs, VaultCommand},
     context::{Ctx, Mode},
     error::{Error, Result},
-    refs,
+    lists, refs,
     ui::{
         describe, format, prompt, qr,
         steps::{Step, Tracked, Tracker},
@@ -840,14 +840,12 @@ fn show_health(
 
 async fn audit(ctx: &Ctx, limit: u32) -> Result<()> {
     let vault = refs::vault(ctx).await?;
-    let entries = ctx
-        .client()
-        .await?
-        .call::<VaultAudit>(&VaultAuditParams {
-            vault: vault.address,
-            limit: limit.clamp(1, 500),
-        })
-        .await?;
+    let entries = lists::audit(
+        ctx.client().await?,
+        vault.address,
+        usize::try_from(limit.clamp(1, 10_000)).unwrap_or(500),
+    )
+    .await?;
     if ctx.mode == Mode::Json {
         return ctx.json(&entries);
     }
@@ -923,7 +921,85 @@ async fn receive(ctx: &Ctx) -> Result<()> {
             theme::dim("Only private transfers keep the vault's balance private.").to_string(),
         ],
     );
+    let receiving = client
+        .call::<VaultReceiving>(&VaultParams {
+            vault: vault.address,
+        })
+        .await?;
+    let mut finds = vec![format!(
+        "{} payments from any Aztec wallet that handshakes with the vault (its default)",
+        theme::check(receiving.handshakes)
+    )];
+    finds.push(format!(
+        "{} payments from the {} registered from aztec-wallet",
+        theme::check(true),
+        format::plural(receiving.senders, "account", "accounts")
+    ));
+    finds.push(match receiving.last_received_at {
+        Some(at) => format!("last payment {}", format::relative(at)),
+        None => theme::dim("no payment received yet").to_string(),
+    });
+    ctx.section("What the vault finds", &finds);
     ctx.out(&vault.address.to_string());
+    ctx.next("request <amount> <token>");
+    Ok(())
+}
+
+/// `ome request`: an `ome-pay:` link and QR code naming the vault and what is asked for.
+pub(crate) async fn request(ctx: &Ctx, args: RequestArgs) -> Result<()> {
+    let vault = refs::vault(ctx).await?;
+    let client = ctx.client().await?;
+    let token = match &args.token {
+        Some(input) => Some(refs::token(ctx, vault.address, input).await?),
+        None if args.amount.is_some() => {
+            let tracked = client
+                .call::<TokensList>(&VaultParams {
+                    vault: vault.address,
+                })
+                .await?;
+            match tracked.as_slice() {
+                [only] => Some(only.token.clone()),
+                _ => {
+                    return Err(Error::usage("Name the token the amount is in.")
+                        .hint(format!("For example `{}`.", ctx.ome("request 25 USDC"))));
+                }
+            }
+        }
+        None => None,
+    };
+    let amount = match (&args.amount, &token) {
+        (Some(amount), Some(token)) => Some(Amount(format::parse_amount(amount, token.decimals)?)),
+        _ => None,
+    };
+    let request = client
+        .call::<VaultRequest>(&PaymentRequestParams {
+            vault: vault.address,
+            token: token.as_ref().map(|t| t.address),
+            amount,
+            memo: args.memo.clone(),
+        })
+        .await?;
+    if ctx.mode == Mode::Json {
+        return ctx.json(&request);
+    }
+    if !ctx.human() {
+        ctx.out(&request.uri);
+        return Ok(());
+    }
+    let asked = match (&request.amount, &request.token) {
+        (Some(a), Some(t)) => format!("{} {}", format::amount(a.0, t.decimals), t.symbol),
+        (None, Some(t)) => format!("any amount of {}", t.symbol),
+        _ => "any amount".to_owned(),
+    };
+    let mut lines = vec![
+        format!("{asked} to {}", vault.name),
+        theme::name(&request.uri).to_string(),
+    ];
+    if let Some(code) = qr::render(&request.uri) {
+        lines.extend(code.lines().map(String::from));
+    }
+    ctx.section("Payment request", &lines);
+    ctx.out(&request.uri);
     Ok(())
 }
 
@@ -979,20 +1055,29 @@ pub(crate) async fn balance(ctx: &Ctx, args: BalanceArgs) -> Result<()> {
         ctx.next("token add <address>");
         return Ok(());
     }
-    let mut t = table::Table::new(&["token", "balance", "address"]);
+    let mut t = table::Table::new(&["token", "private", "public", "address"]);
     for b in &balances {
-        let (amount, tone) = match (&b.balance, &b.error) {
-            (Some(a), _) => (format::amount(a.0, b.token.decimals), Tone::Bold),
-            (None, Some(e)) => (format!("unreadable: {e}"), Tone::Warn),
-            (None, None) => ("?".into(), Tone::Dim),
+        let (private, private_tone) = describe::balance_state(&b.private, b.token.decimals);
+        let (public, public_tone) = describe::balance_state(&b.public, b.token.decimals);
+        let symbol = if b.token.standard {
+            b.token.symbol.clone()
+        } else {
+            format!("{} (custom)", b.token.symbol)
         };
         t.row(vec![
-            table::toned(&b.token.symbol, Tone::Name),
-            table::toned(amount, tone),
+            table::toned(symbol, Tone::Name),
+            table::toned(private, private_tone),
+            table::toned(public, public_tone),
             table::toned(address(ctx, &b.token.address), Tone::Dim),
         ]);
     }
     t.print(ctx);
+    if balances
+        .iter()
+        .any(|b| matches!(b.private, ome_api::daemon::BalanceState::Unreadable { .. }))
+    {
+        ctx.warn("Too few keepers answered to read the private balance: members' keepers may be offline.");
+    }
     Ok(())
 }
 
@@ -1044,16 +1129,14 @@ fn entry_row(ctx: &Ctx, entry: &ActivityEntry, labels: &refs::Book) -> Vec<(Stri
     }
 }
 
+/// Entries `activity --follow` rereads on each event.
+const FOLLOW_PAGE: usize = 50;
+
 pub(crate) async fn activity(ctx: &Ctx, args: ActivityArgs) -> Result<()> {
     let vault = refs::vault(ctx).await?;
     let client = ctx.client().await?;
     let book = refs::Book::load(ctx).await?;
-    let mut entries = client
-        .call::<VaultActivity>(&VaultParams {
-            vault: vault.address,
-        })
-        .await?;
-    entries.truncate(args.limit);
+    let entries = lists::activity(client, vault.address, Some(args.limit)).await?;
     if ctx.mode == Mode::Json && !args.follow {
         return ctx.json(&entries);
     }
@@ -1096,11 +1179,8 @@ pub(crate) async fn activity(ctx: &Ctx, args: ActivityArgs) -> Result<()> {
         if !refresh {
             continue;
         }
-        let latest = client
-            .call::<VaultActivity>(&VaultParams {
-                vault: vault.address,
-            })
-            .await?;
+        // New entries are the newest: one page holds them.
+        let latest = lists::activity(client, vault.address, Some(FOLLOW_PAGE)).await?;
         for e in latest.iter().rev() {
             if seen.insert(entry_key(e)) {
                 if ctx.mode == Mode::Json {
@@ -1119,13 +1199,7 @@ pub(crate) async fn activity(ctx: &Ctx, args: ActivityArgs) -> Result<()> {
 
 pub(crate) async fn counterparties(ctx: &Ctx) -> Result<()> {
     let vault = refs::vault(ctx).await?;
-    let list = ctx
-        .client()
-        .await?
-        .call::<VaultCounterparties>(&VaultParams {
-            vault: vault.address,
-        })
-        .await?;
+    let list = lists::counterparties(ctx.client().await?, vault.address).await?;
     if ctx.mode == Mode::Json {
         return ctx.json(&list);
     }

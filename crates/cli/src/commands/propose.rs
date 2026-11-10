@@ -134,7 +134,7 @@ async fn transfer(
             balances
                 .iter()
                 .map(|b| {
-                    let held = b.balance.map_or_else(
+                    let held = b.private.amount().map_or_else(
                         || "balance unknown".into(),
                         |a| format!("{} held", format::amount(a.0, b.token.decimals)),
                     );
@@ -168,7 +168,7 @@ async fn transfer(
     let held = balances
         .iter()
         .find(|b| b.token.address == token.address)
-        .and_then(|b| b.balance);
+        .and_then(|b| b.private.amount());
     if let Some(held) = held.filter(|h| h.0 < base) {
         ctx.warn(&format!(
             "The vault holds {} {}: this would fail unless more arrives first.",

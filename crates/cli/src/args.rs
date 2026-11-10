@@ -167,6 +167,8 @@ pub(crate) enum Command {
     Activity(ActivityArgs),
     /// Who paid the vault, and who should handshake with it again.
     Counterparties,
+    /// A payment request: an ome-pay: link and QR code naming the vault, and what you ask for.
+    Request(RequestArgs),
     /// The tokens the vault tracks.
     #[command(subcommand)]
     Token(TokenCommand),
@@ -451,6 +453,17 @@ pub(crate) struct CreateArgs {
 }
 
 #[derive(Debug, Args)]
+pub(crate) struct RequestArgs {
+    /// How much, in whole tokens (`25.5`).
+    pub(crate) amount: Option<String>,
+    /// Which token (symbol or address); the vault's only token when it tracks one.
+    pub(crate) token: Option<String>,
+    /// What it is for.
+    #[arg(long)]
+    pub(crate) memo: Option<String>,
+}
+
+#[derive(Debug, Args)]
 pub(crate) struct BalanceArgs {
     /// One token (symbol or address).
     pub(crate) token: Option<String>,
@@ -611,15 +624,31 @@ pub(crate) enum ProposeCommand {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub(crate) enum StatusFilter {
-    /// Collecting votes or ready.
+    /// Collecting votes, ready, or blocked (waiting to be cancelled).
     #[default]
     Open,
     /// Ready to execute.
     Ready,
-    /// Executed, cancelled, expired, blocked or stale.
+    /// Waiting for your vote.
+    NeedsMe,
+    /// Executed, cancelled, expired or stale.
     Done,
     /// Everything.
     All,
+}
+
+impl StatusFilter {
+    /// The daemon's filter.
+    pub(crate) const fn filter(self) -> ome_api::daemon::ProposalFilter {
+        use ome_api::daemon::ProposalFilter;
+        match self {
+            Self::Open => ProposalFilter::Open,
+            Self::Ready => ProposalFilter::Ready,
+            Self::NeedsMe => ProposalFilter::NeedsMe,
+            Self::Done => ProposalFilter::Done,
+            Self::All => ProposalFilter::All,
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -824,6 +853,22 @@ mod tests {
         );
         assert_eq!(options.memo.as_deref(), Some("rent"));
         assert_eq!(options.expires, "3d");
+    }
+
+    #[test]
+    fn request_takes_an_amount_a_token_and_a_memo() {
+        let cli = parse("request 25.5 USDC --memo rent");
+        let Some(Command::Request(args)) = cli.command else {
+            panic!("not a request");
+        };
+        assert_eq!(
+            (
+                args.amount.as_deref(),
+                args.token.as_deref(),
+                args.memo.as_deref()
+            ),
+            (Some("25.5"), Some("USDC"), Some("rent"))
+        );
     }
 
     #[test]

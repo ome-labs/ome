@@ -192,8 +192,11 @@ test("they pay from it: proposed, reviewed and approved by two, executed", async
     short,
   ]);
   assert.equal(executed.status, "executed");
-  const [balance] = await json<{ balance: string }[]>("alice", ["balance", token.symbol]);
-  assert.equal(BigInt(balance?.balance ?? "0"), 975n * 10n ** 18n);
+  const [balance] = await json<{ private: { state: string; amount?: string } }[]>("alice", [
+    "balance",
+    token.symbol,
+  ]);
+  assert.deepEqual(balance?.private, { state: "known", amount: String(975n * 10n ** 18n) });
 });
 
 test("they remove Carol: a reshare and rotate_membership, approved by the two who stay", async () => {

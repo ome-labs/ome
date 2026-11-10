@@ -24,6 +24,7 @@ pub(crate) fn usdc() -> TokenInfo {
         name: "USD Coin".into(),
         symbol: "USDC".into(),
         decimals: 6,
+        standard: true,
     }
 }
 

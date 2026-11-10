@@ -7,17 +7,16 @@ use ome_api::{
     Empty,
     daemon::{
         ConfigSet, DaemonInfoGet, FeesStatusGet, NodeStatusGet, ProfileCreate, ProfileCreateParams,
-        ProposalStatus, ProposalsList, RelaysParams, RelaysSet, ServiceStatus, SettingsPatch,
+        ProposalFilter, ProposalStatus, RelaysParams, RelaysSet, ServiceStatus, SettingsPatch,
         Status, StatusGet,
     },
-    keeper::VaultParams,
 };
 
 use crate::{
     args::{Cli, InitArgs, NodeArgs, Prover},
     context::{Ctx, Mode},
     error::{Error, Result},
-    launch, secret,
+    launch, lists, secret,
     ui::{describe, format, prompt, steps::Step, theme},
 };
 
@@ -442,10 +441,7 @@ async fn next_step(ctx: &Ctx, status: &Status) -> Option<(String, String)> {
     let vault = status
         .default_vault
         .or_else(|| (status.vaults.len() == 1).then(|| status.vaults[0].address))?;
-    let proposals = ctx
-        .running_client()
-        .await?
-        .call::<ProposalsList>(&VaultParams { vault })
+    let proposals = lists::proposals(ctx.running_client().await?, vault, ProposalFilter::Open)
         .await
         .ok()?;
     if let Some(p) = proposals.iter().find(|p| describe::can_vote(p)) {

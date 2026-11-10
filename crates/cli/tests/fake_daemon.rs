@@ -13,9 +13,9 @@ use std::{
 use ome_api::{
     Amount, ErrorKind, Hex32, Method, RpcError,
     daemon::{
-        ApproveParams, AztecAliases, Intent, ProposalStatus, ProposalView, ProposalsApprove,
-        ProposalsList, ProposalsReview, Proposer, Review, ReviewChecks, Secret, SignerStatus,
-        SignerStatusGet, Signs, Simulation, TokenInfo, VaultList, VaultSummary, Vote,
+        ApproveParams, AztecAliases, Intent, ProposalPage, ProposalStatus, ProposalView,
+        ProposalsApprove, ProposalsList, ProposalsReview, Proposer, Review, ReviewChecks, Secret,
+        SignerStatus, SignerStatusGet, Signs, Simulation, TokenInfo, VaultList, VaultSummary, Vote,
     },
     jsonrpc::{Request, Response},
 };
@@ -43,6 +43,7 @@ fn vault() -> VaultSummary {
         members: 3,
         my_index: 2,
         founded_at: 1_800_000_000,
+        counts: ome_api::daemon::ProposalCounts::default(),
     }
 }
 
@@ -89,6 +90,7 @@ fn proposal(id: &str, status: ProposalStatus) -> ProposalView {
             name: "USD Coin".into(),
             symbol: "USDC".into(),
             decimals: 6,
+            standard: true,
         }),
         execution: None,
         executing: None,
@@ -143,7 +145,10 @@ fn to(value: impl serde::Serialize) -> Result<Value, RpcError> {
 fn answer(daemon: &Daemon, request: &Request) -> Result<Value, RpcError> {
     match request.method.as_str() {
         VaultList::NAME => to(vec![vault()]),
-        ProposalsList::NAME => to(daemon.proposals.clone()),
+        ProposalsList::NAME => to(ProposalPage {
+            items: daemon.proposals.clone(),
+            next: None,
+        }),
         SignerStatusGet::NAME => to(SignerStatus {
             locked: true,
             unlocked_until: None,

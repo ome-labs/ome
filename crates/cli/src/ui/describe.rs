@@ -5,9 +5,9 @@ use std::fmt::Write;
 use ome_api::{
     Amount, Hex32,
     daemon::{
-        BalanceChange, DaemonEvent, Effects, ExecutionPhase, FeeEstimate, FeePayerKind, FeesStatus,
-        GovernanceChange, Intent, PolicyWarning, ProposalStatus, ProposalView, SimulationError,
-        SimulationFailure, TokenInfo,
+        BalanceChange, BalanceState, DaemonEvent, Effects, ExecutionPhase, FeeEstimate,
+        FeePayerKind, FeesStatus, GovernanceChange, Intent, PolicyWarning, ProposalStatus,
+        ProposalView, SimulationError, SimulationFailure, TokenInfo,
     },
 };
 
@@ -339,6 +339,18 @@ pub(crate) fn lifecycle_notice(event: &DaemonEvent) -> Option<String> {
             proposal, summary, ..
         } => Some(format!("{} was cancelled: {summary}", format::id(proposal))),
         _ => None,
+    }
+}
+
+/// A balance as a table cell: the amount, how many keepers answered, or why it failed.
+pub(crate) fn balance_state(state: &BalanceState, decimals: u8) -> (String, Tone) {
+    match state {
+        BalanceState::Known { amount } => (format::amount(amount.0, decimals), Tone::Bold),
+        BalanceState::Unreadable { answered, needed } => (
+            format!("unreadable: {answered} of {needed} keepers answered"),
+            Tone::Warn,
+        ),
+        BalanceState::Failed { message } => (format!("can't read: {message}"), Tone::Dim),
     }
 }
 

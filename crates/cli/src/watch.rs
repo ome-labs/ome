@@ -14,8 +14,8 @@ use std::{
 use ome_api::{
     Empty,
     daemon::{
-        ActivityEntry, DaemonEvent, ProposalStatus, ProposalView, ProposalsList, ServiceStatus,
-        Status, StatusGet, VaultActivity, VaultList, VaultSummary, VaultUse,
+        ActivityEntry, DaemonEvent, ProposalFilter, ProposalStatus, ProposalView, ServiceStatus,
+        Status, StatusGet, VaultList, VaultSummary, VaultUse,
     },
     keeper::VaultParams,
 };
@@ -34,6 +34,7 @@ use crate::{
     commands::{proposal, propose},
     context::Ctx,
     error::{Error, Result},
+    lists,
     refs::{self, Book},
     ui::{describe, format},
 };
@@ -184,22 +185,22 @@ pub(crate) async fn run(ctx: &mut Ctx) -> Result<()> {
     result
 }
 
+/// Activity the view keeps: more than any screen shows.
+const ACTIVITY_SHOWN: usize = 200;
+
 async fn load(ctx: &Ctx, vault: VaultSummary) -> Result<View> {
     let client = ctx.client().await?;
-    let params = VaultParams {
-        vault: vault.address,
-    };
     let (status, proposals, activity) = tokio::join!(
         client.call::<StatusGet>(&Empty {}),
-        client.call::<ProposalsList>(&params),
-        client.call::<VaultActivity>(&params),
+        lists::proposals(client, vault.address, ProposalFilter::All),
+        lists::activity(client, vault.address, Some(ACTIVITY_SHOWN)),
     );
     let mut proposals = proposals?;
     // Open proposals first, then the rest, newest first within each.
     proposals.sort_by_key(|p| {
         (
             !describe::is_open(p.status),
-            std::cmp::Reverse(p.expires_at),
+            std::cmp::Reverse(p.created_at),
         )
     });
     let mut list = ListState::default();
@@ -536,6 +537,7 @@ mod tests {
             members: 3,
             my_index: 2,
             founded_at: 0,
+            counts: ome_api::daemon::ProposalCounts::default(),
         };
         let mut view = View {
             vault,

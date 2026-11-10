@@ -8,9 +8,9 @@ use ome_api::{
     Empty,
     daemon::{
         MembershipBegin, MembershipGet, MembershipList, MembershipParams, MembershipPlan,
-        MembershipPlanGet, MembershipRequest, MembershipSwapSigner, ProposalRef, ProposalStatus,
-        ProposalsGet, RotationPlanText, RotationRef, RotationState, RotationStepId, StepStatus,
-        SwapSignerParams, VaultDetailsGet, VaultSummary,
+        MembershipPlanGet, MembershipRequest, MembershipSwapSigner, ProposalCounts, ProposalRef,
+        ProposalStatus, ProposalsGet, RotationPlanText, RotationRef, RotationState, RotationStepId,
+        StepStatus, SwapSignerParams, VaultDetailsGet, VaultSummary,
     },
     keeper::VaultParams,
 };
@@ -285,6 +285,7 @@ async fn join(ctx: &Ctx, plan: Option<String>) -> Result<()> {
             members: u32::try_from(state.plan.next.members.len()).unwrap_or(0),
             my_index: 0,
             founded_at: 0,
+            counts: ProposalCounts::default(),
         });
     ctx.intro(&format!("Take part in a change of {}", vault.name));
     show_plan(ctx, &state.plan);

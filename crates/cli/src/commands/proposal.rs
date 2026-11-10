@@ -6,8 +6,7 @@ use ome_api::{
     daemon::{
         ApproveParams, DaemonEvent, EventEnvelope, ExecuteParams, ExecutionPhase, Intent,
         ProposalRef, ProposalStatus, ProposalView, ProposalsApprove, ProposalsExecute,
-        ProposalsList, ProposalsReject, ProposalsReview, RejectParams, Review, TokensList,
-        VaultSummary,
+        ProposalsReject, ProposalsReview, RejectParams, Review, TokensList, VaultSummary,
     },
     keeper::VaultParams,
 };
@@ -16,6 +15,7 @@ use crate::{
     args::{ExecuteArgs, ListArgs, ProposalArg, RejectArgs, StatusFilter},
     context::{Ctx, Mode},
     error::{Error, Result},
+    lists,
     refs::{self, Book},
     secret,
     ui::{
@@ -28,19 +28,8 @@ use crate::{
 
 pub(crate) async fn list(ctx: &Ctx, args: ListArgs) -> Result<()> {
     let vault = refs::vault(ctx).await?;
-    let mut proposals = ctx
-        .client()
-        .await?
-        .call::<ProposalsList>(&VaultParams {
-            vault: vault.address,
-        })
-        .await?;
-    proposals.retain(|p| match args.status {
-        StatusFilter::Open => describe::is_open(p.status),
-        StatusFilter::Ready => p.status == ProposalStatus::Ready,
-        StatusFilter::Done => !describe::is_open(p.status),
-        StatusFilter::All => true,
-    });
+    let proposals =
+        lists::proposals(ctx.client().await?, vault.address, args.status.filter()).await?;
     if ctx.mode == Mode::Json {
         return ctx.json(&proposals);
     }
@@ -51,6 +40,7 @@ pub(crate) async fn list(ctx: &Ctx, args: ListArgs) -> Result<()> {
             match args.status {
                 StatusFilter::Open => "open",
                 StatusFilter::Ready => "ready",
+                StatusFilter::NeedsMe => "waiting for your vote",
                 StatusFilter::Done => "finished",
                 StatusFilter::All => "",
             }
@@ -508,7 +498,7 @@ async fn holding(ctx: &Ctx, vault: &VaultSummary, view: &ProposalView) -> Option
     Some(format!(
         "{} now holds {} {}",
         vault.name,
-        theme::bold(format::amount(b.balance?.0, b.token.decimals)),
+        theme::bold(format::amount(b.private.amount()?.0, b.token.decimals)),
         b.token.symbol
     ))
 }

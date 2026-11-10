@@ -47,6 +47,7 @@ pub(crate) async fn run(ctx: &mut Ctx, command: Option<Command>) -> Result<()> {
         Command::Vault(command) => vault::run(ctx, command).await,
         Command::Activity(args) => vault::activity(ctx, args).await,
         Command::Counterparties => vault::counterparties(ctx).await,
+        Command::Request(args) => vault::request(ctx, args).await,
         Command::Token(command) => token::run(ctx, command).await,
         Command::Contract(command) => contract::run(ctx, command).await,
         Command::Propose(command) => propose::run(ctx, command).await,
