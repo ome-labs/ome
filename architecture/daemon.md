@@ -47,9 +47,11 @@ already chosen; a local network needs none.
 
 - Newline-delimited JSON-RPC 2.0, the keeper's framing.
 - Every connection presents the token first (`session.auth`), compared in constant time.
-- `events.subscribe` adds `event` notifications.
-- Errors carry the API kind and code. Errors from the keeper and from `@ome-labs/wasm` keep their kinds; anything else
-  is `failed`.
+- `events.subscribe` adds `event` notifications, numbered per daemon start, and replays the ones after `since` from
+  the last 1,024 (`architecture/api.md`, Daemon events).
+- Errors carry the API kind, code and details. Errors from the keeper, from `@ome-labs/wasm` and the wallet's
+  `VaultTxError` keep their kinds and details, also when Aztec wraps them (the server looks down the `cause` chain);
+  anything else is `failed`.
 - All 60 daemon methods are served. The server answers `session.auth` and `events.subscribe` itself, and the other
   58 each have a handler (`src/server/handlers.ts`) that checks the params it uses. Hex values and points are checked
   again by the bindings.

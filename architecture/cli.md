@@ -170,14 +170,18 @@ a screen that hides the review.
 
 ## Exit codes
 
-| Code | When                                                                                      |
-| ---- | ----------------------------------------------------------------------------------------- |
-| 0    | done                                                                                      |
-| 1    | failed: daemon, keeper, node or chain errors; `locked`, `auth` and `alarm`                |
-| 2    | usage: bad or missing arguments, unknown or ambiguous references (`invalid`, `not-found`) |
-| 3    | the daemon is not running and could not be started, or the profile is not set up          |
-| 4    | not ready yet (`not-ready`): below threshold, keeper starting, node unreachable           |
-| 5    | declined at a prompt, or Ctrl-C                                                           |
+| Code | When                                                                                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------------------- |
+| 0    | done                                                                                                                      |
+| 1    | failed: daemon, keeper, node or chain errors; `locked`, `auth`, `alarm`, `insufficient-funds`, `expired`, `stale`, `full` |
+| 2    | usage: bad or missing arguments, unknown or ambiguous references (`invalid`, `not-found`, `unknown-contract`, `network`)  |
+| 3    | the daemon is not running and could not be started, or the profile is not set up                                          |
+| 4    | not ready yet (`not-ready`, `unreadable`, `conflict`): below threshold, keeper starting, node unreachable                 |
+
+An error with details is printed in the CLI's own words, with its fix ("The vault holds 50 OMET; this needs 75.5
+OMET." · "See what the vault holds with `ome balance`."), and the daemon's message becomes the cause shown with
+`--verbose`. `--json` prints the kind as `code`.
+| 5 | declined at a prompt, or Ctrl-C |
 
 ## Layout
 
