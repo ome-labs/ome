@@ -31,6 +31,8 @@ pub const MAX_ARTIFACT_CHUNK_BYTES: usize = 256 * 1024;
 pub const MAX_ARTIFACT_CHUNKS: usize = 128;
 /// Most chunks asked for in one request.
 pub const MAX_ARTIFACT_REQUEST: usize = 16;
+/// Most private authwits one proposal grants alongside its transaction.
+pub const MAX_AUTHWITS: usize = 4;
 /// Longest human-readable proposal summary.
 pub const MAX_SUMMARY_BYTES: usize = 4 * 1024;
 /// Longest rejection reason.

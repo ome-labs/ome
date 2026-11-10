@@ -19,6 +19,7 @@ use ome_crypto::{
 };
 use ome_wire::{
     Error, Message, decode_body, encode_body,
+    limits::MAX_AUTHWITS,
     messages::{
         ceremony::{Ceremony, DkgRound1, Justification, Manifest, ReshareDeal, SealedShare},
         ecdh::EcdhResponse,
@@ -233,9 +234,9 @@ fn an_approval_carries_a_signature_that_still_verifies() {
     let message = Base::from(77u64);
     let signature = schnorr::sign(&key, message, &mut rng).unwrap();
 
-    let approval = Approval::new(proposal().id().unwrap(), 0, &signature);
+    let approval = Approval::new(proposal().id().unwrap(), 0, &[signature]);
 
-    let received = schnorr::Signature::try_from(&approval.signature).unwrap();
+    let received = schnorr::Signature::try_from(&approval.signatures[0]).unwrap();
     assert!(schnorr::verify(
         &Point::generator_mul_secret(&key).unwrap(),
         message,
@@ -275,4 +276,33 @@ fn a_proposal_is_not_made_after_its_deadline() {
     proposal.created_at = proposal.expires_at + 1;
     let body = encode_body(&Message::Proposal(proposal.clone()));
     assert!(body.is_err() || decode_body(&body.unwrap()).is_err());
+}
+
+#[test]
+fn approvals_and_proposals_are_bounded_by_the_authwits_a_proposal_grants() {
+    let mut rng = rng(7);
+    let key = SecretScalar::random(&mut rng);
+    let signature = schnorr::sign(&key, Base::from(1u64), &mut rng).unwrap();
+    let approval = |count: usize| {
+        Message::Approval(Approval::new(
+            proposal().id().unwrap(),
+            0,
+            &vec![signature; count],
+        ))
+    };
+    let signatures = Error::OutOfBounds {
+        field: "signatures",
+    };
+
+    assert_eq!(approval(1).validate(), Ok(()));
+    assert_eq!(approval(1 + MAX_AUTHWITS).validate(), Ok(()));
+    assert_eq!(approval(0).validate(), Err(signatures.clone()));
+    assert_eq!(approval(2 + MAX_AUTHWITS).validate(), Err(signatures));
+
+    let mut granting = proposal();
+    granting.authwits = vec![[0x23; 32]; MAX_AUTHWITS + 1];
+    assert_eq!(
+        Message::Proposal(granting).validate(),
+        Err(Error::OutOfBounds { field: "authwits" })
+    );
 }

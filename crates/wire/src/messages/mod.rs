@@ -141,12 +141,12 @@ impl Message {
             Self::ArtifactManifest(m) => m.validate(),
             Self::ArtifactChunk(m) => m.validate(),
             Self::NameChange(m) => m.validate(),
+            Self::Approval(m) => m.validate(),
             Self::DkgConfirm(_)
             | Self::ReshareConfirm(_)
             | Self::Complaint(_)
             | Self::Justification(_)
             | Self::Abort(_)
-            | Self::Approval(_)
             | Self::ExecutionReceipt(_)
             | Self::ExecutionClaim(_)
             | Self::LobbyRemoved(_)

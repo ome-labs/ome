@@ -17,7 +17,9 @@ use super::bounded;
 use crate::{
     Error, IdentityPublic, KeeperIdentity,
     codec::canonical,
-    limits::{MAX_PAYLOAD_BYTES, MAX_PAYLOAD_REQUESTS, MAX_REASON_BYTES, MAX_SUMMARY_BYTES},
+    limits::{
+        MAX_AUTHWITS, MAX_PAYLOAD_BYTES, MAX_PAYLOAD_REQUESTS, MAX_REASON_BYTES, MAX_SUMMARY_BYTES,
+    },
     types::{Bytes64, WireField, WireSignature},
 };
 
@@ -52,6 +54,9 @@ pub struct Proposal {
     pub config_version: u32,
     /// The hash members approve: the entrypoint payload hash, which each approver recomputes from the payload.
     pub outer_hash: WireField,
+    /// The message hashes of the private authwits the vault grants with this transaction, in payload order. Each
+    /// approver recomputes them from the payload, and an approval signs each one.
+    pub authwits: Vec<WireField>,
     /// When the proposer made it (unix seconds, the clock `expires_at` uses). Part of the id, so every member shows
     /// the same time.
     pub created_at: u64,
@@ -90,6 +95,7 @@ impl Proposal {
             1,
             MAX_PAYLOAD_BYTES,
         )?;
+        bounded("authwits", self.authwits.len(), 0, MAX_AUTHWITS)?;
         bounded("summary", self.summary.len(), 0, MAX_SUMMARY_BYTES)
     }
 }
@@ -140,26 +146,31 @@ impl PayloadRequest {
     }
 }
 
-/// A member's approval: its Schnorr signature over the proposal's approval message.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// A member's approval: its Schnorr signatures over the proposal's approval messages, the transaction's first and
+/// then one per authwit the proposal grants.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Approval {
     /// Approved proposal id.
     pub proposal: [u8; 32],
     /// Signer slot (member index - 1).
     pub slot: u32,
-    /// The signature as contract limbs.
-    pub signature: WireSignature,
+    /// The signatures as contract limbs: the transaction's, then each authwit's in the proposal's order.
+    pub signatures: Vec<WireSignature>,
 }
 
 impl Approval {
-    /// Wraps a signature.
+    /// Wraps the signatures, the transaction's first.
     #[must_use]
-    pub fn new(proposal: [u8; 32], slot: u32, signature: &schnorr::Signature) -> Self {
+    pub fn new(proposal: [u8; 32], slot: u32, signatures: &[schnorr::Signature]) -> Self {
         Self {
             proposal,
             slot,
-            signature: WireSignature::from(signature),
+            signatures: signatures.iter().map(WireSignature::from).collect(),
         }
+    }
+
+    pub(super) fn validate(&self) -> Result<(), Error> {
+        bounded("signatures", self.signatures.len(), 1, 1 + MAX_AUTHWITS)
     }
 }
 

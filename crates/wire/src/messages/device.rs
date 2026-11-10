@@ -296,7 +296,7 @@ pub struct DeviceVote {
 impl DeviceVote {
     pub(super) fn validate(&self) -> Result<(), Error> {
         match &self.ballot {
-            Ballot::Approval(_) => Ok(()),
+            Ballot::Approval(approval) => approval.validate(),
             Ballot::Rejection(rejection) => rejection.validate(),
         }
     }

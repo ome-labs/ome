@@ -135,6 +135,7 @@ pub fn proposal() -> Proposal {
     Proposal {
         config_version: 3,
         outer_hash: [0x22; 32],
+        authwits: vec![[0x23; 32]],
         created_at: NOW,
         expires_at: NOW + 3600,
         tx_nonce: [0x01; 32],
@@ -265,7 +266,7 @@ pub fn samples() -> Vec<(&'static str, Message)> {
             Message::Approval(Approval {
                 proposal: proposal_id,
                 slot: 1,
-                signature,
+                signatures: vec![signature, signature],
             }),
         ),
         (
@@ -359,7 +360,7 @@ pub fn samples() -> Vec<(&'static str, Message)> {
                 ballot: Ballot::Approval(Approval {
                     proposal: proposal_id,
                     slot: 0,
-                    signature,
+                    signatures: vec![signature],
                 }),
             }),
         ),
