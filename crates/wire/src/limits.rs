@@ -25,6 +25,12 @@ pub const MAX_ECDH_POINTS: usize = 4096;
 pub const MAX_PAYLOAD_BYTES: usize = 256 * 1024;
 /// Most payloads asked for in one request.
 pub const MAX_PAYLOAD_REQUESTS: usize = 64;
+/// Largest artifact chunk. An artifact (gzip-compressed JSON) is split into chunks this size.
+pub const MAX_ARTIFACT_CHUNK_BYTES: usize = 256 * 1024;
+/// Most chunks of one artifact: 32 MiB compressed.
+pub const MAX_ARTIFACT_CHUNKS: usize = 128;
+/// Most chunks asked for in one request.
+pub const MAX_ARTIFACT_REQUEST: usize = 16;
 /// Longest human-readable proposal summary.
 pub const MAX_SUMMARY_BYTES: usize = 4 * 1024;
 /// Longest rejection reason.

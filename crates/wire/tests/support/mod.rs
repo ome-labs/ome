@@ -12,6 +12,7 @@ use ome_crypto::{Point, Scalar, SecretScalar};
 use ome_wire::{
     Header, KeeperIdentity, Message, SignedMessage,
     messages::{
+        artifacts::{ArtifactChunk, ArtifactManifest, ArtifactRequest, chunk_hash},
         ceremony::{
             Abort, AbortReason, Ceremony, Complaint, Confirm, DkgRound1, Echo, Justification,
             Manifest, Member, ReshareDeal, SealedShare,
@@ -367,6 +368,28 @@ pub fn samples() -> Vec<(&'static str, Message)> {
             "device_unpair",
             Message::DeviceUnpair(DeviceUnpair {
                 reason: "revoked".to_owned(),
+            }),
+        ),
+        (
+            "artifact_request",
+            Message::ArtifactRequest(ArtifactRequest {
+                class_id: [0x1a; 32],
+                chunks: vec![0, 1],
+            }),
+        ),
+        (
+            "artifact_manifest",
+            Message::ArtifactManifest(ArtifactManifest {
+                class_id: [0x1a; 32],
+                chunks: vec![chunk_hash(&[0x1b; 8]), chunk_hash(&[0x1c; 4])],
+            }),
+        ),
+        (
+            "artifact_chunk",
+            Message::ArtifactChunk(ArtifactChunk {
+                class_id: [0x1a; 32],
+                index: 1,
+                bytes: vec![0x1c; 4],
             }),
         ),
     ]

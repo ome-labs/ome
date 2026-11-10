@@ -2,6 +2,7 @@
 //! version: their position is their encoding. Each body has structural bounds checked on encode and decode, and
 //! conversions to `ome-crypto` types that validate the cryptographic content.
 
+pub mod artifacts;
 pub mod ceremony;
 pub mod device;
 pub mod ecdh;
@@ -13,6 +14,7 @@ pub mod sync;
 use serde::{Deserialize, Serialize};
 
 use crate::Error;
+use artifacts::{ArtifactChunk, ArtifactManifest, ArtifactRequest};
 use ceremony::{
     Abort, Complaint, Confirm, DkgRound1, Echo, Justification, Manifest, ReshareDeal, SealedShare,
 };
@@ -87,6 +89,12 @@ pub enum Message {
     DeviceVoted(DeviceVoted),
     /// A device or its keeper ends the pairing.
     DeviceUnpair(DeviceUnpair),
+    /// A request for a contract artifact's manifest or chunks.
+    ArtifactRequest(ArtifactRequest),
+    /// A contract artifact's chunk hashes.
+    ArtifactManifest(ArtifactManifest),
+    /// One chunk of a contract artifact.
+    ArtifactChunk(ArtifactChunk),
 }
 
 impl Message {
@@ -118,6 +126,9 @@ impl Message {
             Self::DeviceVote(m) => m.validate(),
             Self::DeviceVoted(m) => m.validate(),
             Self::DeviceUnpair(m) => m.validate(),
+            Self::ArtifactRequest(m) => m.validate(),
+            Self::ArtifactManifest(m) => m.validate(),
+            Self::ArtifactChunk(m) => m.validate(),
             Self::DkgConfirm(_)
             | Self::ReshareConfirm(_)
             | Self::Complaint(_)

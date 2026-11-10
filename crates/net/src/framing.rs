@@ -59,7 +59,10 @@ impl Lane {
                 | Message::Approval(_)
                 | Message::Rejection(_)
                 | Message::ExecutionReceipt(_)
-                | Message::SyncRequest(_),
+                | Message::SyncRequest(_)
+                | Message::ArtifactRequest(_)
+                | Message::ArtifactManifest(_)
+                | Message::ArtifactChunk(_),
             ) => Self::Sync,
             Ok(
                 Message::LobbyJoin(_)
