@@ -145,3 +145,36 @@ fn weakened_unknown_or_malformed_files_are_refused_before_opening() {
         Some(Error::Malformed("too large"))
     );
 }
+
+#[test]
+fn a_reseal_keeps_the_key_and_takes_only_the_new_passphrase() {
+    let (key, sealed) = sealed_with_passphrase();
+    let mut rng = seeded(2);
+    let old = Secret::Passphrase("correct horse");
+    let new = Secret::Passphrase("battery staple");
+
+    let resealed = sealed.reseal(&old, &new, &mut rng).unwrap();
+
+    assert_eq!(resealed.public_key().unwrap(), key.public_key());
+    assert_eq!(resealed.open(&new).unwrap().public_key(), key.public_key());
+    assert!(matches!(resealed.open(&old), Err(Error::WrongSecret)));
+    // A fresh salt: the sealing key changes with the passphrase.
+    assert_ne!(
+        resealed.sealing_key("battery staple").unwrap().to_bytes(),
+        sealed.sealing_key("correct horse").unwrap().to_bytes()
+    );
+    // A wrong current passphrase changes nothing.
+    assert!(matches!(
+        sealed.reseal(&Secret::Passphrase("wrong"), &new, &mut rng),
+        Err(Error::WrongSecret)
+    ));
+    // The sealing key opens it as the passphrase does.
+    let by_key = sealed
+        .reseal(
+            &Secret::Key(&sealed.sealing_key("correct horse").unwrap()),
+            &new,
+            &mut rng,
+        )
+        .unwrap();
+    assert_eq!(by_key.open(&new).unwrap().public_key(), key.public_key());
+}

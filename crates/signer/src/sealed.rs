@@ -124,6 +124,21 @@ impl SealedKey {
         Ok(sealed)
     }
 
+    /// The same key sealed under `next` instead: opened with `current`, sealed again with a fresh salt and nonce. The
+    /// public key is unchanged, so nothing on chain notices.
+    ///
+    /// # Errors
+    /// As [`SealedKey::open`] for `current`, and [`Error::Kdf`] for `next`.
+    pub fn reseal(
+        &self,
+        current: &Secret<'_>,
+        next: &Secret<'_>,
+        rng: &mut impl CryptoRng,
+    ) -> Result<Self, Error> {
+        let key = self.open(current)?;
+        Self::seal(&key, next, rng)
+    }
+
     /// Opens the key.
     ///
     /// # Errors

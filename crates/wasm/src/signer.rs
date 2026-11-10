@@ -49,6 +49,25 @@ pub fn generate_signer(
     run().map_err(JsValue::from)
 }
 
+/// The same signing key sealed under the passphrase `next`, opened with `current` (passphrase or sealing key). The
+/// public key is unchanged; the sealing key is not, so fetch it again with `sealingKey`.
+#[wasm_bindgen(js_name = resealSigner)]
+pub fn reseal_signer(
+    sealed: &str,
+    #[wasm_bindgen(unchecked_param_type = "Secret")] current: JsValue,
+    next: &str,
+) -> Result<String, JsValue> {
+    let run = || -> Result<String> {
+        let mut rng = rng();
+        let sealed = SealedKey::from_json(sealed)?;
+        let resealed = with_secret(current, |current| {
+            Ok(sealed.reseal(current, &ome_signer::Secret::Passphrase(next), &mut rng)?)
+        })?;
+        Ok(resealed.to_json()?)
+    };
+    run().map_err(JsValue::from)
+}
+
 /// The public key of a sealed signer, readable without the secret.
 #[wasm_bindgen(js_name = sealedPublicKey, unchecked_return_type = "Point")]
 pub fn sealed_public_key(sealed: &str) -> Result<JsValue, JsValue> {

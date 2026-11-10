@@ -145,6 +145,7 @@ pub fn decode_join_request(request: &str) -> Result<JsValue, JsValue> {
         let member = ome_wire::messages::lobby::JoinRequest::decode(request)?.member;
         Ok(ome_api::daemon::Joiner {
             name: member.name,
+            account: member.account.into(),
             signer_key: ome_api::Point::from(&member.signer_key),
             keeper: ome_api::keeper::KeeperContact {
                 identity: member.keeper.identity.0.into(),
