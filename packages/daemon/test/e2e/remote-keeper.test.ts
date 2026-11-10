@@ -128,7 +128,7 @@ describe.skipIf(!available)("a member's keeper on their own server", () => {
     await bob.client.call("tokens.add", { vault, token: asset });
     const balance = async () => {
       const [entry] = await bob.client.call("tokens.list", { vault });
-      return entry?.balance ? BigInt(entry.balance) : undefined;
+      return entry?.private.state === "known" ? BigInt(entry.private.amount) : undefined;
     };
     expect(await until(balance, "Bob's balance")).toBe(1000n * 10n ** 18n);
 

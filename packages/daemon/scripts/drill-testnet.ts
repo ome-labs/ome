@@ -80,7 +80,9 @@ try {
       await until(
         async () => {
           const [entry] = await m.client.call("tokens.list", { vault });
-          return entry?.balance === "1000" ? true : undefined;
+          return entry?.private.state === "known" && entry.private.amount === "1000"
+            ? true
+            : undefined;
         },
         `${m.name}'s balance`,
         STEP_MS,
@@ -160,7 +162,9 @@ try {
     await until(
       async () => {
         const [entry] = await bob.client.call("tokens.list", { vault });
-        return entry?.balance === "990" ? true : undefined;
+        return entry?.private.state === "known" && entry.private.amount === "990"
+          ? true
+          : undefined;
       },
       "Bob's balance after the rotation",
       STEP_MS,

@@ -7,7 +7,7 @@ import type { SimulationFacts, VaultNote } from "@ome-labs/wallet";
 
 import type { Context } from "../context.ts";
 import { apiType, apiValue } from "../contracts/abi.ts";
-import { balances } from "../vaults/tokens.ts";
+import { balances, known } from "../vaults/tokens.ts";
 
 const lower = (text: string) => text.toLowerCase() as Hex32;
 
@@ -44,10 +44,12 @@ export async function effectsOf(
   for (const note of facts.created) apply(note, 1n);
 
   const changed = tokens.filter((t) => (deltas.get(t.address) ?? 0n) !== 0n);
-  const before = changed.length > 0 ? await balances(context, vault, changed) : [];
+  const before =
+    changed.length > 0 ? await balances(context, vault, changed, { public: false }) : [];
   const changes: BalanceChange[] = [];
   for (const read of before) {
-    if (read.balance === null) {
+    const held = known(read.private);
+    if (held === null) {
       // Without the balance before, the change can't be shown as before and after.
       complete = false;
       continue;
@@ -55,8 +57,8 @@ export async function effectsOf(
     const delta = deltas.get(read.token.address) ?? 0n;
     changes.push({
       token: read.token,
-      before: read.balance,
-      after: (BigInt(read.balance) + delta).toString(),
+      before: held,
+      after: (BigInt(held) + delta).toString(),
       visibility: "private",
     });
   }

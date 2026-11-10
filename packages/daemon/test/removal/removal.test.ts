@@ -76,7 +76,7 @@ describe.skipIf(!available).each(SHAPES)(
 
     const balance = async (m: Member) => {
       const [entry] = await m.client.call("tokens.list", { vault }).catch(() => [undefined]);
-      return entry?.balance ? BigInt(entry.balance) : undefined;
+      return entry?.private.state === "known" ? BigInt(entry.private.amount) : undefined;
     };
 
     beforeAll(async () => {

@@ -11,7 +11,13 @@ import { DaemonError } from "../errors.ts";
 import { reviewError, simulationError } from "./failures.ts";
 
 const TOKEN = `0x${"0c".repeat(32)}` as Hex32;
-const OMET: TokenInfo = { address: TOKEN, name: "Ome Test", symbol: "OMET", decimals: 18 };
+const OMET: TokenInfo = {
+  address: TOKEN,
+  name: "Ome Test",
+  symbol: "OMET",
+  decimals: 18,
+  standard: true,
+};
 
 const failedIn = (message: string, functionName = "transfer") =>
   new SimulationError(message, [

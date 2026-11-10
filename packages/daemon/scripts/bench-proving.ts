@@ -103,7 +103,7 @@ try {
   await bob.client.call("tokens.add", { vault, token });
   await until(async () => {
     const [entry] = await bob.client.call("tokens.list", { vault });
-    return entry?.balance ? true : undefined;
+    return entry?.private.state === "known" ? true : undefined;
   }, "Bob's balance");
 
   const bobAccount = (await bob.client.call("status", {})).profile?.account as Hex32;
