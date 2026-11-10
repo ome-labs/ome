@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::ProposalView;
+use super::{ProposalCounts, ProposalView};
 use crate::{Amount, Hex32, Hex64, Point};
 
 /// One of the member's vaults.
@@ -28,6 +28,8 @@ pub struct VaultSummary {
     pub my_index: u32,
     /// Unix seconds it was founded.
     pub founded_at: u64,
+    /// Its open proposals at a glance; refreshed in the background.
+    pub counts: ProposalCounts,
 }
 
 /// The vault contract's deployment.
@@ -214,17 +216,8 @@ pub struct TokenInfo {
     pub symbol: String,
     /// Decimals.
     pub decimals: u8,
-}
-
-/// The vault's private balance of a token.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct TokenBalance {
-    /// Token.
-    pub token: TokenInfo,
-    /// Balance, if it could be read.
-    pub balance: Option<Amount>,
-    /// Why it could not.
-    pub error: Option<String>,
+    /// Aztec's standard `Token` contract; `false` for a token with its own code.
+    pub standard: bool,
 }
 
 /// Something that happened to a vault.

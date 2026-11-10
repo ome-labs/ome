@@ -7,6 +7,7 @@ mod fees;
 mod founding;
 mod membership;
 mod proposals;
+mod receiving;
 mod review;
 mod status;
 mod vaults;
@@ -33,6 +34,11 @@ pub use proposals::{
     ProposalStatus, ProposalView, ProposeParams, Proposer, Recipient, RejectParams, Review,
     ReviewChecks, Signs, Simulation, Vote,
 };
+pub use receiving::{
+    ActivityKind, ActivityPage, ActivityParams, AuditPage, BalanceState, CounterpartyPage,
+    PageParams, PaymentRequest, PaymentRequestParams, ProposalCounts, ProposalFilter,
+    ProposalListParams, ProposalPage, ReceivingStatus, TokenBalance,
+};
 pub use review::{
     BalanceChange, CallResult, Effects, GovernanceChange, NoteCounts, PolicyWarning, ReviewError,
     ReviewFailure, SimulationError, SimulationFailure, Visibility,
@@ -46,8 +52,8 @@ pub use status::{
 use ts_rs::TS;
 pub use vaults::{
     ActivityEntry, AuditView, CommitteeMember, CommitteeView, ConfigView, ContractInfo,
-    Counterparty, FoundingInfo, MemberReachability, MemberRef, NamedKey, TokenBalance, TokenInfo,
-    VaultDetails, VaultSummary,
+    Counterparty, FoundingInfo, MemberReachability, MemberRef, NamedKey, TokenInfo, VaultDetails,
+    VaultSummary,
 };
 
 use crate::{
@@ -55,15 +61,6 @@ use crate::{
     jsonrpc::methods,
     keeper::{DeviceOffer, DeviceParams, DeviceReviewSent, InviteParams, LobbyParams, VaultParams},
 };
-
-/// Params of `vault.audit`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct VaultAuditParams {
-    /// Vault.
-    pub vault: Hex32,
-    /// Most recent entries, 1 to 500.
-    pub limit: u32,
-}
 
 /// Params of `vault.alias`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -193,11 +190,15 @@ methods! {
     /// Members' reachability.
     VaultPeers = "vault.peers" (VaultParams) -> Vec<MemberReachability>;
     /// The ECDH audit log.
-    VaultAudit = "vault.audit" (VaultAuditParams) -> Vec<AuditView>;
-    /// Proposals and received transfers, newest first.
-    VaultActivity = "vault.activity" (VaultParams) -> Vec<ActivityEntry>;
+    VaultAudit = "vault.audit" (PageParams) -> AuditPage;
+    /// Proposals and received transfers, newest first, a page at a time.
+    VaultActivity = "vault.activity" (ActivityParams) -> ActivityPage;
     /// Who has paid the vault, and whether a member removed since could still notice their payments.
-    VaultCounterparties = "vault.counterparties" (VaultParams) -> Vec<Counterparty>;
+    VaultCounterparties = "vault.counterparties" (PageParams) -> CounterpartyPage;
+    /// What payments the vault finds, and when it last received one.
+    VaultReceiving = "vault.receiving" (VaultParams) -> ReceivingStatus;
+    /// A payment request: an `ome-pay:` link for a payer.
+    VaultRequest = "vault.request" (PaymentRequestParams) -> PaymentRequest;
     /// Sets a vault's alias.
     VaultAlias = "vault.alias" (AliasParams) -> Vec<VaultSummary>;
     /// Retires the viewing share the keeper kept for a vault whose newer committee it could not verify: after a
@@ -213,8 +214,8 @@ methods! {
     TokensRemove = "tokens.remove" (TokenRefParams) -> Vec<TokenInfo>;
     /// Deploys a test token and mints to the vault (local network only).
     TokensDeployTest = "tokens.deployTest" (VaultParams) -> TokenInfo;
-    /// The vault's proposals.
-    ProposalsList = "proposals.list" (VaultParams) -> Vec<ProposalView>;
+    /// The vault's proposals, newest first, a page at a time.
+    ProposalsList = "proposals.list" (ProposalListParams) -> ProposalPage;
     /// One proposal.
     ProposalsGet = "proposals.get" (ProposalRef) -> ProposalView;
     /// Simulates a proposal before making it.

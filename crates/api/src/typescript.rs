@@ -75,7 +75,10 @@ fn types(cfg: &Config) -> Vec<Declared> {
         d::FunctionParam, d::Joiner, d::MembershipParams, d::CommitteeShape, d::MembershipPlan,
         d::RotationRef, d::RotationPlanText, d::RotationStepId, d::RotationStep, d::RotationState, d::DaemonEvent,
         d::EventSeq, d::EventEnvelope, d::SubscribeParams, d::Subscription,
-        d::VaultAuditParams, d::AliasParams, d::TokenParams, d::ContractParams,
+        d::AliasParams, d::BalanceState, d::ReceivingStatus, d::PaymentRequestParams,
+        d::PaymentRequest, d::ProposalFilter, d::ProposalListParams, d::ActivityKind, d::ActivityParams,
+        d::PageParams, d::ProposalPage, d::ActivityPage, d::AuditPage, d::CounterpartyPage,
+        d::ProposalCounts, d::TokenParams, d::ContractParams,
         d::DeviceView, d::EnrollParams, d::SwapSignerParams, d::TokenDeployment, d::Counterparty, d::RemoteKeeper, d::RemoteKeeperParams,
         d::KeeperConnectParams, d::AztecAlias, d::TokenRefParams,
     ]

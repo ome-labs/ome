@@ -2242,6 +2242,10 @@ export type VaultSummary = {
    * Unix seconds it was founded.
    */
   foundedAt: number;
+  /**
+   * Its open proposals at a glance; refreshed in the background.
+   */
+  counts: ProposalCounts;
 };
 
 /**
@@ -2556,10 +2560,14 @@ export type TokenInfo = {
    * Decimals.
    */
   decimals: number;
+  /**
+   * Aztec's standard `Token` contract; `false` for a token with its own code.
+   */
+  standard: boolean;
 };
 
 /**
- * The vault's private balance of a token.
+ * The vault's balance of a token, private (its notes) and public (the token's storage).
  */
 export type TokenBalance = {
   /**
@@ -2567,13 +2575,13 @@ export type TokenBalance = {
    */
   token: TokenInfo;
   /**
-   * Balance, if it could be read.
+   * Private balance: needs the keepers to read the vault's notes.
    */
-  balance: Amount | null;
+  private: BalanceState;
   /**
-   * Why it could not.
+   * Public balance: needs no viewing key, so it shows even when the keepers can't answer.
    */
-  error: string | null;
+  public: BalanceState;
 };
 
 /**
@@ -4618,20 +4626,6 @@ export type Subscription = {
 };
 
 /**
- * Params of `vault.audit`.
- */
-export type VaultAuditParams = {
-  /**
-   * Vault.
-   */
-  vault: Hex32;
-  /**
-   * Most recent entries, 1 to 500.
-   */
-  limit: number;
-};
-
-/**
  * Params of `vault.alias`.
  */
 export type AliasParams = {
@@ -4643,6 +4637,256 @@ export type AliasParams = {
    * Lowercase letters, digits, `-` and `_`, at most 32.
    */
   alias: string;
+};
+
+/**
+ * A balance as this member could read it.
+ */
+export type BalanceState =
+  | {
+      state: "known";
+      /**
+       * In base units.
+       */
+      amount: Amount;
+    }
+  | {
+      state: "unreadable";
+      /**
+       * Keepers that answered with valid partials.
+       */
+      answered: number;
+      /**
+       * The vault's viewing threshold.
+       */
+      needed: number;
+    }
+  | {
+      state: "failed";
+      /**
+       * Why.
+       */
+      message: string;
+    };
+
+/**
+ * What the Receive page can promise.
+ */
+export type ReceivingStatus = {
+  /**
+   * Payments arriving with a non-interactive handshake (any Aztec wallet's default) are found.
+   */
+  handshakes: boolean;
+  /**
+   * Senders registered from `aztec-wallet`'s accounts, found even without a handshake.
+   */
+  senders: number;
+  /**
+   * The latest transfer received in a tracked token (unix seconds).
+   */
+  lastReceivedAt: number | null;
+};
+
+/**
+ * Params of `vault.request`.
+ */
+export type PaymentRequestParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * The token asked for.
+   */
+  token?: Hex32;
+  /**
+   * The amount asked for, in base units.
+   */
+  amount?: Amount;
+  /**
+   * What it is for.
+   */
+  memo?: string;
+};
+
+/**
+ * A payment request to hand a payer: `ome-pay:` link (`architecture/wire.md`).
+ */
+export type PaymentRequest = {
+  /**
+   * The `ome-pay:` link.
+   */
+  uri: string;
+  /**
+   * The vault.
+   */
+  vault: Hex32;
+  /**
+   * The network: `<L1 chain id>:<rollup version>`.
+   */
+  network: string;
+  /**
+   * The token asked for, when the vault tracks it.
+   */
+  token: TokenInfo | null;
+  /**
+   * The amount, in base units.
+   */
+  amount: Amount | null;
+  /**
+   * What it is for.
+   */
+  memo: string | null;
+};
+
+/**
+ * Which proposals `proposals.list` returns.
+ */
+export type ProposalFilter = "all" | "open" | "ready" | "done" | "needsMe";
+
+/**
+ * Params of `proposals.list`.
+ */
+export type ProposalListParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * Which proposals; all when absent.
+   */
+  filter?: ProposalFilter;
+  /**
+   * At most this many, 1 to 500 (50 when absent).
+   */
+  limit?: number;
+  /**
+   * The previous page's `next`: items older than it.
+   */
+  before?: string;
+};
+
+/**
+ * What `vault.activity` lists.
+ */
+export type ActivityKind = "proposal" | "received";
+
+/**
+ * Params of `vault.activity`.
+ */
+export type ActivityParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * Which kinds; every kind when absent.
+   */
+  kinds?: Array<ActivityKind>;
+  /**
+   * Only entries about this token.
+   */
+  token?: Hex32;
+  /**
+   * At most this many, 1 to 500 (50 when absent).
+   */
+  limit?: number;
+  /**
+   * The previous page's `next`.
+   */
+  before?: string;
+};
+
+/**
+ * Params of `vault.audit` and `vault.counterparties`.
+ */
+export type PageParams = {
+  /**
+   * Vault.
+   */
+  vault: Hex32;
+  /**
+   * At most this many, 1 to 500 (50 when absent).
+   */
+  limit?: number;
+  /**
+   * The previous page's `next`.
+   */
+  before?: string;
+};
+
+/**
+ * A page of proposals, newest first. `next` is the cursor for older ones, `None` on the last page.
+ */
+export type ProposalPage = {
+  /**
+   * Proposals.
+   */
+  items: Array<ProposalView>;
+  /**
+   * Cursor for the next page.
+   */
+  next: string | null;
+};
+
+/**
+ * A page of activity, newest first.
+ */
+export type ActivityPage = {
+  /**
+   * Entries.
+   */
+  items: Array<ActivityEntry>;
+  /**
+   * Cursor for the next page.
+   */
+  next: string | null;
+};
+
+/**
+ * A page of the ECDH audit log, newest first.
+ */
+export type AuditPage = {
+  /**
+   * Entries.
+   */
+  items: Array<AuditView>;
+  /**
+   * Cursor for the next page.
+   */
+  next: string | null;
+};
+
+/**
+ * A page of counterparties, most recent payer first.
+ */
+export type CounterpartyPage = {
+  /**
+   * Counterparties.
+   */
+  items: Array<Counterparty>;
+  /**
+   * Cursor for the next page.
+   */
+  next: string | null;
+};
+
+/**
+ * A vault's open proposals at a glance, for a badge.
+ */
+export type ProposalCounts = {
+  /**
+   * Collecting, ready or blocked.
+   */
+  open: number;
+  /**
+   * Ready to execute.
+   */
+  ready: number;
+  /**
+   * Open, and this member hasn't voted.
+   */
+  needsMe: number;
 };
 
 /**
@@ -4949,9 +5193,11 @@ export interface DaemonMethods {
   "vault.list": { params: Empty; result: Array<VaultSummary> };
   "vault.details": { params: VaultParams; result: VaultDetails };
   "vault.peers": { params: VaultParams; result: Array<MemberReachability> };
-  "vault.audit": { params: VaultAuditParams; result: Array<AuditView> };
-  "vault.activity": { params: VaultParams; result: Array<ActivityEntry> };
-  "vault.counterparties": { params: VaultParams; result: Array<Counterparty> };
+  "vault.audit": { params: PageParams; result: AuditPage };
+  "vault.activity": { params: ActivityParams; result: ActivityPage };
+  "vault.counterparties": { params: PageParams; result: CounterpartyPage };
+  "vault.receiving": { params: VaultParams; result: ReceivingStatus };
+  "vault.request": { params: PaymentRequestParams; result: PaymentRequest };
   "vault.alias": { params: AliasParams; result: Array<VaultSummary> };
   "vault.retire": { params: VaultParams; result: Array<VaultSummary> };
   "vault.use": { params: VaultParams; result: Array<VaultSummary> };
@@ -4959,7 +5205,7 @@ export interface DaemonMethods {
   "tokens.add": { params: TokenParams; result: TokenInfo };
   "tokens.remove": { params: TokenRefParams; result: Array<TokenInfo> };
   "tokens.deployTest": { params: VaultParams; result: TokenInfo };
-  "proposals.list": { params: VaultParams; result: Array<ProposalView> };
+  "proposals.list": { params: ProposalListParams; result: ProposalPage };
   "proposals.get": { params: ProposalRef; result: ProposalView };
   "proposals.preview": { params: ProposeParams; result: ProposalPreview };
   "proposals.create": { params: ProposeParams; result: ProposalView };

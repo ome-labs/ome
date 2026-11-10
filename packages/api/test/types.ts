@@ -20,7 +20,10 @@ check<Equal<KeeperParams<"audit.list">, { vault: string; limit?: number }>>();
 const approve: DaemonParams<"proposals.approve"> = { vault: "0x00", id: "0x00" };
 
 // Amounts are decimal strings and times are numbers.
-const balance: DaemonResult<"tokens.list">[number]["balance"] = "25000000000000000000";
+const balance: DaemonResult<"tokens.list">[number]["private"] = {
+  state: "known",
+  amount: "25000000000000000000",
+};
 const seen: KeeperResult<"peers.status">[number]["lastSeen"] = 1_800_000_000;
 
 // Events are tagged unions.
