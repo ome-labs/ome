@@ -86,6 +86,12 @@ const encodePlan = (plan: PlanFile): string =>
 
 function decodePlan(text: string): PlanFile {
   const body = text.trim();
+  const newer = /^ome-rotation-v([0-9]+):/u.exec(body)?.[1];
+  if (newer !== undefined && newer !== "0")
+    throw new DaemonError(
+      "invalid",
+      `this rotation plan needs a newer release of Ome (format v${newer})`,
+    );
   require(body.startsWith(PLAN_PREFIX), "not an Ome rotation plan");
   try {
     const plan = JSON.parse(

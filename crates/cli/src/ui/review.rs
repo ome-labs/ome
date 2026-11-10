@@ -214,7 +214,7 @@ fn effect(review: &Review, full: &dyn Fn(&ome_api::Hex32) -> String) -> Vec<Stri
             "Cancel proposal {}: its nonce is spent, so it can never execute",
             format::id(cancels)
         )),
-        Intent::Calls { .. } => lines.push(capitalize(&describe::intent(p))),
+        Intent::Calls { .. } | Intent::Unknown => lines.push(capitalize(&describe::intent(p))),
         Intent::App { origin, name, .. } => {
             lines.push(capitalize(&describe::intent(p)));
             lines.push(format!(

@@ -17,7 +17,7 @@ describe("ome-pay: links", () => {
       memo: "March rent & fees",
     });
     expect(uri).toBe(
-      `ome-pay:${VAULT}?network=aztec%3A31337%3A1&token=${TOKEN}&amount=2500000000000000000&memo=March+rent+%26+fees`,
+      `ome-pay:${VAULT}?v=0&network=aztec%3A31337%3A1&token=${TOKEN}&amount=2500000000000000000&memo=March+rent+%26+fees`,
     );
     expect(parseRequest(uri)).toEqual({
       vault: VAULT,
@@ -44,5 +44,14 @@ describe("ome-pay: links", () => {
     expect(() => parseRequest(`ome-pay:0x12?network=aztec:1:1`)).toThrow(/ome-pay/u);
     expect(() => parseRequest(`ome-pay:${VAULT}?network=aztec:1:1&amount=-5`)).toThrow(/ome-pay/u);
     expect(() => parseRequest(`pay:${VAULT}?network=aztec:1:1`)).toThrow(/ome-pay/u);
+  });
+
+  it("reads a link without a format as format 0, and asks for an update for a newer one", () => {
+    expect(parseRequest(`ome-pay:${VAULT}?network=aztec:1:1`)).toMatchObject({
+      network: "aztec:1:1",
+    });
+    expect(() => parseRequest(`ome-pay:${VAULT}?v=2&network=aztec:1:1`)).toThrow(
+      /needs a newer release of Ome \(format v2\)/u,
+    );
   });
 });

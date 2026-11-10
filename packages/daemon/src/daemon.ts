@@ -35,7 +35,7 @@ import { DaemonError, notReady, require } from "./errors.ts";
 import { feesStatus } from "./fees.ts";
 import { FoundingService } from "./founding/founding.ts";
 import { KeeperSupervisor, keeperBinary } from "./keeper/supervisor.ts";
-import { LIMITS } from "./limits.ts";
+import { CAPABILITIES, LIMITS } from "./limits.ts";
 import { MembershipService } from "./membership/service.ts";
 import { networkOf, unsupported } from "./node/networks.ts";
 import { NodeService } from "./node/node.ts";
@@ -302,6 +302,7 @@ export class Daemon implements Context {
       startedAt: this.#startedAt,
       node: this.node.url,
       limits: LIMITS,
+      capabilities: [...CAPABILITIES],
     };
   }
 

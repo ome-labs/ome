@@ -951,7 +951,7 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       );
       expect(summary?.counts.needsMe).toBe(needs.items.length);
       const request = await alice.client.call("vault.request", { vault, token, amount: "25" });
-      expect(request.uri).toMatch(/^ome-pay:0x[0-9a-f]{64}\?network=aztec/u);
+      expect(request.uri).toMatch(/^ome-pay:0x[0-9a-f]{64}\?v=0&network=aztec/u);
       expect((await alice.client.call("vault.receiving", { vault })).handshakes).toBe(true);
     });
 

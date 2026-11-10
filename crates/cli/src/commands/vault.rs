@@ -385,7 +385,7 @@ async fn join(ctx: &Ctx, invite: Option<String>) -> Result<()> {
     let client = ctx.client().await?;
     ctx.intro("Join a vault");
     let invite = prompt::text(ctx, invite, "<invite>", "The invite", None, |v| {
-        if v.trim().starts_with("ome-invite-v0:") {
+        if v.trim().starts_with("ome-invite-v") {
             Ok(())
         } else {
             Err("An invite starts with ome-invite-v0:".into())

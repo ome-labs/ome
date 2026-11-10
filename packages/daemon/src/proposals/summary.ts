@@ -44,5 +44,7 @@ export function summaryLine(view: ProposalView): string {
       return "Void every approval collected so far";
     case "app":
       return `A transaction from ${intent.name ?? intent.origin}`;
+    case "unknown":
+      return "A proposal from a newer release of Ome";
   }
 }

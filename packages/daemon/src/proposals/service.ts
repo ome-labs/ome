@@ -599,6 +599,8 @@ function actionOf(proposal: ProposalView): string {
       return "void every approval collected so far";
     case "app":
       return `${proposal.calls.length} call(s) from ${intent.name ?? intent.origin}`;
+    case "unknown":
+      return `${proposal.calls.length} call(s), proposed with a newer release of Ome`;
     case "calls":
       return proposal.authwits.length > 0
         ? `${proposal.calls.length} call(s), granting ${proposal.authwits.length} authwit(s)`

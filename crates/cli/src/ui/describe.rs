@@ -65,6 +65,10 @@ pub(crate) fn intent_with(p: &ProposalView, labels: Labels<'_>) -> String {
                     .join(", ")
             ),
         },
+        Intent::Unknown => match p.calls.len() {
+            1 => "1 call, from a newer release of Ome".to_owned(),
+            n => format!("{n} calls, from a newer release of Ome"),
+        },
         Intent::App { origin, name, .. } => format!(
             "{} from {}",
             match p.calls.len() {
@@ -134,6 +138,7 @@ pub(crate) fn memo(p: &ProposalView) -> Option<&str> {
         | Intent::SetThreshold { memo, .. }
         | Intent::InvalidatePending { memo }
         | Intent::App { memo, .. } => memo.as_deref(),
+        Intent::Unknown => None,
     }
 }
 
@@ -165,6 +170,7 @@ pub(crate) fn status(p: &ProposalView) -> (String, Tone) {
         ProposalStatus::Cancelled => ("cancelled".into(), Tone::Dim),
         ProposalStatus::Expired => ("expired".into(), Tone::Dim),
         ProposalStatus::Stale => ("stale".into(), Tone::Dim),
+        ProposalStatus::Unknown => ("unknown (update ome)".into(), Tone::Dim),
     }
 }
 
@@ -487,6 +493,7 @@ pub(crate) fn simulation_failure(error: &SimulationError) -> String {
             None => error.message.clone(),
         },
         SimulationFailure::Unavailable => format!("it can't be simulated now: {}", error.message),
+        SimulationFailure::Unknown => error.message.clone(),
     }
 }
 

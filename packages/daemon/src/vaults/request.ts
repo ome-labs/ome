@@ -7,6 +7,8 @@ import type { Context } from "../context.ts";
 import { DaemonError, require } from "../errors.ts";
 
 const SCHEME = "ome-pay:";
+/** The link format this release writes; a link without `v` is format 0. */
+const FORMAT = "0";
 const HEX32 = /^0x[0-9a-f]{64}$/u;
 const AMOUNT = /^[1-9][0-9]*$/u;
 
@@ -36,7 +38,7 @@ export function paymentRequest(context: Context, params: PaymentRequestParams): 
 
 /** The `ome-pay:` link of a request. */
 export function formatRequest(request: Omit<PaymentRequest, "uri">): string {
-  const query = new URLSearchParams({ network: request.network });
+  const query = new URLSearchParams({ v: FORMAT, network: request.network });
   if (request.token) query.set("token", request.token.address);
   if (request.amount) query.set("amount", request.amount);
   if (request.memo) query.set("memo", request.memo);
@@ -54,6 +56,12 @@ export function parseRequest(uri: string): {
   if (!uri.startsWith(SCHEME)) throw notALink();
   const [vault, query = ""] = uri.slice(SCHEME.length).split("?", 2);
   const params = new URLSearchParams(query);
+  const format = params.get("v") ?? FORMAT;
+  if (format !== FORMAT)
+    throw new DaemonError(
+      "invalid",
+      `this payment link needs a newer release of Ome (format v${format})`,
+    );
   const network = params.get("network");
   const token = params.get("token");
   const amount = params.get("amount");

@@ -3,6 +3,21 @@ import type { Limits } from "@ome-labs/api";
 
 import { MAX_ARTIFACT_BYTES } from "./contracts/artifacts.ts";
 
+/**
+ * What this daemon can do, as `daemon.info` reports it: clients check for a feature instead of comparing versions. A
+ * feature is added here when it lands, never removed within an API version.
+ */
+export const CAPABILITIES = [
+  "proposals",
+  "authwits",
+  "apps",
+  "contracts",
+  "devices",
+  "membership",
+  "names",
+  "profile-schemas",
+] as const;
+
 /** An Aztec entrypoint runs 5 calls (`APP_MAX_CALLS`); the fee payer's always takes one. */
 export const LIMITS: Limits = {
   maxCalls: 4,

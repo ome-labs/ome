@@ -21,10 +21,25 @@ export function summaryOf(intent: Intent): string {
   return summary;
 }
 
+/** The intent kinds this release reads; a member on a newer release may write others. */
+const KINDS: ReadonlySet<string> = new Set([
+  "transfer",
+  "calls",
+  "cancel",
+  "setThreshold",
+  "invalidatePending",
+  "app",
+]);
+
+/**
+ * The intent a proposal's summary carries. A kind a newer release wrote is `unknown` (the review shows the proposal by
+ * its decoded calls, which are what members sign); text that isn't an Ome intent is shown as a memo.
+ */
 export function intentOf(summary: string): Intent {
   try {
-    const intent = JSON.parse(summary) as Intent;
-    if (intent && typeof intent === "object" && "kind" in intent) return intent;
+    const intent = JSON.parse(summary) as { kind?: unknown };
+    if (intent && typeof intent === "object" && typeof intent.kind === "string")
+      return KINDS.has(intent.kind) ? (intent as Intent) : { kind: "unknown" };
   } catch {
     // Not an Ome intent: show the summary as a memo.
   }

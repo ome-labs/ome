@@ -85,7 +85,7 @@ async fn change(ctx: &Ctx, args: ChangeArgs) -> Result<()> {
                     .placeholder("Enter when there is no one (more) to add")
                     .required(false)
                     .validate(|v: &String| {
-                        if v.is_empty() || v.starts_with("ome-join-v0:") {
+                        if v.is_empty() || v.starts_with("ome-join-v") {
                             Ok(())
                         } else {
                             Err("A join request starts with ome-join-v0:")
@@ -259,7 +259,7 @@ fn share_plan(ctx: &Ctx, share: &str) {
 
 async fn join(ctx: &Ctx, plan: Option<String>) -> Result<()> {
     let plan = prompt::text(ctx, plan, "<plan>", "The plan", None, |v| {
-        if v.trim().starts_with("ome-rotation-v0:") {
+        if v.trim().starts_with("ome-rotation-v") {
             Ok(())
         } else {
             Err("A plan starts with ome-rotation-v0:".into())
