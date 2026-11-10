@@ -4,9 +4,9 @@
 use ome_api::{
     Hex32,
     daemon::{
-        ApproveParams, DaemonEvent, ExecutionPhase, Intent, ProposalRef, ProposalStatus,
-        ProposalView, ProposalsApprove, ProposalsExecute, ProposalsList, ProposalsReject,
-        ProposalsReview, RejectParams, Review, TokensList, VaultSummary,
+        ApproveParams, DaemonEvent, EventEnvelope, ExecutionPhase, Intent, ProposalRef,
+        ProposalStatus, ProposalView, ProposalsApprove, ProposalsExecute, ProposalsList,
+        ProposalsReject, ProposalsReview, RejectParams, Review, TokensList, VaultSummary,
     },
     keeper::VaultParams,
 };
@@ -435,7 +435,9 @@ pub(crate) async fn execute(ctx: &Ctx, args: ExecuteArgs) -> Result<()> {
         tokio::select! {
             result = &mut call => break result.map_err(|e| Error::failed(e.to_string()))?,
             event = events.next() => {
-                let Some(Ok(DaemonEvent::Execution { execution })) = event else { continue };
+                let Some(Ok(EventEnvelope { event: DaemonEvent::Execution { execution }, .. })) = event else {
+                    continue;
+                };
                 if execution.proposal != p.id || execution.phase == phase {
                     continue;
                 }

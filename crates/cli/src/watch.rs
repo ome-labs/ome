@@ -144,8 +144,7 @@ pub(crate) async fn run(ctx: &mut Ctx) -> Result<()> {
                     }
                 }
             }
-            event = events.next() => match event {
-                Some(Ok(DaemonEvent::VaultActivity { vault: v })) => v == vault.address,
+            event = events.next() => match event.map(|e| e.map(|e| e.event)) {
                 Some(Ok(DaemonEvent::Signer { signer })) => { view.status.signer = signer; false }
                 Some(Ok(DaemonEvent::Node { node })) => { view.status.node = node; false }
                 Some(Ok(DaemonEvent::Keeper { keeper })) => { view.status.keeper = keeper; false }
@@ -157,6 +156,8 @@ pub(crate) async fn run(ctx: &mut Ctx) -> Result<()> {
                     view.message = format!("{counterparties} counterparties should handshake again (ome counterparties)");
                     false
                 }
+                // Anything else about this vault changes what the view shows.
+                Some(Ok(event)) if event.vault() == Some(&vault.address) => true,
                 Some(_) => false,
                 None => break Err(Error::new(crate::error::Exit::Daemon, "The daemon closed the connection.")),
             },

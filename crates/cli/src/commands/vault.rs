@@ -1076,12 +1076,12 @@ pub(crate) async fn activity(ctx: &Ctx, args: ActivityArgs) -> Result<()> {
     }
     loop {
         let refresh = tokio::select! {
-            event = events.next() => match event {
-                Some(Ok(DaemonEvent::VaultActivity { vault: v })) => v == vault.address,
+            event = events.next() => match event.map(|e| e.map(|e| e.event)) {
                 Some(Ok(DaemonEvent::HandshakeAdvised { vault: v, counterparties })) if v == vault.address => {
                     ctx.warn(&format!("{counterparties} counterparties should handshake again: `{}`", ctx.ome("counterparties")));
                     false
                 }
+                Some(Ok(event)) if event.vault() == Some(&vault.address) => true,
                 Some(_) => false,
                 None => return Err(Error::new(crate::error::Exit::Daemon, "The daemon closed the connection.")),
             },

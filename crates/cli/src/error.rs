@@ -2,9 +2,11 @@
 
 use std::fmt;
 
-use ome_api::ErrorKind;
+use ome_api::{ErrorDetails, ErrorKind, Funds, NotReadyReason};
 use ome_client::ClientError;
 use serde_json::json;
+
+use crate::ui::format;
 
 /// What went wrong, which decides the exit code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,11 +44,14 @@ impl Exit {
         }
     }
 
-    /// The exit an API error kind maps to.
+    /// The exit an API error kind maps to: what was asked for is wrong (2), not possible yet (4), or failed (1).
     pub(crate) const fn from_kind(kind: ErrorKind) -> Self {
         match kind {
-            ErrorKind::Invalid | ErrorKind::NotFound => Self::Usage,
-            ErrorKind::NotReady => Self::NotReady,
+            ErrorKind::Invalid
+            | ErrorKind::NotFound
+            | ErrorKind::UnknownContract
+            | ErrorKind::Network => Self::Usage,
+            ErrorKind::NotReady | ErrorKind::Unreadable | ErrorKind::Conflict => Self::NotReady,
             _ => Self::Failed,
         }
     }
@@ -164,10 +169,21 @@ impl From<ClientError> for Error {
             ClientError::Rpc(rpc) => {
                 // A daemon message can carry a stack or a nested error after its first line: that is the cause.
                 let (first, rest) = rpc.message.split_once('\n').unwrap_or((&rpc.message, ""));
-                let mut out = Self::new(Exit::from_kind(kind), sentence(first));
+                // With details, the CLI says it in its own words and keeps the daemon's as the cause.
+                let words = rpc.details().and_then(words);
+                let mut out = Self::new(
+                    Exit::from_kind(kind),
+                    words.clone().unwrap_or_else(|| sentence(first)),
+                );
                 out.kind = Some(kind);
-                if !rest.trim().is_empty() {
-                    out.cause = Some(rest.trim().to_owned());
+                out.hint = rpc.details().and_then(fix);
+                let cause = if words.is_some() {
+                    rpc.message.trim()
+                } else {
+                    rest.trim()
+                };
+                if !cause.is_empty() {
+                    out.cause = Some(cause.to_owned());
                 }
                 out
             }
@@ -184,6 +200,93 @@ impl From<ClientError> for Error {
         out.hint = out.hint.or_else(|| hint_for(kind).map(str::to_owned));
         out
     }
+}
+
+/// What went wrong, from an error's details, in the CLI's words.
+fn words(details: &ErrorDetails) -> Option<String> {
+    Some(match details {
+        ErrorDetails::InsufficientFunds {
+            funds: Funds::Token { token },
+            needed,
+            held,
+        } => format!(
+            "The vault holds {} {sym}; this needs {} {sym}.",
+            format::amount(held.0, token.decimals),
+            format::amount(needed.0, token.decimals),
+            sym = token.symbol
+        ),
+        ErrorDetails::InsufficientFunds {
+            funds: Funds::FeeJuice { payer },
+            ..
+        } => format!(
+            "The fee payer {} can't cover this transaction's fee.",
+            format::short(payer)
+        ),
+        ErrorDetails::Expired { at } => {
+            format!("The proposal expired {}.", format::relative(*at))
+        }
+        ErrorDetails::Stale { made, current } => format!(
+            "The proposal was made under config version {made}; the vault is at {current} now."
+        ),
+        ErrorDetails::Conflict {
+            member,
+            phase,
+            since,
+        } => format!(
+            "{} is already executing it ({}, started {}).",
+            member.name,
+            format!("{phase:?}").to_lowercase(),
+            format::relative(*since)
+        ),
+        ErrorDetails::Full { members } => {
+            format!("The lobby is full: a vault has at most {members} members.")
+        }
+        ErrorDetails::Unreadable { answered, needed } => {
+            format!("Only {answered} of the {needed} keepers needed to read the vault answered.")
+        }
+        ErrorDetails::UnknownContract { address, .. } => {
+            format!("Ome doesn't know the contract {}.", format::short(address))
+        }
+        ErrorDetails::Network { expected, actual } => {
+            format!("That belongs to {expected}; this profile is on {actual}.")
+        }
+        ErrorDetails::NotReady { .. } => return None,
+    })
+}
+
+/// The next thing to do, from an error's details.
+fn fix(details: &ErrorDetails) -> Option<String> {
+    let fix = match details {
+        ErrorDetails::InsufficientFunds {
+            funds: Funds::Token { .. },
+            ..
+        } => "See what the vault holds with `ome balance`.",
+        ErrorDetails::InsufficientFunds { .. } => {
+            "Fund the fee payer, or choose another with `ome config`."
+        }
+        ErrorDetails::Expired { .. } | ErrorDetails::Stale { .. } => "Propose it again.",
+        ErrorDetails::Conflict { .. } => "Wait for it: `ome proposal show` follows it.",
+        ErrorDetails::Unreadable { .. } => {
+            "Ask the other members to start their keepers; `ome vault health` shows who is online."
+        }
+        ErrorDetails::UnknownContract { .. } => "Register the contract with this member first.",
+        ErrorDetails::Network { .. } => {
+            "Use a profile on that network, or create one with `ome init`."
+        }
+        ErrorDetails::NotReady { reason } => match reason {
+            NotReadyReason::Signer => "Unlock the signer with `ome unlock`.",
+            NotReadyReason::Profile => "Set up a profile with `ome init`.",
+            NotReadyReason::Keeper => "Check the keeper with `ome status`.",
+            NotReadyReason::Node => "Check the node with `ome status`.",
+            NotReadyReason::Payload => "Wait for it to arrive from the member who proposed it.",
+            NotReadyReason::Starting
+            | NotReadyReason::Sync
+            | NotReadyReason::Vault
+            | NotReadyReason::Reshare => "Try again in a moment.",
+        },
+        ErrorDetails::Full { .. } => return None,
+    };
+    Some(fix.to_owned())
 }
 
 /// The fix for an API error kind, when there is a general one.
@@ -221,6 +324,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn details_read_in_the_clis_words_with_their_fix() {
+        let error = Error::from(ClientError::Rpc(RpcError::detailed(
+            ErrorDetails::Unreadable {
+                answered: 1,
+                needed: 2,
+            },
+            "only 1 of 2 members answered",
+        )));
+        assert_eq!(
+            error.message,
+            "Only 1 of the 2 keepers needed to read the vault answered."
+        );
+        assert_eq!(error.exit, Exit::NotReady);
+        assert!(
+            error
+                .hint
+                .as_deref()
+                .unwrap_or_default()
+                .contains("vault health")
+        );
+        assert_eq!(error.cause.as_deref(), Some("only 1 of 2 members answered"));
+        assert_eq!(error.to_json()["error"]["code"], "unreadable");
+
+        let error = Error::from(ClientError::Rpc(RpcError::detailed(
+            ErrorDetails::NotReady {
+                reason: NotReadyReason::Signer,
+            },
+            "unlock the signer first",
+        )));
+        assert_eq!(error.message, "Unlock the signer first.");
+        assert!(
+            error
+                .hint
+                .as_deref()
+                .unwrap_or_default()
+                .contains("ome unlock")
+        );
+    }
+
+    #[test]
     fn api_kinds_map_to_exit_codes() {
         let code = |kind| Exit::from_kind(kind).code();
         assert_eq!(code(ErrorKind::Invalid), 2);
@@ -229,6 +372,12 @@ mod tests {
         assert_eq!(code(ErrorKind::Locked), 1);
         assert_eq!(code(ErrorKind::Auth), 1);
         assert_eq!(code(ErrorKind::Alarm), 1);
+        assert_eq!(code(ErrorKind::Unreadable), 4);
+        assert_eq!(code(ErrorKind::Conflict), 4);
+        assert_eq!(code(ErrorKind::UnknownContract), 2);
+        assert_eq!(code(ErrorKind::Network), 2);
+        assert_eq!(code(ErrorKind::InsufficientFunds), 1);
+        assert_eq!(code(ErrorKind::Expired), 1);
         assert_eq!(Exit::Daemon.code(), 3);
         assert_eq!(Exit::Declined.code(), 5);
     }
