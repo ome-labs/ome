@@ -228,7 +228,7 @@ describe.skipIf(!available)("a vault on a local network with real keepers", () =
       await token.methods.transfer(bob.account, 1n).request({ fee: alice.fee }),
       { expiresAt: (await alice.wallet.chainTime()) - 1, summary: "late", proposer: 1 },
     );
-    await expect(approve(alice, tx, [0])).rejects.toMatchObject({ kind: "invalid" });
+    await expect(approve(alice, tx, [0])).rejects.toMatchObject({ kind: "expired" });
   });
 
   it("cancels a proposal by burning its nonce", async () => {
