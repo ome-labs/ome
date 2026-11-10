@@ -337,6 +337,7 @@ impl Keeper {
             signer_key: pair.signer_key,
             name: pair.name,
             paired_at: self.now(),
+            versions: pair.versions,
         };
         let offer = {
             let mut state = self.0.state.lock().await;
@@ -474,7 +475,15 @@ impl Keeper {
         if self.0.mailbox.is_none() {
             return Err(Error::Invalid("reaching a device needs a relay".into()));
         }
-        let (frame, _) = self.sign(scope, epoch, body)?;
+        // The newest version both the vault and the device's app speak; an app too old for the vault is told to update.
+        let version = self.version_for(scope).min(device.versions.max);
+        if !device.versions.contains(version) {
+            return Err(Error::Invalid(format!(
+                "{} runs an app too old for this vault: update the app",
+                device.name
+            )));
+        }
+        let (frame, _) = self.sign_in(version, scope, epoch, body)?;
         let peer = Peer {
             identity: device.identity,
             transport: device.transport,

@@ -342,6 +342,7 @@ pub fn samples() -> Vec<(&'static str, Message)> {
                 name: "Alice's phone".to_owned(),
                 transport: [0x52; 32],
                 signer_key: wire_point(9),
+                versions: ome_wire::version::VersionRange { min: 0, max: 0 },
             }),
         ),
         (

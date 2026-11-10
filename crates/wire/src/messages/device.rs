@@ -20,6 +20,7 @@ use crate::{
         MAX_SUMMARY_BYTES,
     },
     types::{WireField, WirePoint},
+    version::VersionRange,
 };
 
 /// Prefix of a pairing offer's string form.
@@ -136,10 +137,13 @@ pub struct DevicePair {
     pub transport: [u8; 32],
     /// The Grumpkin key the device signs approvals with.
     pub signer_key: WirePoint,
+    /// The protocol versions the device's app reads and writes, so its keeper writes to it in one it reads.
+    pub versions: VersionRange,
 }
 
 impl DevicePair {
     pub(super) fn validate(&self) -> Result<(), Error> {
+        self.versions.validate()?;
         name("name", &self.name)
     }
 }

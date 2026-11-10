@@ -148,4 +148,9 @@ pub(super) const MIGRATIONS: &[&str] = &[
     ALTER TABLE names ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE capabilities ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
     ",
+    // 9: the protocol versions a paired device's app speaks; one paired before it said speaks the first.
+    "
+    ALTER TABLE devices ADD COLUMN min_version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE devices ADD COLUMN max_version INTEGER NOT NULL DEFAULT 0;
+    ",
 ];

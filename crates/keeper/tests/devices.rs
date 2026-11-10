@@ -86,6 +86,7 @@ impl Phone {
                 name: "phone".into(),
                 transport: self.public.0,
                 signer_key,
+                versions: ome_wire::version::SUPPORTED,
             }),
         );
         let sealed = pairing::seal(secret, &frame, &mut ChaCha20Rng::seed_from_u64(1)).unwrap();

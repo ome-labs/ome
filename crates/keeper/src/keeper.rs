@@ -300,9 +300,32 @@ impl Keeper {
         self.0.clock.now()
     }
 
-    /// Signs `body` under `scope` / `epoch` with a fresh message id.
+    /// Signs `body` under `scope` / `epoch` with a fresh message id, in the version `scope`'s members speak.
     pub(crate) fn sign(
         &self,
+        scope: [u8; 32],
+        epoch: u32,
+        body: Message,
+    ) -> Result<(Vec<u8>, [u8; 16])> {
+        self.sign_in(self.version_for(scope), scope, epoch, body)
+    }
+
+    /// The version `scope`'s messages go out in: a vault's, the one all its members speak; anything else (a lobby, a
+    /// ceremony before the vault exists), the first version.
+    pub(crate) fn version_for(&self, scope: [u8; 32]) -> u16 {
+        self.0
+            .versions
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&scope)
+            .copied()
+            .unwrap_or(version::FIRST.max)
+    }
+
+    /// Signs `body` in protocol `version`.
+    pub(crate) fn sign_in(
+        &self,
+        version: u16,
         scope: [u8; 32],
         epoch: u32,
         body: Message,
@@ -314,16 +337,6 @@ impl Keeper {
             id,
             created_at: self.now(),
         };
-        // A vault's messages go out in the version all its members speak; anything else (a lobby, a ceremony before
-        // the vault exists) in the first version.
-        let version = self
-            .0
-            .versions
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(&scope)
-            .copied()
-            .unwrap_or(version::FIRST.max);
         let message = SignedMessage::sign(&self.0.keys.identity, version, header, body)?;
         Ok((encode(&message)?, id))
     }

@@ -305,6 +305,7 @@ impl OmeDevice {
                 name: self.keys.public.name.clone(),
                 transport: self.keys.public.transport,
                 signer_key: self.keys.public.signer_key,
+                versions: ome_wire::version::SUPPORTED,
             }),
         )?;
         let peer = Peer {

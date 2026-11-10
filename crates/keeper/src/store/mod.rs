@@ -12,6 +12,7 @@ use ome_wire::{
     IdentityPublic, Message, decode_body, decode_body_in, encode_body, encode_body_in,
     messages::ceremony::Manifest,
     types::{WirePoint, field, parse_field},
+    version::VersionRange,
 };
 use rusqlite::{Connection, OptionalExtension, functions::FunctionFlags, params};
 use serde::{Serialize, de::DeserializeOwned};
@@ -904,6 +905,8 @@ pub struct DeviceRecord {
     pub name: String,
     /// When it paired (unix seconds).
     pub paired_at: u64,
+    /// The protocol versions its app reads and writes (the first version for a device paired before it said).
+    pub versions: VersionRange,
 }
 
 impl Store {
@@ -919,10 +922,20 @@ impl Store {
         key.extend_from_slice(&device.signer_key.y);
         self.with(|c| {
             c.execute(
-                "INSERT INTO devices (identity, transport, signer_key, name, paired_at) VALUES (?1, ?2, ?3, ?4, ?5)
+                "INSERT INTO devices (identity, transport, signer_key, name, paired_at, min_version, max_version)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                  ON CONFLICT (identity) DO UPDATE SET transport = excluded.transport,
-                 signer_key = excluded.signer_key, name = excluded.name, paired_at = excluded.paired_at",
-                params![device.identity.0, device.transport, key, device.name, ts(device.paired_at)],
+                 signer_key = excluded.signer_key, name = excluded.name, paired_at = excluded.paired_at,
+                 min_version = excluded.min_version, max_version = excluded.max_version",
+                params![
+                    device.identity.0,
+                    device.transport,
+                    key,
+                    device.name,
+                    ts(device.paired_at),
+                    device.versions.min,
+                    device.versions.max
+                ],
             )
             .map(drop)
         })
@@ -933,19 +946,28 @@ impl Store {
     /// # Errors
     /// Storage errors.
     pub fn devices(&self) -> Result<Vec<DeviceRecord>> {
-        type Row = ([u8; 32], [u8; 32], Vec<u8>, String, i64);
+        type Row = ([u8; 32], [u8; 32], Vec<u8>, String, i64, u16, u16);
         let rows: Vec<Row> = self.with(|c| {
             let mut statement = c.prepare(
-                "SELECT identity, transport, signer_key, name, paired_at FROM devices ORDER BY paired_at",
+                "SELECT identity, transport, signer_key, name, paired_at, min_version, max_version
+                 FROM devices ORDER BY paired_at",
             )?;
             statement
                 .query_map([], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                    ))
                 })?
                 .collect()
         })?;
         rows.into_iter()
-            .map(|(identity, transport, key, name, paired_at)| {
+            .map(|(identity, transport, key, name, paired_at, min, max)| {
                 let (x, y) = key
                     .split_at_checked(32)
                     .filter(|(_, y)| y.len() == 32)
@@ -959,6 +981,7 @@ impl Store {
                     },
                     name,
                     paired_at: u64::try_from(paired_at).unwrap_or(0),
+                    versions: VersionRange { min, max },
                 })
             })
             .collect()
