@@ -23,10 +23,12 @@ import { KeeperClient, OmeWallet } from "@ome-labs/wallet";
 
 import { accountAddresses, addressNames, walletDir } from "./aztec/aliases.ts";
 import type { Context } from "./context.ts";
+import { ContractRegistry } from "./contracts/registry.ts";
 import { DeviceService } from "./devices/service.ts";
 import { DaemonError, notReady, require } from "./errors.ts";
 import { FoundingService } from "./founding/founding.ts";
 import { KeeperSupervisor, keeperBinary } from "./keeper/supervisor.ts";
+import { LIMITS } from "./limits.ts";
 import { MembershipService } from "./membership/service.ts";
 import { networkOf, unsupported } from "./node/networks.ts";
 import { NodeService } from "./node/node.ts";
@@ -75,6 +77,7 @@ export class Daemon implements Context {
   readonly signer: SignerService;
   readonly keeper: KeeperSupervisor;
   readonly vaults: VaultService;
+  readonly contracts: ContractRegistry;
   readonly founding: FoundingService;
   readonly proposals: ProposalService;
   readonly membership: MembershipService;
@@ -106,6 +109,7 @@ export class Daemon implements Context {
       (state) => this.#keeperChanged(state),
     );
     this.vaults = new VaultService(this);
+    this.contracts = new ContractRegistry(this);
     this.founding = new FoundingService(this);
     this.proposals = new ProposalService(this);
     this.membership = new MembershipService(this);
@@ -115,6 +119,7 @@ export class Daemon implements Context {
     this.#proposalEvents = new ProposalEvents(
       (ref) => this.proposals.get(ref),
       (event) => this.emit(event),
+      (ref) => this.proposals.ensureContracts(ref),
     );
     this.#received = new ReceivedWatcher(this);
   }
@@ -249,6 +254,7 @@ export class Daemon implements Context {
       profileDir: this.paths.dir,
       startedAt: this.#startedAt,
       node: this.node.url,
+      limits: LIMITS,
     };
   }
 
@@ -351,6 +357,8 @@ export class Daemon implements Context {
     await this.keeper.subscribe((event) => {
       this.emit({ type: "keeperEvent", event });
       void this.#proposalEvents.onKeeperEvent(event);
+      if (event.type === "artifact" && event.complete)
+        void this.#artifactArrived(event.vault, event.classId);
       this.devices.onKeeperEvent(event);
     });
     await this.#startKeeper();
@@ -375,12 +383,19 @@ export class Daemon implements Context {
     }
     await this.registerSenders();
     await this.vaults.load();
+    await this.contracts.load();
     await this.membership.load();
     this.#sync = setInterval(() => {
       void this.vaults.sync().then(() => this.#checkReceived());
       void this.registerSenders();
     }, SYNC_INTERVAL_MS);
     this.#sync.unref();
+  }
+
+  /** A contract's code a member's keeper fetched: checked and registered, then announced so reviews refresh. */
+  async #artifactArrived(vault: Hex32, classId: Hex32): Promise<void> {
+    if (await this.contracts.fetched(vault, classId).catch(() => false))
+      this.emit({ type: "contractAvailable", vault, classId });
   }
 
   /** Announces transfers into each active vault that arrived since the last sync. */

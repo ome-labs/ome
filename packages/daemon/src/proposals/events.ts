@@ -14,20 +14,24 @@ import { summaryLine } from "./summary.ts";
 
 type Emit = (event: DaemonEvent) => void;
 type View = (ref: ProposalRef) => Promise<ProposalView>;
+type Prepare = (ref: ProposalRef) => Promise<unknown>;
 
 const key = (ref: ProposalRef) => `${ref.vault}:${ref.id}`;
 
 export class ProposalEvents {
   readonly #view: View;
   readonly #emit: Emit;
+  readonly #prepare: Prepare;
   /** The status last announced per proposal, so ready and blocked are announced once each. */
   readonly #status = new Map<string, ProposalStatus>();
   /** Proposals whose payload hadn't arrived when they did: announced once it does. */
   readonly #waiting = new Map<Hex32, Set<Hex32>>();
 
-  constructor(view: View, emit: Emit) {
+  /** `prepare` starts fetching the contracts a proposal calls, as soon as it is here. */
+  constructor(view: View, emit: Emit, prepare: Prepare = () => Promise.resolve()) {
     this.#view = view;
     this.#emit = emit;
+    this.#prepare = prepare;
   }
 
   /** Reacts to one keeper event. Failures to read a proposal are left to the next event; they never throw. */
@@ -48,6 +52,7 @@ export class ProposalEvents {
   }
 
   async #created(ref: ProposalRef): Promise<void> {
+    void this.#prepare(ref).catch(() => undefined);
     const view = await this.#view(ref).catch(() => undefined);
     if (!view) {
       const waiting = this.#waiting.get(ref.vault) ?? new Set();

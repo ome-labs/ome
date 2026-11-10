@@ -3,6 +3,7 @@ import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import type { DaemonEvent, Hex32 } from "@ome-labs/api";
 import type { OmeWallet } from "@ome-labs/wallet";
 
+import type { ContractRegistry } from "./contracts/registry.ts";
 import type { KeeperSupervisor } from "./keeper/supervisor.ts";
 import type { NodeService } from "./node/node.ts";
 import type { ProfilePaths } from "./profile/paths.ts";
@@ -19,6 +20,7 @@ export interface Context {
   readonly keeper: KeeperSupervisor;
   readonly node: NodeService;
   readonly vaults: VaultService;
+  readonly contracts: ContractRegistry;
   wallet(): OmeWallet;
   secrets(): SecretsStore;
   /** The member's own Aztec account, which sends deployments. */

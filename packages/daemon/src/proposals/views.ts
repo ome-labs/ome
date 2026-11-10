@@ -13,6 +13,7 @@ import {
 } from "@ome-labs/wasm";
 
 import type { Context } from "../context.ts";
+import { decodeCalls } from "../contracts/decode.ts";
 import { intentOf } from "./intents.ts";
 
 /** Everything stored about one proposal, gathered from the member's keeper. */
@@ -108,17 +109,12 @@ export async function proposalView(
         stored.payload,
         Math.min(now, info.expiresAt),
       );
-      const names = fromVaultRequest(request).calls.map((c) => c.name);
-      calls = request.calls.map((call, i) => ({
-        to: call.to,
-        toLabel:
-          call.to === vault
-            ? record.name
-            : (tokens.find((t) => t.address === call.to)?.symbol ?? null),
-        fn: names[i] ?? `0x${call.selector.toString(16)}`,
-        args: call.args,
-        isStatic: call.isStatic,
-      }));
+      calls = await decodeCalls(context, fromVaultRequest(request).calls, {
+        vault,
+        vaultName: record.name,
+        tokens,
+        names: await context.names(),
+      });
     } catch {
       // A stale proposal no longer checks against the vault; its status says why.
     }

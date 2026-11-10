@@ -1,14 +1,26 @@
-import type { Hex32, Profile, Settings, TokenInfo } from "@ome-labs/api";
+import type { Hex32, HexBytes, Profile, Settings, TokenInfo } from "@ome-labs/api";
 
 import { readJson, writeJson } from "./files.ts";
 
-/** Everything public a profile keeps: who the member is, settings, the address book, aliases and tracked tokens. */
+/** A contract the member registered (its artifact is kept in the profile's `contracts` directory). */
+export interface RegisteredContract {
+  name: string;
+  classId: Hex32;
+  /** `SerializableContractInstance` bytes, for an instance the node doesn't publish. */
+  instance: HexBytes | null;
+}
+
+/**
+ * Everything public a profile keeps: who the member is, settings, the address book, aliases, tracked tokens and
+ * registered contracts.
+ */
 export interface ProfileFile {
   profile: Profile | null;
   settings: Settings;
   aliases: Record<Hex32, string>;
   defaultVault: Hex32 | null;
   tokens: Record<Hex32, TokenInfo[]>;
+  contracts: Record<Hex32, RegisteredContract>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -39,7 +51,9 @@ export class ProfileState {
       aliases: {},
       defaultVault: null,
       tokens: {},
+      contracts: {},
     });
+    file.contracts ??= {};
     file.settings = { ...DEFAULT_SETTINGS, ...file.settings, ...settings };
     return new ProfileState(path, file);
   }

@@ -1,5 +1,5 @@
-// Three members found a 2-of-3 vault through their daemons, pay from it with two approvals, see a rejection block a
-// proposal, and then rotate: Carol leaves and a newcomer joins with a join request, receiving the vault's protocol
+// Three members found a 2-of-3 vault through their daemons, pay from it with two approvals, call a contract only the
+// proposer registered, see a rejection block a proposal, and then rotate: Carol leaves and a newcomer joins with a join request, receiving the vault's protocol
 // secrets in the reshare. Everything goes through the daemons' sockets, as an app would; each daemon runs its own
 // keeper process and PXE against `aztec start --local-network`.
 import { mkdtemp } from "node:fs/promises";
@@ -7,7 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { openStoreAt } from "@aztec-labs/kv-store/lmdb-v2";
+import { PrivateVotingContract } from "@aztec-labs/noir-contracts.js/PrivateVoting";
 import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { contractArtifactToBuffer } from "@aztec-labs/stdlib/abi";
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import type { FoundingState, Hex32, ProposalView, RotationState } from "@ome-labs/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -169,6 +171,72 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
           },
         }),
       ).rejects.toThrow(/another address/u);
+    });
+
+    it("calls a contract only the proposer has: the others fetch its code, review it decoded, and execute it", async () => {
+      const aliceAccount = AztecAddress.fromStringUnsafe(
+        (await alice.client.call("status", {})).profile?.account as Hex32,
+      );
+      const { contract } = await PrivateVotingContract.deploy(
+        alice.daemon.wallet(),
+        aliceAccount,
+      ).send({
+        from: aliceAccount,
+        fee: alice.daemon.fee(),
+      });
+      const address = contract.address.toString() as Hex32;
+      const artifact = contractArtifactToBuffer(PrivateVotingContract.artifact).toString("utf8");
+      await alice.client.call("contracts.register", { address, artifact });
+      const functions = await alice.client.call("contracts.functions", { contract: address });
+      expect(functions.find((f) => f.name === "cast_vote")?.params).toEqual([
+        { name: "candidate", type: { kind: "field" } },
+      ]);
+      await expect(
+        alice.client.call("proposals.preview", {
+          vault,
+          intent: {
+            kind: "calls",
+            calls: [{ to: address, fn: "cast_vote", args: ["1.5"] }],
+            memo: null,
+          },
+          expiresInHours: 1,
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/cast_vote\.candidate/u),
+      });
+
+      const created = await alice.client.call("proposals.create", {
+        vault,
+        intent: {
+          kind: "calls",
+          calls: [{ to: address, fn: "cast_vote", args: ["7"] }],
+          memo: "vote 7",
+        },
+        expiresInHours: 1,
+      });
+      // Bob never registered the contract: his keeper fetches it from Alice's, his daemon checks it against the class.
+      await proposal(bob, created.id);
+      const review = await until(
+        async () => {
+          const r = await bob.client.call("proposals.review", { vault, id: created.id });
+          return r.proposal.calls[0]?.decoded ? r : undefined;
+        },
+        "Bob's decoded review",
+        180_000,
+        2000,
+      );
+      expect(review.proposal.calls[0]?.args.map((a) => a.name)).toEqual(["candidate"]);
+      expect(review.simulation.ok).toBe(true);
+      expect(bob.events.some((e) => e.type === "contractAvailable")).toBe(true);
+
+      await bob.client.call("proposals.approve", { vault, id: created.id });
+      await alice.client.call("proposals.approve", { vault, id: created.id });
+      await status(bob, created.id, "ready");
+      // Bob proves it with the code he fetched.
+      expect((await bob.client.call("proposals.execute", { vault, id: created.id })).status).toBe(
+        "executed",
+      );
     });
 
     it("blocks a proposal two members reject", async () => {

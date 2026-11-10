@@ -12,18 +12,19 @@ import type {
   Review,
   Secret,
 } from "@ome-labs/api";
-import type { VaultTx } from "@ome-labs/wallet";
-import { decodeProposal, rejectionMessage, signerSwapSlot } from "@ome-labs/wasm";
+import { type VaultTx, payloadContracts } from "@ome-labs/wallet";
+import { checkProposal, decodeProposal, rejectionMessage, signerSwapSlot } from "@ome-labs/wasm";
 
 import type { Context } from "../context.ts";
+import { decodeCalls } from "../contracts/decode.ts";
 import { DaemonError, notReady, require } from "../errors.ts";
+import { LIMITS } from "../limits.ts";
 import { requireBalance } from "../vaults/tokens.ts";
 import { intentOf, payloadOf, summaryOf } from "./intents.ts";
 import { type Stored, proposalView, storedProposals } from "./views.ts";
 
 /** `rotate_membership(...)`'s selector; its proposals are approved through the membership service. */
 const ROTATE_MEMBERSHIP_SELECTOR = 0xe1071b7c;
-const MAX_HOURS = 720;
 
 /** Approves rotation proposals after comparing them with this member's own reshare (the membership service). */
 export type RotationApprover = (
@@ -75,30 +76,73 @@ export class ProposalService {
     return proposalView(this.#context, stored, all, this.#tokens(ref.vault));
   }
 
-  async #prepare(params: ProposeParams, txNonce?: Fr): Promise<VaultTx> {
-    require(params.expiresInHours >= 1 &&
-      params.expiresInHours <= MAX_HOURS, "a proposal lasts 1 to 720 hours");
+  /** Builds the transaction; `share` also records and offers the contracts its calls need, for a real proposal. */
+  async #prepare(params: ProposeParams, txNonce?: Fr, share = false): Promise<VaultTx> {
+    const { minExpiryHours: min, maxExpiryHours: max } = LIMITS;
+    require(params.expiresInHours >= min &&
+      params.expiresInHours <= max, `a proposal lasts ${min} to ${max} hours`);
     const wallet = this.#context.wallet();
     const vault = this.#context.vaults.address(params.vault);
     const payload = await payloadOf(this.#context, params.intent);
+    const contracts = share
+      ? await this.#context.contracts.forProposal(payload.calls.map((call) => call.to))
+      : undefined;
     return wallet.prepareVaultTx(vault, payload, {
       expiresAt: (await wallet.chainTime()) + params.expiresInHours * 3600,
       summary: summaryOf(params.intent),
       proposer: this.#context.vaults.myIndex(params.vault),
       txNonce,
+      ...(contracts ? { contracts } : {}),
     });
+  }
+
+  /** What the member knows names for in `vault`. */
+  async #labels(vault: Hex32) {
+    return {
+      vault,
+      vaultName: this.#context.vaults.record(vault).name,
+      tokens: this.#tokens(vault),
+      names: await this.#context.names(),
+    };
+  }
+
+  /**
+   * Makes the contracts a proposal calls usable on this device: missing classes are fetched from the members who have
+   * them and checked. Returns whether everything is here; never throws (a review still says what it can).
+   */
+  async ensureContracts(ref: ProposalRef): Promise<boolean> {
+    try {
+      const { stored } = await this.#stored(ref);
+      if (!stored.payload) return false;
+      const wallet = this.#context.wallet();
+      const request = checkProposal(
+        {
+          manifest: this.#context.vaults.manifest(ref.vault),
+          config: await wallet.getVaultConfig(this.#context.vaults.address(ref.vault)),
+        },
+        await wallet.chain(),
+        stored.body,
+        stored.payload,
+        Math.min(await wallet.chainTime(), stored.info.expiresAt),
+      );
+      return await this.#context.contracts.ensure(
+        ref.vault,
+        request.calls.map((call) => call.to),
+        payloadContracts(request),
+      );
+    } catch {
+      return false;
+    }
   }
 
   async preview(params: ProposeParams): Promise<ProposalPreview> {
     try {
       const tx = await this.#prepare(params);
-      const calls = tx.payload.calls.map((c) => ({
-        to: c.to.toString(),
-        toLabel: null,
-        fn: c.name,
-        args: c.args.map((a) => a.toString()),
-        isStatic: c.isStatic,
-      }));
+      const calls = await decodeCalls(
+        this.#context,
+        tx.payload.calls,
+        await this.#labels(params.vault),
+      );
       const simulation = await this.#context.wallet().previewVaultTx(tx);
       const gas = simulation.gasUsed.totalGas;
       return { ok: true, calls, gas: { da: gas.daGas, l2: gas.l2Gas }, error: null };
@@ -116,7 +160,7 @@ export class ProposalService {
   async create(params: ProposeParams, txNonce?: Fr): Promise<ProposalView> {
     if (params.intent.kind === "transfer")
       await requireBalance(this.#context, params.vault, params.intent.token, params.intent.amount);
-    const tx = await this.#prepare(params, txNonce);
+    const tx = await this.#prepare(params, txNonce, true);
     const keeper = this.#context.keeper.client;
     await keeper.call("payloads.put", { vault: params.vault, body: tx.payloadBody });
     await keeper.call("proposals.put", { vault: params.vault, body: tx.proposal });
@@ -142,6 +186,7 @@ export class ProposalService {
   }
 
   async review(ref: ProposalRef): Promise<Review> {
+    await this.ensureContracts(ref);
     const { stored, all } = await this.#stored(ref);
     const proposal = await proposalView(this.#context, stored, all, this.#tokens(ref.vault));
     const record = this.#context.vaults.record(ref.vault);
@@ -274,6 +319,7 @@ export class ProposalService {
 
   /** Executes a ready proposal from this device and stores the receipt with the keeper. */
   async execute(ref: ProposalRef): Promise<ProposalView> {
+    await this.ensureContracts(ref);
     const { stored } = await this.#stored(ref);
     const intent = intentOf(stored.info.summary);
     if (intent.kind === "transfer")

@@ -1,5 +1,3 @@
-import { FunctionType } from "@aztec-labs/stdlib/abi";
-import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import type {
   ActivityEntry,
   DaemonMethod,
@@ -12,7 +10,6 @@ import type {
 import { listAliases, setAlias, walletDir } from "../aztec/aliases.ts";
 import type { Daemon } from "../daemon.ts";
 import { DaemonError, require } from "../errors.ts";
-import { artifactOf } from "../proposals/intents.ts";
 import { counterparties, receivedTransfers } from "../vaults/activity.ts";
 import { balances, deployTestToken, tokenInfo } from "../vaults/tokens.ts";
 
@@ -216,22 +213,14 @@ export const handlers: Handlers = {
   "proposals.cancel": async (d, p) =>
     d.proposals.cancel({ vault: lower(p.vault), id: lower(p.id) }),
 
-  "contracts.functions": async (d, p) => {
-    const artifact = await artifactOf(d, AztecAddress.fromStringUnsafe(lower(p.contract)));
-    return artifact.functions
-      .filter((f) => !f.isOnlySelf && !f.isInitializer)
-      .map((f) => ({
-        name: f.name,
-        kind:
-          f.functionType === FunctionType.PRIVATE
-            ? ("private" as const)
-            : f.functionType === FunctionType.PUBLIC
-              ? ("public" as const)
-              : ("utility" as const),
-        isStatic: f.isStatic,
-        params: f.parameters.map((param) => ({ name: param.name, type: param.type.kind })),
-      }));
+  "contracts.functions": async (d, p) =>
+    d.contracts.functions(lower(p.contract), p.includeUtility ?? false),
+  "contracts.register": async (d, p) => {
+    require(typeof p.artifact === "string" && p.artifact.length > 0, "give the artifact's JSON");
+    return d.contracts.register({ ...p, address: lower(p.address) });
   },
+  "contracts.list": async (d) => d.contracts.list(),
+  "contracts.remove": async (d, p) => (await d.contracts.remove(lower(p.contract)), null),
 
   "aztec.aliases": async (d) => listAliases(walletDir(d.state.file.settings.aztecWalletDir)),
   "aztec.alias": async (d, p) => {

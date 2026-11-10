@@ -1,52 +1,21 @@
 import { Contract } from "@aztec-labs/aztec.js/contracts";
-import { Fr } from "@aztec-labs/foundation/curves/bn254";
 import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
-import type { ContractArtifact } from "@aztec-labs/stdlib/abi";
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import { type ExecutionPayload, mergeExecutionPayloads } from "@aztec-labs/stdlib/tx";
-import type { Hex32, Intent } from "@ome-labs/api";
+import type { Hex32, Intent, IntentCall } from "@ome-labs/api";
 
 import type { Context } from "../context.ts";
+import { argument } from "../contracts/abi.ts";
 import { DaemonError, require } from "../errors.ts";
-
-/** Largest summary a proposal carries (the wire limit is 4 KiB). */
-const MAX_SUMMARY = 4096;
+import { LIMITS } from "../limits.ts";
 
 const FUNCTION = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/u;
-
-/** A call argument as the CLI types it: `0x` hex or a decimal integer as a field, anything else as a string. */
-function argument(value: string): Fr | bigint | string {
-  if (/^0x[0-9a-fA-F]{1,64}$/u.test(value)) return Fr.fromString(value);
-  if (/^-?\d+$/u.test(value)) return BigInt(value);
-  return value;
-}
-
-/** The artifact of a contract registered in this member's PXE. */
-export async function artifactOf(
-  context: Context,
-  address: AztecAddress,
-): Promise<ContractArtifact> {
-  const pxe = context.wallet().pxeService;
-  const instance = await pxe.getContractInstance(address);
-  const artifact = instance
-    ? await pxe.getContractArtifact(instance.originalContractClassId)
-    : undefined;
-  if (!artifact)
-    throw DaemonError.detailed(
-      {
-        kind: "unknown-contract",
-        address: address.toString() as Hex32,
-        ...(instance ? { classId: instance.originalContractClassId.toString() as Hex32 } : {}),
-      },
-      `contract ${address.toString()} is not registered with this member`,
-    );
-  return artifact;
-}
 
 /** The summary a proposal carries: its intent as JSON, which every member's daemon reads back. */
 export function summaryOf(intent: Intent): string {
   const summary = JSON.stringify(intent);
-  require(summary.length <= MAX_SUMMARY, "the proposal's description is too long");
+  require(Buffer.byteLength(summary) <=
+    LIMITS.maxSummaryBytes, `the proposal's description is ${Buffer.byteLength(summary)} bytes; a proposal carries at most ${LIMITS.maxSummaryBytes}`);
   return summary;
 }
 
@@ -78,16 +47,9 @@ export async function payloadOf(context: Context, intent: Intent): Promise<Execu
     }
     case "calls": {
       require(intent.calls.length >= 1 &&
-        intent.calls.length <= 4, "a proposal makes 1 to 4 calls besides its fee");
-      const payloads = await Promise.all(
-        intent.calls.map(async (call) => {
-          require(FUNCTION.test(call.fn), `${call.fn} is not a function name`);
-          const to = AztecAddress.fromStringUnsafe(call.to);
-          const method = Contract.at(to, await artifactOf(context, to), wallet).methods[call.fn];
-          if (!method) throw new DaemonError("invalid", `the contract has no function ${call.fn}`);
-          return method(...call.args.map(argument)).request();
-        }),
-      );
+        intent.calls.length <=
+          LIMITS.maxCalls, `a proposal makes 1 to ${LIMITS.maxCalls} calls besides its fee`);
+      const payloads = await Promise.all(intent.calls.map((call) => callPayload(context, call)));
       return mergeExecutionPayloads([...payloads, fee]);
     }
     case "cancel":
@@ -95,4 +57,22 @@ export async function payloadOf(context: Context, intent: Intent): Promise<Execu
     default:
       throw new DaemonError("invalid", "unknown intent");
   }
+}
+
+/** One call, its arguments checked against the function's parameters before Aztec encodes them. */
+async function callPayload(context: Context, call: IntentCall): Promise<ExecutionPayload> {
+  require(FUNCTION.test(call.fn), `${call.fn} is not a function name`);
+  const { artifact } = await context.contracts.artifact(call.to.toLowerCase() as Hex32);
+  const fn = artifact.functions.find((f) => f.name === call.fn);
+  if (!fn) throw new DaemonError("invalid", `${artifact.name} has no function ${call.fn}`);
+  require(call.args.length ===
+    fn.parameters
+      .length, `${call.fn} takes ${fn.parameters.length} arguments (${fn.parameters.map((p) => p.name).join(", ")}); ${call.args.length} given`);
+  const args = fn.parameters.map((param, i) =>
+    argument(param.type, call.args[i] as IntentCall["args"][number], `${call.fn}.${param.name}`),
+  );
+  const contract = Contract.at(AztecAddress.fromStringUnsafe(call.to), artifact, context.wallet());
+  const method = contract.methods[call.fn];
+  if (!method) throw new DaemonError("invalid", `${artifact.name} has no function ${call.fn}`);
+  return method(...args).request();
 }

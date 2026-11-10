@@ -24,6 +24,8 @@ export interface ProfilePaths {
   readonly secrets: string;
   readonly vaults: string;
   readonly rotations: string;
+  /** Artifacts of registered and fetched contracts, gzip-compressed, by class id. */
+  readonly contracts: string;
   readonly keeperDir: string;
   readonly keeperSocket: string;
   readonly keeperLog: string;
@@ -61,6 +63,7 @@ export function profilePaths(name: string, home = omeHome()): ProfilePaths {
     secrets: join(dir, "secrets"),
     vaults: join(dir, "vaults"),
     rotations: join(dir, "rotations"),
+    contracts: join(dir, "contracts"),
     keeperDir,
     keeperSocket: socketPath(keeperDir, "keeper.sock"),
     keeperLog: join(dir, "keeper.log"),
