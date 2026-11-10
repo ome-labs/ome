@@ -119,6 +119,8 @@ export async function fakeContext(members = 3, viewingThreshold = 2): Promise<Fa
       manifest: () => manifest,
       address: () => AztecAddress.fromStringUnsafe(address),
       myIndex: () => 1,
+      ensureCurrent: () => Promise.resolve(),
+      observe: () => Promise.resolve("current"),
     },
     state: { file: { tokens: {}, profile: { name: "Ada" } } },
     names: () => Promise.resolve(new Map()),

@@ -525,6 +525,7 @@ export class MembershipService {
     proposer: number,
     txNonce: Fr,
   ): Promise<Hex32> {
+    await this.#context.vaults.ensureCurrent(vaultAddress);
     const wallet = this.#context.wallet();
     const vault = AztecAddress.fromStringUnsafe(vaultAddress);
     const method = Contract.at(vault, vaultArtifact(), wallet).methods.rotate_membership;
@@ -539,9 +540,10 @@ export class MembershipService {
       // The contract checks every share against this polynomial and its constant term against the vault's key.
       pad(committeePolynomial(rotation.viewingThreshold, rotation.verificationShares)),
     ).request();
+    // The fee call first, as for every proposal (`payloadOf`).
     const payload = mergeExecutionPayloads([
-      rotate,
       await this.#context.fee().paymentMethod.getExecutionPayload(),
+      rotate,
     ]);
     const tx = await wallet.prepareVaultTx(vault, payload, {
       expiresAt: (await wallet.chainTime()) + 72 * 3600,

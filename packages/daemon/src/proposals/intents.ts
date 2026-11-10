@@ -3,6 +3,7 @@ import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import { type ExecutionPayload, mergeExecutionPayloads } from "@aztec-labs/stdlib/tx";
 import type { Hex32, Intent, IntentCall } from "@ome-labs/api";
+import { vaultArtifact } from "@ome-labs/wallet";
 
 import type { Context } from "../context.ts";
 import { argument } from "../contracts/abi.ts";
@@ -32,8 +33,15 @@ export function intentOf(summary: string): Intent {
 /**
  * The execution payload an intent describes, with the trusted fee payer's call merged in (the vault never pays its own
  * fees). A cancellation is the fee call alone: run under the cancelled proposal's nonce, it burns that nonce.
+ *
+ * The fee call comes first: the fee payer ends Aztec's setup phase, and a public call enqueued before that runs as
+ * setup, which only allow-listed functions may (`Setup function not on allow list`).
  */
-export async function payloadOf(context: Context, intent: Intent): Promise<ExecutionPayload> {
+export async function payloadOf(
+  context: Context,
+  intent: Intent,
+  vault: AztecAddress,
+): Promise<ExecutionPayload> {
   const wallet = context.wallet();
   const fee = await context.fee().paymentMethod.getExecutionPayload();
   switch (intent.kind) {
@@ -43,17 +51,32 @@ export async function payloadOf(context: Context, intent: Intent): Promise<Execu
       const transfer = await token.methods
         .transfer(AztecAddress.fromStringUnsafe(intent.to), BigInt(intent.amount))
         .request();
-      return mergeExecutionPayloads([transfer, fee]);
+      return mergeExecutionPayloads([fee, transfer]);
     }
     case "calls": {
       require(intent.calls.length >= 1 &&
         intent.calls.length <=
           LIMITS.maxCalls, `a proposal makes 1 to ${LIMITS.maxCalls} calls besides its fee`);
       const payloads = await Promise.all(intent.calls.map((call) => callPayload(context, call)));
-      return mergeExecutionPayloads([...payloads, fee]);
+      return mergeExecutionPayloads([fee, ...payloads]);
     }
     case "cancel":
       return mergeExecutionPayloads([fee]);
+    case "setThreshold": {
+      const config = await wallet.getVaultConfig(vault);
+      require(Number.isInteger(intent.threshold) &&
+        intent.threshold >= 1 &&
+        intent.threshold <=
+          config.signerCount, `the approvals to spend are 1 to ${config.signerCount}, the vault's members`);
+      require(intent.threshold !==
+        config.threshold, `the vault already needs ${config.threshold} approvals to spend`);
+      const call = await vaultCall(context, vault, "set_threshold", [intent.threshold]);
+      return mergeExecutionPayloads([fee, call]);
+    }
+    case "invalidatePending": {
+      const call = await vaultCall(context, vault, "invalidate_pending", []);
+      return mergeExecutionPayloads([fee, call]);
+    }
     default:
       throw new DaemonError("invalid", "unknown intent");
   }
@@ -74,5 +97,17 @@ async function callPayload(context: Context, call: IntentCall): Promise<Executio
   const contract = Contract.at(AztecAddress.fromStringUnsafe(call.to), artifact, context.wallet());
   const method = contract.methods[call.fn];
   if (!method) throw new DaemonError("invalid", `${artifact.name} has no function ${call.fn}`);
+  return method(...args).request();
+}
+
+/** A call to one of the vault's own functions, which run only through its approved transactions. */
+async function vaultCall(
+  context: Context,
+  vault: AztecAddress,
+  fn: string,
+  args: unknown[],
+): Promise<ExecutionPayload> {
+  const method = Contract.at(vault, vaultArtifact(), context.wallet()).methods[fn];
+  if (!method) throw new DaemonError("failed", `the vault's artifact has no ${fn}`);
   return method(...args).request();
 }

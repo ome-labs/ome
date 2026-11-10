@@ -33,7 +33,10 @@ describe("proposals.review", () => {
     const ref = { vault: fake.deployment.address.toString(), id: built.id };
     const review = await service.review(ref);
     expect(review.checks.rebuilt).toBe(false);
-    expect(review.checks.failure).toMatch(/hashes the payload differently/u);
+    expect(review.checks.failure).toEqual({
+      failure: { kind: "payloadMismatch" },
+      message: "Aztec's entrypoint hashes the payload differently from the proposal",
+    });
     expect(review.simulation.ok).toBe(false);
     await expect(service.approve(ref)).rejects.toThrow(VaultTxError);
   });

@@ -34,5 +34,9 @@ export function summaryLine(view: ProposalView): string {
     }
     case "cancel":
       return `Cancel proposal ${intent.cancels.slice(2, 6)}`;
+    case "setThreshold":
+      return `Need ${intent.threshold} ${intent.threshold === 1 ? "approval" : "approvals"} to spend`;
+    case "invalidatePending":
+      return "Void every approval collected so far";
   }
 }

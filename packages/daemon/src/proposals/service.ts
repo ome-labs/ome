@@ -10,16 +10,25 @@ import type {
   ProposeParams,
   RejectParams,
   Review,
+  ReviewError,
   Secret,
 } from "@ome-labs/api";
 import { type VaultTx, payloadContracts } from "@ome-labs/wallet";
-import { checkProposal, decodeProposal, rejectionMessage, signerSwapSlot } from "@ome-labs/wasm";
+import {
+  checkProposal,
+  decodeProposal,
+  policyWarnings,
+  rejectionMessage,
+  signerSwapSlot,
+} from "@ome-labs/wasm";
 
 import type { Context } from "../context.ts";
 import { decodeCalls } from "../contracts/decode.ts";
 import { DaemonError, notReady, require } from "../errors.ts";
 import { LIMITS } from "../limits.ts";
 import { requireBalance } from "../vaults/tokens.ts";
+import { effectsOf } from "./effects.ts";
+import { reviewError, simulationError } from "./failures.ts";
 import { intentOf, payloadOf, summaryOf } from "./intents.ts";
 import { type Stored, proposalView, storedProposals } from "./views.ts";
 
@@ -81,9 +90,10 @@ export class ProposalService {
     const { minExpiryHours: min, maxExpiryHours: max } = LIMITS;
     require(params.expiresInHours >= min &&
       params.expiresInHours <= max, `a proposal lasts ${min} to ${max} hours`);
+    await this.#context.vaults.ensureCurrent(params.vault);
     const wallet = this.#context.wallet();
     const vault = this.#context.vaults.address(params.vault);
-    const payload = await payloadOf(this.#context, params.intent);
+    const payload = await payloadOf(this.#context, params.intent, vault);
     const contracts = share
       ? await this.#context.contracts.forProposal(payload.calls.map((call) => call.to))
       : undefined;
@@ -135,24 +145,32 @@ export class ProposalService {
     }
   }
 
+  /**
+   * A dry run. An intent that can't become calls (a bad argument, an unknown contract) fails the request; a
+   * transaction that doesn't simulate is reported with its failure.
+   */
   async preview(params: ProposeParams): Promise<ProposalPreview> {
+    const tx = await this.#prepare(params);
+    const calls = await decodeCalls(
+      this.#context,
+      tx.payload.calls,
+      await this.#labels(params.vault),
+    );
+    return { calls, ...(await this.#simulate(params.vault, tx)) };
+  }
+
+  /** Simulates `tx` and reads its effects on the vault; a failure becomes a kind with its message. */
+  async #simulate(vault: Hex32, tx: VaultTx): Promise<Review["simulation"]> {
+    const wallet = this.#context.wallet();
+    const tokens = this.#tokens(vault);
     try {
-      const tx = await this.#prepare(params);
-      const calls = await decodeCalls(
-        this.#context,
-        tx.payload.calls,
-        await this.#labels(params.vault),
-      );
-      const simulation = await this.#context.wallet().previewVaultTx(tx);
-      const gas = simulation.gasUsed.totalGas;
-      return { ok: true, calls, gas: { da: gas.daGas, l2: gas.l2Gas }, error: null };
+      const result = await wallet.previewVaultTx(tx);
+      const gas = result.gasUsed.totalGas;
+      const facts = await wallet.simulationFacts(tx, result);
+      const effects = await effectsOf(this.#context, vault, tx.payload.calls, facts, tokens);
+      return { ok: true, gas: { da: gas.daGas, l2: gas.l2Gas }, error: null, effects };
     } catch (error) {
-      return {
-        ok: false,
-        calls: [],
-        gas: null,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      return { ok: false, gas: null, error: simulationError(error, tokens), effects: null };
     }
   }
 
@@ -180,6 +198,7 @@ export class ProposalService {
   /** The transaction a stored proposal describes, rebuilt and checked on this device. */
   async #rebuilt(stored: Stored): Promise<VaultTx> {
     if (!stored.payload) throw notReady("payload", "the proposal's payload has not arrived yet");
+    await this.#context.vaults.ensureCurrent(stored.vault);
     return this.#context
       .wallet()
       .vaultTxOf(this.#context.vaults.address(stored.vault), stored.body, stored.payload);
@@ -190,26 +209,24 @@ export class ProposalService {
     const { stored, all } = await this.#stored(ref);
     const proposal = await proposalView(this.#context, stored, all, this.#tokens(ref.vault));
     const record = this.#context.vaults.record(ref.vault);
-    let failure: string | null = null;
+    let failure: ReviewError | null = null;
     let tx: VaultTx | undefined;
     try {
       tx = await this.#rebuilt(stored);
     } catch (error) {
-      failure = error instanceof Error ? error.message : String(error);
+      failure = reviewError(error);
     }
-    let simulation: Review["simulation"] = { ok: false, gas: null, error: failure };
-    if (tx) {
-      try {
-        const gas = (await this.#context.wallet().previewVaultTx(tx)).gasUsed.totalGas;
-        simulation = { ok: true, gas: { da: gas.daGas, l2: gas.l2Gas }, error: null };
-      } catch (error) {
-        simulation = {
+    const simulation: Review["simulation"] = tx
+      ? await this.#simulate(ref.vault, tx)
+      : {
           ok: false,
           gas: null,
-          error: error instanceof Error ? error.message : String(error),
+          error: {
+            failure: { kind: "unavailable" },
+            message: "the proposal didn't rebuild on this device",
+          },
+          effects: null,
         };
-      }
-    }
     const intent = proposal.intent;
     const label =
       intent.kind === "transfer" ? ((await this.#context.names()).get(intent.to) ?? null) : null;
@@ -224,12 +241,8 @@ export class ProposalService {
         notExpired: proposal.status !== "expired",
         failure,
       },
-      action:
-        intent.kind === "transfer"
-          ? `transfer ${intent.amount} base units of ${proposal.token?.symbol ?? intent.token}`
-          : intent.kind === "cancel"
-            ? `cancel proposal ${intent.cancels}`
-            : `${proposal.calls.length} call(s)`,
+      action: actionOf(proposal),
+      change: await this.#change(ref.vault, intent),
       recipient:
         intent.kind === "transfer"
           ? {
@@ -247,6 +260,21 @@ export class ProposalService {
         message: rejectionMessage(ref.vault, stored.info.id),
         formula: 'Poseidon2("ome.rejection.v0", [vault, id_hi, id_lo])',
       },
+    };
+  }
+
+  /** For governance intents: the vault's policy before and after, with the new shape's risks. */
+  async #change(vault: Hex32, intent: Intent): Promise<Review["change"]> {
+    if (intent.kind !== "setThreshold" && intent.kind !== "invalidatePending") return null;
+    const config = await this.#context.wallet().getVaultConfig(this.#context.vaults.address(vault));
+    if (intent.kind === "invalidatePending")
+      return { kind: "invalidatePending", version: config.version };
+    return {
+      kind: "threshold",
+      before: config.threshold,
+      after: intent.threshold,
+      members: config.signerCount,
+      warnings: policyWarnings(intent.threshold, config.viewingThreshold, config.signerCount),
     };
   }
 
@@ -304,6 +332,7 @@ export class ProposalService {
   async reject(params: RejectParams): Promise<ProposalView> {
     const { stored } = await this.#stored(params);
     this.#requireLocalKey(params.vault);
+    await this.#context.vaults.ensureCurrent(params.vault);
     const input = await this.#context
       .wallet()
       .vaultInput(this.#context.vaults.address(params.vault));
@@ -348,6 +377,8 @@ export class ProposalService {
         txHash,
       });
       progress("mined", { txHash });
+      // A governance call changed the config: adopt it now, not at the next sync.
+      await this.#context.vaults.observe(ref.vault).catch(() => undefined);
     } catch (error) {
       progress("failed", { error: error instanceof Error ? error.message : String(error) });
       throw error;
@@ -358,5 +389,22 @@ export class ProposalService {
   /** The proposal id of a stored body. */
   static idOf(body: string): string {
     return decodeProposal(body).id;
+  }
+}
+
+/** One line saying what a proposal does, with exact numbers. */
+function actionOf(proposal: ProposalView): string {
+  const { intent } = proposal;
+  switch (intent.kind) {
+    case "transfer":
+      return `transfer ${intent.amount} base units of ${proposal.token?.symbol ?? intent.token}`;
+    case "cancel":
+      return `cancel proposal ${intent.cancels}`;
+    case "setThreshold":
+      return `need ${intent.threshold} approvals to spend`;
+    case "invalidatePending":
+      return "void every approval collected so far";
+    case "calls":
+      return `${proposal.calls.length} call(s)`;
   }
 }

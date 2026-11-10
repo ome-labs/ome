@@ -184,33 +184,43 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
         from: aliceAccount,
         fee: alice.daemon.fee(),
       });
+      // Votes count only in a started election; Alice is the contract's admin.
+      await contract.methods
+        .start_vote({ id: 1n })
+        .send({ from: aliceAccount, fee: alice.daemon.fee() });
       const address = contract.address.toString() as Hex32;
       const artifact = contractArtifactToBuffer(PrivateVotingContract.artifact).toString("utf8");
       await alice.client.call("contracts.register", { address, artifact });
       const functions = await alice.client.call("contracts.functions", { contract: address });
       expect(functions.find((f) => f.name === "cast_vote")?.params).toEqual([
+        {
+          name: "election_id",
+          type: {
+            kind: "struct",
+            path: "PrivateVoting::ElectionId",
+            fields: [{ name: "id", type: { kind: "field" } }],
+          },
+        },
         { name: "candidate", type: { kind: "field" } },
       ]);
+      // A bad argument fails the dry run itself, naming the parameter.
       await expect(
         alice.client.call("proposals.preview", {
           vault,
           intent: {
             kind: "calls",
-            calls: [{ to: address, fn: "cast_vote", args: ["1.5"] }],
+            calls: [{ to: address, fn: "cast_vote", args: [{ id: "1" }, "1.5"] }],
             memo: null,
           },
           expiresInHours: 1,
         }),
-      ).resolves.toMatchObject({
-        ok: false,
-        error: expect.stringMatching(/cast_vote\.candidate/u),
-      });
+      ).rejects.toThrow(/cast_vote\.candidate/u);
 
       const created = await alice.client.call("proposals.create", {
         vault,
         intent: {
           kind: "calls",
-          calls: [{ to: address, fn: "cast_vote", args: ["7"] }],
+          calls: [{ to: address, fn: "cast_vote", args: [{ id: "1" }, "7"] }],
           memo: "vote 7",
         },
         expiresInHours: 1,
@@ -220,14 +230,15 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       const review = await until(
         async () => {
           const r = await bob.client.call("proposals.review", { vault, id: created.id });
-          return r.proposal.calls[0]?.decoded ? r : undefined;
+          return r.proposal.calls.find((c) => c.fn === "cast_vote")?.decoded ? r : undefined;
         },
         "Bob's decoded review",
         180_000,
         2000,
       );
-      expect(review.proposal.calls[0]?.args.map((a) => a.name)).toEqual(["candidate"]);
-      expect(review.simulation.ok).toBe(true);
+      const vote = review.proposal.calls.find((c) => c.fn === "cast_vote");
+      expect(vote?.args.map((a) => a.name)).toEqual(["election_id", "candidate"]);
+      expect(review.simulation).toMatchObject({ ok: true, error: null });
       expect(bob.events.some((e) => e.type === "contractAvailable")).toBe(true);
 
       await bob.client.call("proposals.approve", { vault, id: created.id });
@@ -235,6 +246,77 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       await status(bob, created.id, "ready");
       // Bob proves it with the code he fetched.
       expect((await bob.client.call("proposals.execute", { vault, id: created.id })).status).toBe(
+        "executed",
+      );
+    });
+
+    it("shows the vault's balance before and after, names a shortfall, and reviews a threshold change", async () => {
+      const bobAccount = (await bob.client.call("status", {})).profile?.account as Hex32;
+      const held = await until(() => balance(alice), "Alice's balance");
+      const transfer = (amount: bigint) =>
+        alice.client.call("proposals.preview", {
+          vault,
+          intent: {
+            kind: "transfer",
+            token,
+            to: bobAccount,
+            amount: amount.toString(),
+            memo: null,
+          },
+          expiresInHours: 1,
+        });
+
+      const paying = await transfer(25n);
+      expect(paying.ok).toBe(true);
+      expect(paying.effects?.complete).toBe(true);
+      expect(paying.effects?.balances).toEqual([
+        expect.objectContaining({
+          before: held.toString(),
+          after: (held - 25n).toString(),
+          visibility: "private",
+        }),
+      ]);
+      const tooMuch = await transfer(held + 1n);
+      expect(tooMuch.ok).toBe(false);
+      expect(tooMuch.error?.failure).toMatchObject({
+        kind: "insufficientBalance",
+        contract: token,
+      });
+
+      const raise = await alice.client.call("proposals.create", {
+        vault,
+        intent: { kind: "setThreshold", threshold: 3, memo: null },
+        expiresInHours: 1,
+      });
+      await proposal(bob, raise.id);
+      const review = await bob.client.call("proposals.review", { vault, id: raise.id });
+      expect(review.change).toMatchObject({ kind: "threshold", before: 2, after: 3, members: 3 });
+      expect(review.change?.kind === "threshold" && review.change.warnings).toContain(
+        "no-spare-signer",
+      );
+      for (const m of [alice, bob]) {
+        // oxlint-disable-next-line no-await-in-loop
+        await m.client.call("proposals.approve", { vault, id: raise.id });
+      }
+      await status(alice, raise.id, "ready");
+      expect((await alice.client.call("proposals.execute", { vault, id: raise.id })).status).toBe(
+        "executed",
+      );
+
+      // Back to 2 of 3 for the suite's later tests; it now takes all three.
+      const back = await alice.client.call("proposals.create", {
+        vault,
+        intent: { kind: "setThreshold", threshold: 2, memo: null },
+        expiresInHours: 1,
+      });
+      for (const m of [alice, bob, carol]) {
+        // oxlint-disable-next-line no-await-in-loop
+        await proposal(m, back.id);
+        // oxlint-disable-next-line no-await-in-loop
+        await m.client.call("proposals.approve", { vault, id: back.id });
+      }
+      await status(alice, back.id, "ready");
+      expect((await alice.client.call("proposals.execute", { vault, id: back.id })).status).toBe(
         "executed",
       );
     });

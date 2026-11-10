@@ -154,7 +154,8 @@ export class VaultService {
     const swapped = observation === "current" && (await this.#adoptSwap(record.address, config));
     await this.save(record);
     if (swapped || (observation !== "current" && observation !== "outdated")) {
-      // A swap, an activated or unknown committee, or a removal: the config and who is in the vault changed.
+      // A swap or threshold change, an activated or unknown committee, or a removal: the config and who is in the
+      // vault, or how many must approve, changed.
       this.#context.emit({ type: "configChanged", vault: record.address, version: config.version });
       this.#context.emit({ type: "memberChanged", vault: record.address });
     }
@@ -164,15 +165,33 @@ export class VaultService {
   }
 
   /**
-   * After a signer swap ran, the config's signer set no longer matches the committee's manifest: the keeper adopts
-   * the new key from the executed swap (`vault.updateSigners`, which checks it against this config), and viewing is
-   * re-pointed at the updated manifest. Returns whether a swap was adopted.
+   * Makes sure this member acts on the vault's current policy: when the config on chain names other signers or another
+   * threshold than the manifest (a swap or threshold change just ran), the config is observed now, so the keeper adopts
+   * the change, instead of at the next sync.
+   */
+  async ensureCurrent(vault: Hex32): Promise<void> {
+    const manifest = this.#manifests.get(vault);
+    if (!manifest) return;
+    const config = await this.#context.wallet().getVaultConfig(this.address(vault));
+    if (
+      manifest.threshold !== config.threshold ||
+      signerSetCommitment(manifest.members.map((m) => m.signerKey)) !== config.signerSetCommitment
+    )
+      await this.observe(vault);
+  }
+
+  /**
+   * After a signer swap or a threshold change ran, the config's signer set or threshold no longer matches the
+   * committee's manifest: the keeper adopts the change from the executed proposal (`vault.updateSigners`, which checks
+   * it against this config), and viewing is re-pointed at the updated manifest. Returns whether a change was adopted.
    */
   async #adoptSwap(vault: Hex32, config: VaultConfig): Promise<boolean> {
     const manifest = this.#manifests.get(vault);
     if (!manifest) return false;
     if (
-      signerSetCommitment(manifest.members.map((m) => m.signerKey)) === config.signerSetCommitment
+      signerSetCommitment(manifest.members.map((m) => m.signerKey)) ===
+        config.signerSetCommitment &&
+      manifest.threshold === config.threshold
     )
       return false;
     const keeper = this.#context.keeper.client;
