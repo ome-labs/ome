@@ -85,6 +85,7 @@ describe("vault proposals", () => {
     const built = buildProposal(input, chain, {
       ...toVaultRequest(exec),
       txNonce: txNonce.toString(),
+      createdAt: EXPIRES_AT - 3600,
       expiresAt: EXPIRES_AT,
       summary: "pay 25",
       proposer: 1,
@@ -116,6 +117,7 @@ describe("approvals", () => {
     const built = buildProposal(input, chain, {
       ...toVaultRequest(await payload()),
       txNonce: Fr.random().toString(),
+      createdAt: EXPIRES_AT - 3600,
       expiresAt: EXPIRES_AT,
       summary: "pay 25",
       proposer: 2,

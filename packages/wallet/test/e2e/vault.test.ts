@@ -205,7 +205,7 @@ describe.skipIf(!available)("a vault on a local network with real keepers", () =
 
     const approvals = await until(async () => {
       const list = await k1.client.call("approvals.list", { proposal: tx.id });
-      return list.length > 0 ? list : undefined;
+      return list.length > 0 ? list.map((vote) => vote.body) : undefined;
     }, "Bob's approval at keeper 1");
     const [alicesApproval] = await approve(alice, tx, [0]);
     const receipt = await alice.wallet.executeVaultTx(tx, [...approvals, alicesApproval ?? ""]);

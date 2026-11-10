@@ -37,6 +37,7 @@ describe("deriveVault", () => {
       calls: [],
       extras: "0x",
       txNonce: Fr.random().toString(),
+      createdAt: 1_899_996_400,
       expiresAt: 1_900_000_000,
       summary: "cancel",
       proposer: 1,

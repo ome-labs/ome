@@ -419,9 +419,12 @@ export class OmeWallet extends BaseWallet {
     const input = await this.vaultInput(vault);
     const txNonce = terms.txNonce ?? Fr.random();
     const request = toVaultRequest(payload, terms.contracts);
+    // Made now, by the clock the deadline uses; a deadline already past (tests do this) is not before it was made.
+    const createdAt = Math.min(await this.chainTime(), terms.expiresAt);
     const built = buildProposal(input, await this.chain(), {
       ...request,
       txNonce: txNonce.toString(),
+      createdAt,
       expiresAt: terms.expiresAt,
       summary: terms.summary,
       proposer: terms.proposer,
