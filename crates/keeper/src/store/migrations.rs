@@ -97,4 +97,20 @@ pub(super) const MIGRATIONS: &[&str] = &[
         paired_at INTEGER NOT NULL
     );
     ",
+    // 2: contract artifacts, by class, in chunks.
+    "
+    CREATE TABLE artifacts (
+        class_id BLOB PRIMARY KEY,
+        count INTEGER NOT NULL,
+        hashes BLOB,
+        complete INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+    );
+    CREATE TABLE artifact_chunks (
+        class_id BLOB NOT NULL,
+        idx INTEGER NOT NULL,
+        bytes BLOB NOT NULL,
+        PRIMARY KEY (class_id, idx)
+    );
+    ",
 ];

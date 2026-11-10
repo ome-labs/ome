@@ -1,7 +1,8 @@
 //! Local `SQLite` database for public, non-secret state: committee manifests, ceremony status and results, proposals,
-//! payloads, votes and receipts, lobbies, the ECDH audit log and observed vault configs. Secrets never go here (see
+//! payloads, votes and receipts, contract artifacts, lobbies, the ECDH audit log and observed vault configs. Secrets never go here (see
 //! [`crate::custody`]).
 
+mod artifacts;
 mod migrations;
 
 use std::{path::Path, sync::Mutex};
@@ -16,6 +17,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{Error, Result};
+
+pub use artifacts::ArtifactRecord;
 
 /// Status of a stored manifest.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -118,7 +121,7 @@ impl Store {
         })
     }
 
-    fn with<T>(&self, f: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T> {
+    pub(super) fn with<T>(&self, f: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T> {
         let conn = self
             .conn
             .lock()
@@ -871,7 +874,7 @@ impl Store {
 }
 
 /// Unix seconds as the `SQLite` integer type.
-fn ts(seconds: u64) -> i64 {
+pub(super) fn ts(seconds: u64) -> i64 {
     i64::try_from(seconds).unwrap_or(i64::MAX)
 }
 

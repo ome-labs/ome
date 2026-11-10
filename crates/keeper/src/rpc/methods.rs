@@ -7,13 +7,14 @@ use ome_api::{
     API_VERSION, ErrorKind, Method, RpcError,
     jsonrpc::Request,
     keeper::{
-        self as api, ApprovalsList, ApprovalsPut, AuditList, CeremonyDkg, CeremonyReshare,
-        CeremonyStatusGet, DevicesList, DevicesOffer, DevicesReview, DevicesRevoke, EcdhBatch,
-        KeeperInfoGet, KeeperJoinRequest, LobbyClose, LobbyInspect, LobbyJoin, LobbyLeave,
-        LobbyList, LobbyOpen, LobbyStart, LobbyStatusGet, MailboxPoll, PayloadsGet, PayloadsPut,
-        PeersStatus, ProposalsGet, ProposalsList, ProposalsPut, ReceiptsList, ReceiptsPut,
-        RejectionsList, RejectionsPut, VaultList, VaultObserveConfig, VaultObserveTx,
-        VaultRegister, VaultRetire, VaultStatusGet, VaultSync, VaultUpdateSigners,
+        self as api, ApprovalsList, ApprovalsPut, ArtifactsFetch, ArtifactsGet, ArtifactsPut,
+        ArtifactsStatus, AuditList, CeremonyDkg, CeremonyReshare, CeremonyStatusGet, DevicesList,
+        DevicesOffer, DevicesReview, DevicesRevoke, EcdhBatch, KeeperInfoGet, KeeperJoinRequest,
+        LobbyClose, LobbyInspect, LobbyJoin, LobbyLeave, LobbyList, LobbyOpen, LobbyStart,
+        LobbyStatusGet, MailboxPoll, PayloadsGet, PayloadsPut, PeersStatus, ProposalsGet,
+        ProposalsList, ProposalsPut, ReceiptsList, ReceiptsPut, RejectionsList, RejectionsPut,
+        VaultList, VaultObserveConfig, VaultObserveTx, VaultRegister, VaultRetire, VaultStatusGet,
+        VaultSync, VaultUpdateSigners,
     },
 };
 use ome_protocol::vault::Config;
@@ -156,6 +157,20 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
         };
         PayloadsGet => |p: api::PayloadParams| async move {
             Ok(keeper.payload(p.vault.0, p.hash.0)?.map(Into::into))
+        };
+        ArtifactsPut => |p: api::ArtifactPutParams| async move {
+            convert::artifact_status(keeper.put_artifact(p.class_id.0, p.index, p.count, &p.bytes.0)?)
+        };
+        ArtifactsGet => |p: api::ArtifactChunkParams| async move {
+            Ok(keeper
+                .artifact_chunk(p.class_id.0, p.index)?
+                .map(|(count, bytes)| api::ArtifactChunk { count, bytes: bytes.into() }))
+        };
+        ArtifactsStatus => |p: api::ArtifactParams| async move {
+            convert::artifact_status(keeper.artifact_progress(p.class_id.0)?)
+        };
+        ArtifactsFetch => |p: api::ArtifactParams| async move {
+            convert::artifact_status(keeper.fetch_artifact(p.vault.0, p.class_id.0).await?)
         };
         ApprovalsPut => |p: api::BodyParams| async move { keeper.put_approval(p.vault.0, &p.body.0).await };
         ApprovalsList => |p: api::ProposalParams| async move { Ok(hex_bodies(keeper.approvals(p.proposal.0)?)) };

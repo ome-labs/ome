@@ -214,3 +214,14 @@ pub(super) fn lobby(me: &IdentityPublic, info: &LobbyInfo) -> api::Lobby {
         invite: info.invite.clone(),
     }
 }
+
+#[allow(clippy::unnecessary_wraps)] // Every method body returns a `Result`.
+pub(super) fn artifact_status(
+    progress: crate::service::artifacts::ArtifactProgress,
+) -> Result<api::ArtifactStatus> {
+    Ok(api::ArtifactStatus {
+        complete: progress.complete,
+        have: progress.have,
+        count: progress.count,
+    })
+}

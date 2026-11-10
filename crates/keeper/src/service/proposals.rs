@@ -262,7 +262,11 @@ impl Keeper {
     }
 
     /// The transport peer of `identity` if it is a member of `vault`'s active committee.
-    async fn member_peer(&self, vault: [u8; 32], identity: &IdentityPublic) -> Option<Peer> {
+    pub(crate) async fn member_peer(
+        &self,
+        vault: [u8; 32],
+        identity: &IdentityPublic,
+    ) -> Option<Peer> {
         let state = self.0.state.lock().await;
         let v = state
             .vaults

@@ -29,6 +29,7 @@ use crate::{
     limits::RateLimiter,
     random::random_bytes,
     service::{
+        artifacts::ArtifactFetch,
         devices::{Offers, is_device_message},
         lobby::{LobbyRecord, is_lobby_message, lobby_admission},
         proposals::Vote,
@@ -146,6 +147,8 @@ pub(crate) struct State {
     pub(crate) offers: Offers,
     /// Paired signing devices, by identity.
     pub(crate) devices: HashMap<IdentityPublic, DeviceRecord>,
+    /// Artifacts being fetched from members, by class.
+    pub(crate) artifact_fetches: HashMap<[u8; 32], ArtifactFetch>,
 }
 
 impl State {
@@ -219,6 +222,7 @@ impl Keeper {
             lobbies: HashMap::new(),
             offers: Offers::new(),
             devices: HashMap::new(),
+            artifact_fetches: HashMap::new(),
         };
         let (events, _) = broadcast::channel(1024);
         let keeper = Self(Arc::new(Inner {
@@ -507,6 +511,17 @@ impl Keeper {
             Message::PayloadRequest(request) => {
                 self.on_payload_request(signer, message.header, request)
                     .await;
+            }
+            Message::ArtifactRequest(request) => {
+                self.on_artifact_request(signer, message.header, request)
+                    .await;
+            }
+            Message::ArtifactManifest(manifest) => {
+                self.on_artifact_manifest(signer, message.header, manifest)
+                    .await;
+            }
+            Message::ArtifactChunk(chunk) => {
+                self.on_artifact_chunk(signer, message.header, chunk).await;
             }
             Message::Echo(echo) => self.on_echo(scope, &echo).await,
             body if is_ceremony_message(&body) => {
