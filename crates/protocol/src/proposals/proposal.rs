@@ -92,7 +92,9 @@ pub fn check_proposal(
         });
     }
     if now > proposal.expires_at {
-        return Err(Error::Expired);
+        return Err(Error::Expired {
+            at: proposal.expires_at,
+        });
     }
     if proposal.proposer == 0 || proposal.proposer > vault.signers().count() {
         return Err(Error::UnknownSlot(proposal.proposer.saturating_sub(1)));

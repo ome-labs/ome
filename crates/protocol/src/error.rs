@@ -90,7 +90,10 @@ pub enum Error {
     },
     /// The approval deadline has passed.
     #[error("approval deadline has passed")]
-    Expired,
+    Expired {
+        /// The deadline, Unix seconds.
+        at: u64,
+    },
     /// The proposal would make the vault pay fees publicly.
     #[error("fee method {0} pays fees from the vault in public")]
     PublicFeePayment(u8),

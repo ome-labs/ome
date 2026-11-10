@@ -92,7 +92,9 @@ fn a_proposal_protocol_refuses_is_never_signed() {
     );
     assert_eq!(
         sign(&proposal, &payload, NOW + 3601).err(),
-        Some(Error::Protocol(ProtocolError::Expired))
+        Some(Error::Protocol(ProtocolError::Expired {
+            at: proposal.expires_at
+        }))
     );
     assert_eq!(
         sign(&public_fee, &payload, NOW).err(),

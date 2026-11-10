@@ -74,7 +74,9 @@ fn stale_expired_foreign_and_publicly_paid_proposals_are_refused() {
     assert_eq!(check(|p| p.fee_method = 1), Err(Error::PublicFeePayment(1)));
     assert_eq!(
         check_proposal(&f.vault, chain(), &proposal, &payload, NOW + 3601),
-        Err(Error::Expired)
+        Err(Error::Expired {
+            at: proposal.expires_at
+        })
     );
 }
 
