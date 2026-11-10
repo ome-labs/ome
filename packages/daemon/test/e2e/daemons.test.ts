@@ -354,19 +354,26 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
         fn: "transfer_to_public",
         args: [vault, hex(amm), "100", nonce],
       };
-      // Only a contract the transaction calls may be granted an authwit.
+      // An authwit the transaction never uses (the AMM pulls 100, not 50) shows in the dry run and is refused.
+      const unused = {
+        kind: "calls" as const,
+        calls: [swap],
+        authwits: [{ caller: hex(amm), call: { ...pull, args: [vault, hex(amm), "50", nonce] } }],
+        memo: null,
+      };
+      const dryRun = await alice.client.call("proposals.preview", {
+        vault,
+        intent: unused,
+        expiresInHours: 1,
+      });
+      expect(dryRun.error?.failure).toEqual({
+        kind: "unusedAuthwit",
+        index: 0,
+        contract: hex(jade),
+      });
       await expect(
-        alice.client.call("proposals.preview", {
-          vault,
-          intent: {
-            kind: "calls",
-            calls: [swap],
-            authwits: [{ caller: hex(jade), call: pull }],
-            memo: null,
-          },
-          expiresInHours: 1,
-        }),
-      ).rejects.toThrow(/must be one of the proposal's calls/u);
+        alice.client.call("proposals.create", { vault, intent: unused, expiresInHours: 1 }),
+      ).rejects.toThrow(/never uses it/u);
       const created = await alice.client.call("proposals.create", {
         vault,
         intent: {
@@ -390,6 +397,9 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
         2000,
       );
       expect(review.checks.rebuilt).toBe(true);
+      // Bob's own simulation reaches OPAL only through the AMM; he fetches it from what the proposal lists.
+      expect(review.simulation.error?.message ?? null).toBeNull();
+      expect(review.simulation.ok).toBe(true);
       expect(review.proposal.authwits[0]).toMatchObject({
         caller: hex(amm),
         messageHash: created.authwits[0]?.messageHash,
@@ -397,10 +407,12 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       });
       await bob.client.call("proposals.approve", { vault, id: created.id });
       await alice.client.call("proposals.approve", { vault, id: created.id });
-      await status(alice, created.id, "ready");
-      expect((await alice.client.call("proposals.execute", { vault, id: created.id })).status).toBe(
+      await status(bob, created.id, "ready");
+      // Bob proves it with the contracts he fetched, OPAL included.
+      expect((await bob.client.call("proposals.execute", { vault, id: created.id })).status).toBe(
         "executed",
       );
+      await status(alice, created.id, "executed");
       const { result } = await TokenContract.at(jade.address, wallet)
         .methods.balance_of_private(AztecAddress.fromStringUnsafe(vault))
         .simulate({ from: AztecAddress.fromStringUnsafe(vault) });

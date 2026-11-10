@@ -84,20 +84,17 @@ export async function payloadOf(
 }
 
 /**
- * The private authwits an intent grants. Each caller must be one of the intent's own call targets: the vault lets a
- * contract act for it only inside the transaction that calls that contract.
+ * The private authwits an intent grants, each call built from its contract's artifact and private. Whether the
+ * transaction uses each one is read from its simulation (`ProposalService`), so a caller may be any contract the
+ * calls reach: an AMM behind a router.
  */
 export async function authwitsOf(context: Context, intent: Intent): Promise<VaultAuthwit[]> {
   if (intent.kind !== "calls") return [];
   const authwits: readonly IntentAuthwit[] = intent.authwits ?? [];
   require(authwits.length <=
     LIMITS.maxAuthwits, `a proposal grants at most ${LIMITS.maxAuthwits} authwits`);
-  const targets = new Set(intent.calls.map((call) => call.to.toLowerCase()));
   return Promise.all(
     authwits.map(async ({ caller, call }) => {
-      require(targets.has(
-        caller.toLowerCase(),
-      ), `an authwit's caller ${caller} must be one of the proposal's calls`);
       const [fn] = (await callPayload(context, call)).calls;
       if (!fn) throw new DaemonError("invalid", `${call.fn} built no call`);
       require(fn.type ===

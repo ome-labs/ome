@@ -110,22 +110,35 @@ export class ProposalService {
     const tx = await wallet.prepareVaultTx(vault, payload, { ...terms, txNonce });
     if (!share) return tx;
     const targets = [...payload.calls.map((call) => call.to), ...authwits.map((a) => a.call.to)];
-    const reached = await this.#reached(tx);
+    const { reached, unused } = await this.#reached(tx);
+    const [first] = unused;
+    if (first !== undefined)
+      throw new DaemonError(
+        "invalid",
+        `authwit ${first + 1} lets ${tx.authwits[first]?.call.to.toString()} act for the vault, but the transaction never uses it`,
+      );
     const contracts = await this.#context.contracts.forProposal([...targets, ...reached]);
     return wallet.prepareVaultTx(vault, payload, { ...terms, txNonce: tx.txNonce, contracts });
   }
 
-  /** The contracts `tx`'s simulation reaches besides the vault; none when it doesn't simulate. */
-  async #reached(tx: VaultTx): Promise<AztecAddress[]> {
+  /**
+   * The contracts `tx`'s simulation reaches besides the vault, and the authwits it never uses; neither when it doesn't
+   * simulate (approval then requires a simulation that does).
+   */
+  async #reached(tx: VaultTx): Promise<{ reached: AztecAddress[]; unused: number[] }> {
+    const wallet = this.#context.wallet();
+    let facts;
     try {
-      const wallet = this.#context.wallet();
-      const facts = await wallet.simulationFacts(tx, await wallet.previewVaultTx(tx));
-      return facts.contracts
-        .map((address) => AztecAddress.fromStringUnsafe(address))
-        .filter((address) => !address.equals(tx.vault));
+      facts = await wallet.simulationFacts(tx, await wallet.previewVaultTx(tx));
     } catch {
-      return [];
+      return { reached: [], unused: [] };
     }
+    return {
+      reached: facts.contracts
+        .map((address) => AztecAddress.fromStringUnsafe(address))
+        .filter((address) => !address.equals(tx.vault)),
+      unused: await wallet.unusedAuthwits(tx, facts),
+    };
   }
 
   /** What the member knows names for in `vault`. */
@@ -200,6 +213,20 @@ export class ProposalService {
       });
       const gas = result.gasUsed.totalGas;
       const facts = await wallet.simulationFacts(tx, result);
+      const [unused] = await wallet.unusedAuthwits(tx, facts);
+      if (unused !== undefined) {
+        const contract = (tx.authwits[unused]?.call.to.toString() ?? "") as Hex32;
+        return {
+          ok: false,
+          gas: null,
+          error: {
+            failure: { kind: "unusedAuthwit", index: unused, contract },
+            message: `the proposal grants authwit ${unused + 1} for ${contract}, which the transaction never uses`,
+          },
+          effects: null,
+          fee: null,
+        };
+      }
       const effects = await effectsOf(this.#context, vault, tx.payload.calls, facts, tokens);
       const used = { da: gas.daGas, l2: gas.l2Gas };
       const fee = await feeEstimate(this.#context, used).catch(() => null);
@@ -346,6 +373,7 @@ export class ProposalService {
     const { stored } = await this.#stored(params);
     this.#requireLocalKey(params.vault);
     const tx = await this.#rebuilt(stored);
+    if (tx.authwits.length > 0) await this.#requireAuthwitsUsed(params.vault, tx);
     const rotation = tx.payload.calls.some(
       (c) => c.to.toString() === params.vault && c.selector.value === ROTATE_MEMBERSHIP_SELECTOR,
     );
@@ -375,6 +403,20 @@ export class ProposalService {
         body: approval,
       });
     return this.get(params);
+  }
+
+  /**
+   * Refuses to approve authwits this member's own simulation can't show the transaction using: an authwit lets a
+   * contract act for the vault, so it is signed only when this transaction is seen asking for it.
+   */
+  async #requireAuthwitsUsed(vault: Hex32, tx: VaultTx): Promise<void> {
+    const simulation = await this.#simulate(vault, tx);
+    if (simulation.ok) return;
+    const reason = simulation.error?.message ?? "it doesn't simulate";
+    throw new DaemonError(
+      "invalid",
+      `the proposal grants authwits, and this device can't confirm the transaction uses them: ${reason}`,
+    );
   }
 
   async reject(params: RejectParams): Promise<ProposalView> {
