@@ -1,6 +1,6 @@
 {
   "name": "@ome-labs/wallet",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Aztec wallet for Ome vaults: the PXE with a threshold key store, vault deployment, and k-of-n proposals and execution",
   "keywords": [
     "account-abstraction",

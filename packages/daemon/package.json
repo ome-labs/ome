@@ -1,6 +1,6 @@
 {
   "name": "@ome-labs/daemon",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "omed, an Ome member's background service: the wallet, the sealed signer, keeper supervision and the daemon API",
   "keywords": [
     "aztec",
