@@ -261,6 +261,7 @@ fn vault(phone: WirePoint) -> (Manifest, Config, Vault) {
                 addresses: vec![],
             })
             .collect(),
+        extensions: ome_wire::Extensions::none(),
     };
     let signers = SignerSet::new(manifest.signer_keys().unwrap()).unwrap();
     let committee = Committee::new(2, manifest.verification_shares().unwrap()).unwrap();
@@ -293,6 +294,7 @@ fn proposal(vault: &Vault, amount: u64, nonce: u64) -> (Proposal, ProposalPayloa
             }],
             authwits: vec![],
             extras: vec![],
+            extensions: ome_wire::Extensions::none(),
         },
         tx_nonce: Base::from(nonce),
         created_at: now(),

@@ -1,5 +1,6 @@
 use ome_crypto::Base;
 use ome_wire::{
+    Extensions,
     codec::{from_canonical, to_canonical},
     limits::MAX_PAYLOAD_BYTES,
     messages::proposals::ProposalPayload,
@@ -28,6 +29,9 @@ pub struct ExecutionRequest {
     /// arguments), encoded by the daemon. It cannot change which calls run or with which arguments; contracts must
     /// constrain any hint they read from it.
     pub extras: Vec<u8>,
+    /// Additions a later release may make (none yet); signed with the calls, since the payload's hash is in the
+    /// proposal.
+    pub extensions: Extensions,
 }
 
 impl ExecutionRequest {
@@ -100,6 +104,7 @@ impl ExecutionRequest {
     }
 
     fn validate(&self) -> Result<(), Error> {
+        self.extensions.validate()?;
         if self.calls.len() > APP_MAX_CALLS {
             return Err(Error::TooManyCalls(self.calls.len()));
         }

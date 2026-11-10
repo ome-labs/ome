@@ -6,6 +6,11 @@
 /// Largest encoded [`crate::SignedMessage`] or message body.
 pub const MAX_MESSAGE_BYTES: usize = 1 << 20;
 
+/// Most extensions on one record.
+pub const MAX_EXTENSIONS: usize = 16;
+/// Largest extension.
+pub const MAX_EXTENSION_BYTES: usize = 4 * 1024;
+
 /// Most members of a vault: the contract's signer limit.
 pub const MAX_MEMBERS: usize = 8;
 /// Most network addresses per keeper.

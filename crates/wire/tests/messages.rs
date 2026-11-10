@@ -18,7 +18,7 @@ use ome_crypto::{
     },
 };
 use ome_wire::{
-    Error, Message, decode_body, encode_body,
+    Error, Extension, Extensions, Message, decode_body, encode_body,
     limits::MAX_AUTHWITS,
     messages::{
         ceremony::{Ceremony, DkgRound1, Justification, Manifest, ReshareDeal, SealedShare},
@@ -260,7 +260,7 @@ fn a_receipt_names_the_keeper_that_signed_it_for_this_vault() {
     assert_eq!(receipt.verify([0x0c; 32]), Err(Error::InvalidSignature));
     let moved = ExecutionReceipt {
         block: 43,
-        ..receipt
+        ..receipt.clone()
     };
     assert_eq!(moved.verify([0x0d; 32]), Err(Error::InvalidSignature));
     let claimed = ExecutionReceipt {
@@ -305,4 +305,36 @@ fn approvals_and_proposals_are_bounded_by_the_authwits_a_proposal_grants() {
         Message::Proposal(granting).validate(),
         Err(Error::OutOfBounds { field: "authwits" })
     );
+}
+
+#[test]
+fn an_unknown_extension_is_ignored_unless_critical() {
+    let extension = |id, critical| Extension {
+        id,
+        critical,
+        bytes: vec![1, 2, 3],
+    };
+    let with = |extensions: Vec<Extension>| {
+        let mut p = proposal();
+        p.extensions = Extensions(extensions);
+        Message::Proposal(p).validate()
+    };
+
+    assert_eq!(with(vec![extension(7, false)]), Ok(()));
+    assert_eq!(
+        with(vec![extension(7, true)]),
+        Err(Error::UnknownCriticalExtension(7))
+    );
+    // Canonical: ids strictly increasing, bounded.
+    let out = Err(Error::OutOfBounds {
+        field: "extensions",
+    });
+    assert_eq!(with(vec![extension(8, false), extension(7, false)]), out);
+    assert_eq!(with(vec![extension(7, false), extension(7, false)]), out);
+    assert_eq!(with((0..=16).map(|id| extension(id, false)).collect()), out);
+
+    // Extensions are inside the proposal's id: adding one changes it.
+    let mut extended = proposal();
+    extended.extensions = Extensions(vec![extension(7, false)]);
+    assert_ne!(extended.id().unwrap(), proposal().id().unwrap());
 }

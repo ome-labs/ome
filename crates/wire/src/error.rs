@@ -39,6 +39,9 @@ pub enum Error {
     /// The message timestamp is outside the accepted window.
     #[error("stale or future message")]
     Stale,
+    /// A record carries a critical extension this build doesn't know: it needs a newer release to be understood.
+    #[error("needs a newer release: unknown critical extension {0}")]
+    UnknownCriticalExtension(u16),
     /// A cryptographic value inside the message is invalid.
     #[error("invalid content: {0}")]
     Crypto(#[from] ome_crypto::Error),

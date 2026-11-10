@@ -31,6 +31,7 @@ pub fn outer_hash(
             calls: self::calls(calls)?,
             authwits: Vec::new(),
             extras: Vec::new(),
+            extensions: ome_wire::Extensions::none(),
         };
         let chain = convert::chain(from_js(chain)?)?;
         Ok(Hex32::from_field(&request.outer_hash(

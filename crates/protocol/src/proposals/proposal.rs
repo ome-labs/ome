@@ -63,6 +63,7 @@ impl Draft {
             payload: payload.reference()?,
             summary: self.summary.clone(),
             proposer: self.proposer,
+            extensions: ome_wire::Extensions::none(),
         };
         Ok((proposal, payload))
     }

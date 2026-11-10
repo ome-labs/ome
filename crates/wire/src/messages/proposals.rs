@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 
 use super::bounded;
 use crate::{
-    Error, IdentityPublic, KeeperIdentity,
+    Error, Extensions, IdentityPublic, KeeperIdentity,
     codec::canonical,
     limits::{
         MAX_AUTHWITS, MAX_PAYLOAD_BYTES, MAX_PAYLOAD_REQUESTS, MAX_REASON_BYTES, MAX_SUMMARY_BYTES,
@@ -72,6 +72,8 @@ pub struct Proposal {
     pub summary: String,
     /// Proposing member.
     pub proposer: MemberIndex,
+    /// Additions a later release may make (none yet).
+    pub extensions: Extensions,
 }
 
 impl Proposal {
@@ -95,6 +97,7 @@ impl Proposal {
             1,
             MAX_PAYLOAD_BYTES,
         )?;
+        self.extensions.validate()?;
         bounded("authwits", self.authwits.len(), 0, MAX_AUTHWITS)?;
         bounded("summary", self.summary.len(), 0, MAX_SUMMARY_BYTES)
     }
@@ -156,6 +159,8 @@ pub struct Approval {
     pub slot: u32,
     /// The signatures as contract limbs: the transaction's, then each authwit's in the proposal's order.
     pub signatures: Vec<WireSignature>,
+    /// Additions a later release may make (none yet).
+    pub extensions: Extensions,
 }
 
 impl Approval {
@@ -166,10 +171,12 @@ impl Approval {
             proposal,
             slot,
             signatures: signatures.iter().map(WireSignature::from).collect(),
+            extensions: Extensions::none(),
         }
     }
 
     pub(super) fn validate(&self) -> Result<(), Error> {
+        self.extensions.validate()?;
         bounded("signatures", self.signatures.len(), 1, 1 + MAX_AUTHWITS)
     }
 }
@@ -187,17 +194,20 @@ pub struct Rejection {
     pub reason: String,
     /// The signature as contract limbs.
     pub signature: WireSignature,
+    /// Additions a later release may make (none yet).
+    pub extensions: Extensions,
 }
 
 impl Rejection {
     pub(super) fn validate(&self) -> Result<(), Error> {
+        self.extensions.validate()?;
         bounded("reason", self.reason.len(), 0, MAX_REASON_BYTES)
     }
 }
 
 /// A proposal was executed in `tx_hash`, by the member whose keeper is `executor`. The executor's keeper signs it, so
 /// a receipt names its executor however it travels (sync re-sends other members' records under its own frames).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutionReceipt {
     /// Executed proposal id.
     pub proposal: [u8; 32],
@@ -207,6 +217,8 @@ pub struct ExecutionReceipt {
     pub block: u64,
     /// The executing member's keeper.
     pub executor: IdentityPublic,
+    /// Additions a later release may make (none yet), signed with the rest.
+    pub extensions: Extensions,
     /// Ed25519 signature by `executor` over the domain, the vault and the fields above.
     pub signature: Bytes64,
 }
@@ -224,6 +236,7 @@ impl ExecutionReceipt {
         block: u64,
     ) -> Result<Self, Error> {
         let executor = identity.public();
+        let extensions = Extensions::none();
         let signature = identity.sign(&canonical(&(
             RECEIPT_DOMAIN,
             vault,
@@ -231,12 +244,14 @@ impl ExecutionReceipt {
             tx_hash,
             block,
             executor,
+            &extensions,
         ))?);
         Ok(Self {
             proposal,
             tx_hash,
             block,
             executor,
+            extensions,
             signature,
         })
     }
@@ -254,6 +269,7 @@ impl ExecutionReceipt {
                 self.tx_hash,
                 self.block,
                 self.executor,
+                &self.extensions,
             ))?,
             &self.signature,
         )

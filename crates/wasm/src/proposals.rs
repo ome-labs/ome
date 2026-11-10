@@ -35,6 +35,7 @@ pub fn build_proposal(
                 calls: draft.calls.into_iter().map(convert::call).collect(),
                 authwits: draft.authwits.into_iter().map(convert::authwit).collect(),
                 extras: draft.extras.0,
+                extensions: ome_wire::Extensions::none(),
             },
             tx_nonce: draft.tx_nonce.to_field()?,
             created_at: draft.created_at,

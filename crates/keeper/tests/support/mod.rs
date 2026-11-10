@@ -275,6 +275,7 @@ pub fn manifest(
         preaddress: field(&preaddress),
         group_key: result.group_key,
         members,
+        extensions: ome_wire::Extensions::none(),
     };
     let config = config_of(&manifest, 0);
     (manifest, config, signers)
@@ -441,6 +442,7 @@ impl Vault {
                 calls: vec![call],
                 authwits: vec![],
                 extras: vec![],
+                extensions: ome_wire::Extensions::none(),
             },
             tx_nonce: Base::from(amount),
             created_at: 1_700_000_000,
@@ -478,6 +480,7 @@ impl Vault {
             slot,
             reason: "no".into(),
             signature: WireSignature::from(&signature),
+            extensions: ome_wire::Extensions::none(),
         }
     }
 }

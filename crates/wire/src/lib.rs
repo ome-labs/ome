@@ -8,6 +8,7 @@
 
 pub mod codec;
 mod error;
+pub mod extensions;
 mod identity;
 pub mod limits;
 pub mod messages;
@@ -18,6 +19,7 @@ pub mod version;
 
 pub use codec::{decode, decode_body, encode, encode_body};
 pub use error::Error;
+pub use extensions::{Extension, Extensions};
 pub use identity::{IdentityPublic, KeeperIdentity};
 pub use messages::Message;
 pub use replay::ReplayGuard;

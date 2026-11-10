@@ -93,6 +93,7 @@ pub fn manifest(signing_keys: &[SecretScalar], shares: &[KeyShare], threshold: u
                 addresses: vec![],
             })
             .collect(),
+        extensions: ome_wire::Extensions::none(),
     }
 }
 
@@ -190,6 +191,7 @@ pub fn request(amount: u64) -> ExecutionRequest {
         }],
         authwits: vec![],
         extras: vec![],
+        extensions: ome_wire::Extensions::none(),
     }
 }
 
@@ -213,6 +215,7 @@ pub fn swap_request(amount: u64) -> ExecutionRequest {
             call: call(0x1001, transfer, vec![0x1234, AMM, amount, 9]),
         }],
         extras: vec![],
+        extensions: ome_wire::Extensions::none(),
     }
 }
 
@@ -277,5 +280,6 @@ pub fn reject(fixture: &mut Fixture, proposal: &Proposal, slot: u32) -> Rejectio
         slot,
         reason: String::new(),
         signature: WireSignature::from(&signature),
+        extensions: ome_wire::Extensions::none(),
     }
 }

@@ -575,6 +575,7 @@ impl Keeper {
                     addresses: m.addresses.clone(),
                 })
                 .collect(),
+            extensions: ome_wire::Extensions::none(),
         };
         if manifest.group_key != old.group_key {
             return Err(Error::Invalid("reshare changed the group key".into()));

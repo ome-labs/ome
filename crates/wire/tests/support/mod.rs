@@ -122,6 +122,7 @@ pub fn manifest() -> Manifest {
                 addresses: vec![format!("/ip4/127.0.0.1/udp/400{i}/quic-v1")],
             })
             .collect(),
+        extensions: ome_wire::Extensions::none(),
     }
 }
 
@@ -143,6 +144,7 @@ pub fn proposal() -> Proposal {
         payload: payload().reference().unwrap(),
         summary: "transfer 10 to 0x05".to_owned(),
         proposer: 1,
+        extensions: ome_wire::Extensions::none(),
     }
 }
 
@@ -267,6 +269,7 @@ pub fn samples() -> Vec<(&'static str, Message)> {
                 proposal: proposal_id,
                 slot: 1,
                 signatures: vec![signature, signature],
+                extensions: ome_wire::Extensions::none(),
             }),
         ),
         (
@@ -276,6 +279,7 @@ pub fn samples() -> Vec<(&'static str, Message)> {
                 slot: 2,
                 reason: "wrong recipient".to_owned(),
                 signature,
+                extensions: ome_wire::Extensions::none(),
             }),
         ),
         (
@@ -361,6 +365,7 @@ pub fn samples() -> Vec<(&'static str, Message)> {
                     proposal: proposal_id,
                     slot: 0,
                     signatures: vec![signature],
+                    extensions: ome_wire::Extensions::none(),
                 }),
             }),
         ),

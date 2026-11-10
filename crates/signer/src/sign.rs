@@ -150,6 +150,7 @@ pub fn reject<S: Signer>(
         slot,
         reason: reason.to_owned(),
         signature: WireSignature::from(&signature),
+        extensions: ome_wire::Extensions::none(),
     })
 }
 

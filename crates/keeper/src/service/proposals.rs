@@ -403,7 +403,7 @@ impl Keeper {
     /// Stores a receipt its executor's keeper signed for this vault, and ends the claims on its proposal.
     async fn store_receipt(&self, vault: [u8; 32], receipt: &ExecutionReceipt) -> Result<()> {
         receipt.verify(vault)?;
-        let body = encode_body(&Message::ExecutionReceipt(*receipt))?;
+        let body = encode_body(&Message::ExecutionReceipt(receipt.clone()))?;
         let stored = self.0.store.put_receipt(
             &receipt.proposal,
             &vault,

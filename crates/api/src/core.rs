@@ -146,6 +146,7 @@ impl TryFrom<Manifest> for ceremony::Manifest {
                     })
                 })
                 .collect::<Result<_, InvalidValue>>()?,
+            extensions: ome_wire::Extensions::none(),
         })
     }
 }

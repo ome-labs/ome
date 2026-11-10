@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use super::bounded;
 use crate::{
-    Error, IdentityPublic, KeeperIdentity, codec::canonical, limits::MAX_NAME_BYTES, types::Bytes64,
+    Error, Extensions, IdentityPublic, KeeperIdentity, codec::canonical, limits::MAX_NAME_BYTES,
+    types::Bytes64,
 };
 
 /// Domain of a rename's signature.
@@ -34,6 +35,8 @@ pub struct NameChange {
     pub at: u64,
     /// The renaming member's keeper.
     pub by: IdentityPublic,
+    /// Additions a later release may make (none yet), signed with the rest.
+    pub extensions: Extensions,
     /// Ed25519 signature by `by` over the domain and the fields above.
     pub signature: Bytes64,
 }
@@ -52,13 +55,23 @@ impl NameChange {
     ) -> Result<Self, Error> {
         bounded("name", name.len(), 1, MAX_NAME_BYTES)?;
         let by = identity.public();
-        let signature = identity.sign(&canonical(&(NAME_DOMAIN, vault, subject, &name, at, by))?);
+        let extensions = Extensions::none();
+        let signature = identity.sign(&canonical(&(
+            NAME_DOMAIN,
+            vault,
+            subject,
+            &name,
+            at,
+            by,
+            &extensions,
+        ))?);
         Ok(Self {
             vault,
             subject,
             name,
             at,
             by,
+            extensions,
             signature,
         })
     }
@@ -77,12 +90,14 @@ impl NameChange {
                 &self.name,
                 self.at,
                 self.by,
+                &self.extensions,
             ))?,
             &self.signature,
         )
     }
 
     pub(super) fn validate(&self) -> Result<(), Error> {
+        self.extensions.validate()?;
         bounded("name", self.name.len(), 1, MAX_NAME_BYTES)
     }
 

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use super::bounded;
 use crate::{
-    Error, IdentityPublic,
+    Error, Extensions, IdentityPublic,
     limits::{
         MAX_ADDRESS_BYTES, MAX_ADDRESSES, MAX_ECHO_BYTES, MAX_MEMBERS, MAX_SEALED_SHARE_BYTES,
     },
@@ -44,6 +44,8 @@ pub struct Manifest {
     pub group_key: WirePoint,
     /// Members in slot order; member `i` (1-based) is signer slot `i - 1`.
     pub members: Vec<Member>,
+    /// Additions a later release may make (none yet).
+    pub extensions: Extensions,
 }
 
 /// One committee member.
@@ -71,6 +73,7 @@ impl Manifest {
     /// [`Error::UnsupportedVersion`] or [`Error::OutOfBounds`] naming the field.
     pub fn validate(&self) -> Result<(), Error> {
         version::require_supported(self.protocol_version)?;
+        self.extensions.validate()?;
         bounded("members", self.members.len(), 1, MAX_MEMBERS)?;
         let n = u32::try_from(self.members.len())
             .map_err(|_| Error::OutOfBounds { field: "members" })?;

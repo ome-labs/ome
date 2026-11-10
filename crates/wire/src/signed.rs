@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error, IdentityPublic, KeeperIdentity, Message,
+    Error, Extensions, IdentityPublic, KeeperIdentity, Message,
     codec::{canonical, to_canonical},
     limits::MAX_MESSAGE_BYTES,
     types::Bytes64,
@@ -32,9 +32,11 @@ pub struct SignedMessage {
     pub header: Header,
     /// The message.
     pub body: Message,
+    /// Additions to the envelope a later release may make (none yet).
+    pub extensions: Extensions,
     /// The sending keeper.
     pub signer: IdentityPublic,
-    /// Ed25519 signature over `"ome.wire.v0" ‖ canonical(version, header, body, signer)`.
+    /// Ed25519 signature over `"ome.wire.v0" ‖ canonical(version, header, body, extensions, signer)`.
     pub signature: Bytes64,
 }
 
@@ -52,12 +54,20 @@ impl SignedMessage {
     ) -> Result<Self, Error> {
         version::require_supported(version)?;
         body.validate()?;
+        let extensions = Extensions::none();
         let signer = identity.public();
-        let signature = identity.sign(&canonical(&(version, &header, &body, &signer))?);
+        let signature = identity.sign(&canonical(&(
+            version,
+            &header,
+            &body,
+            &extensions,
+            &signer,
+        ))?);
         let message = Self {
             version,
             header,
             body,
+            extensions,
             signer,
             signature,
         };
@@ -70,7 +80,13 @@ impl SignedMessage {
     /// # Errors
     /// [`Error::InvalidSignature`].
     pub fn verify(&self) -> Result<(), Error> {
-        let payload = canonical(&(self.version, &self.header, &self.body, &self.signer))?;
+        let payload = canonical(&(
+            self.version,
+            &self.header,
+            &self.body,
+            &self.extensions,
+            &self.signer,
+        ))?;
         self.signer.verify(&payload, &self.signature)
     }
 

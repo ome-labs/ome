@@ -23,6 +23,7 @@ pub fn encode(message: &SignedMessage) -> Result<Vec<u8>, Error> {
 pub fn decode(bytes: &[u8]) -> Result<SignedMessage, Error> {
     let message: SignedMessage = from_canonical(bytes, MAX_MESSAGE_BYTES)?;
     version::require_supported(message.version)?;
+    message.extensions.validate()?;
     message.body.validate()?;
     Ok(message)
 }
