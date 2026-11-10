@@ -3077,8 +3077,9 @@ export type IntentCall = {
 };
 
 /**
- * A private authwit a `calls` intent grants: `caller`, one of the intent's call targets, may make `call` on the
- * vault's behalf inside the transaction (a swap pulling the vault's tokens, say).
+ * A private authwit a `calls` intent grants: `caller`, a contract the transaction reaches (an AMM the calls invoke,
+ * directly or through a router), may make `call` on the vault's behalf once, inside the transaction. The
+ * transaction must use it: a proposal whose simulation never asks the vault about it is refused.
  */
 export type IntentAuthwit = {
   /**
@@ -4109,6 +4110,17 @@ export type SimulationFailure =
        * The contract that asked.
        */
       contract: Hex32 | null;
+    }
+  | {
+      kind: "unusedAuthwit";
+      /**
+       * Its position in the proposal's authwits.
+       */
+      index: number;
+      /**
+       * The contract that would have consumed it.
+       */
+      contract: Hex32;
     }
   | { kind: "nonceUsed" }
   | {

@@ -21,8 +21,9 @@ pub struct IntentCall {
     pub args: Vec<AbiValue>,
 }
 
-/// A private authwit a `calls` intent grants: `caller`, one of the intent's call targets, may make `call` on the
-/// vault's behalf inside the transaction (a swap pulling the vault's tokens, say).
+/// A private authwit a `calls` intent grants: `caller`, a contract the transaction reaches (an AMM the calls invoke,
+/// directly or through a router), may make `call` on the vault's behalf once, inside the transaction. The
+/// transaction must use it: a proposal whose simulation never asks the vault about it is refused.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct IntentAuthwit {
     /// The contract allowed to make the call.

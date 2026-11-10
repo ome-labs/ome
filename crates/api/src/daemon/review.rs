@@ -126,6 +126,13 @@ pub enum SimulationFailure {
         /// The contract that asked.
         contract: Option<Hex32>,
     },
+    /// The proposal grants an authwit the transaction never uses: no contract asked the vault about it.
+    UnusedAuthwit {
+        /// Its position in the proposal's authwits.
+        index: u32,
+        /// The contract that would have consumed it.
+        contract: Hex32,
+    },
     /// The proposal's nonce is spent: it was executed or cancelled.
     NonceUsed,
     /// A call reverted.

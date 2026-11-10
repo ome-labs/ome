@@ -467,6 +467,11 @@ pub(crate) fn simulation_failure(error: &SimulationError) -> String {
                 .as_ref()
                 .map_or_else(|| "a contract".to_owned(), format::short)
         ),
+        SimulationFailure::UnusedAuthwit { index, contract } => format!(
+            "it grants authwit {} for {}, which the transaction never uses",
+            index + 1,
+            format::short(contract)
+        ),
         SimulationFailure::NonceUsed => "it was already executed or cancelled".to_owned(),
         SimulationFailure::Reverted { function, .. } => match function {
             Some(function) => format!("{function} reverted: {}", error.message),
@@ -501,6 +506,14 @@ mod tests {
             message: String::new(),
         };
         assert!(simulation_failure(&short).starts_with("the vault holds too little 0x"));
+        let unused = SimulationError {
+            failure: SimulationFailure::UnusedAuthwit {
+                index: 0,
+                contract: Hex32([7; 32]),
+            },
+            message: String::new(),
+        };
+        assert!(simulation_failure(&unused).starts_with("it grants authwit 1 for 0x"));
         let lines = governance(&GovernanceChange::Threshold {
             before: 2,
             after: 3,
