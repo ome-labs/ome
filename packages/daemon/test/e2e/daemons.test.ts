@@ -7,7 +7,9 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Fr } from "@aztec-labs/foundation/curves/bn254";
 import { openStoreAt } from "@aztec-labs/kv-store/lmdb-v2";
+import { AMMContract } from "@aztec-labs/noir-contracts.js/AMM";
 import { PrivateVotingContract } from "@aztec-labs/noir-contracts.js/PrivateVoting";
 import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 import { contractArtifactToBuffer } from "@aztec-labs/stdlib/abi";
@@ -18,6 +20,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Member, PASSPHRASE, member, networkAvailable, until } from "./members.ts";
 
 const available = await networkAvailable();
+
+const hex = (c: { address: AztecAddress }) => c.address.toString() as Hex32;
 
 describe.skipIf(!available)("members' daemons on a local network", () => {
   let alice: Member; // member 1: founds and proposes
@@ -290,6 +294,117 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       expect((await bob.client.call("proposals.execute", { vault, id: created.id })).status).toBe(
         "executed",
       );
+    });
+
+    it("swaps through an AMM under an authwit: Bob reviews the authwit decoded, and the swap executes", async () => {
+      const from = AztecAddress.fromStringUnsafe(
+        (await alice.client.call("status", {})).profile?.account as Hex32,
+      );
+      const wallet = alice.daemon.wallet();
+      const send = { from, fee: alice.daemon.fee() };
+      const deploy = async (name: string, symbol: string) =>
+        (await TokenContract.deploy(wallet, from, name, symbol, 18).send(send)).contract;
+      const jade = await deploy("Jade", "JADE");
+      const opal = await deploy("Opal", "OPAL");
+      const shares = await deploy("Ome LP", "OLP");
+      const { contract: amm } = await AMMContract.deploy(
+        wallet,
+        jade.address,
+        opal.address,
+        shares.address,
+      ).send(send);
+      await shares.methods.set_minter(amm.address, true).send(send);
+      await jade.methods.mint_to_private(from, 10_000n).send(send);
+      await opal.methods.mint_to_private(from, 10_000n).send(send);
+      await jade.methods.mint_to_private(AztecAddress.fromStringUnsafe(vault), 1_000n).send(send);
+      const liquidityNonce = Fr.random();
+      const authWitnesses = await Promise.all(
+        [jade, opal].map(async (t) =>
+          wallet.createAuthWit(from, {
+            caller: amm.address,
+            call: await t.methods
+              .transfer_to_public_and_prepare_private_balance_increase(
+                from,
+                amm.address,
+                10_000n,
+                liquidityNonce,
+              )
+              .getFunctionCall(),
+          }),
+        ),
+      );
+      await amm.methods
+        .add_liquidity(10_000n, 10_000n, 9_000n, 9_000n, liquidityNonce)
+        .with({ authWitnesses })
+        .send(send);
+      await alice.client.call("contracts.register", {
+        address: hex(amm),
+        artifact: contractArtifactToBuffer(AMMContract.artifact).toString("utf8"),
+      });
+
+      // The AMM pulls 100 JADE from the vault under an authwit the members sign with the swap.
+      const nonce = Fr.random().toBigInt().toString();
+      const swap = {
+        to: hex(amm),
+        fn: "swap_exact_tokens_for_tokens",
+        args: [hex(jade), hex(opal), "100", "1", nonce],
+      };
+      const pull = {
+        to: hex(jade),
+        fn: "transfer_to_public",
+        args: [vault, hex(amm), "100", nonce],
+      };
+      // Only a contract the transaction calls may be granted an authwit.
+      await expect(
+        alice.client.call("proposals.preview", {
+          vault,
+          intent: {
+            kind: "calls",
+            calls: [swap],
+            authwits: [{ caller: hex(jade), call: pull }],
+            memo: null,
+          },
+          expiresInHours: 1,
+        }),
+      ).rejects.toThrow(/must be one of the proposal's calls/u);
+      const created = await alice.client.call("proposals.create", {
+        vault,
+        intent: {
+          kind: "calls",
+          calls: [swap],
+          authwits: [{ caller: hex(amm), call: pull }],
+          memo: "swap 100 JADE for OPAL",
+        },
+        expiresInHours: 1,
+      });
+      expect(created.authwits).toHaveLength(1);
+
+      await proposal(bob, created.id);
+      const review = await until(
+        async () => {
+          const r = await bob.client.call("proposals.review", { vault, id: created.id });
+          return r.proposal.authwits[0]?.call.decoded ? r : undefined;
+        },
+        "Bob's decoded authwit",
+        180_000,
+        2000,
+      );
+      expect(review.checks.rebuilt).toBe(true);
+      expect(review.proposal.authwits[0]).toMatchObject({
+        caller: hex(amm),
+        messageHash: created.authwits[0]?.messageHash,
+        call: { to: hex(jade), fn: "transfer_to_public" },
+      });
+      await bob.client.call("proposals.approve", { vault, id: created.id });
+      await alice.client.call("proposals.approve", { vault, id: created.id });
+      await status(alice, created.id, "ready");
+      expect((await alice.client.call("proposals.execute", { vault, id: created.id })).status).toBe(
+        "executed",
+      );
+      const { result } = await TokenContract.at(jade.address, wallet)
+        .methods.balance_of_private(AztecAddress.fromStringUnsafe(vault))
+        .simulate({ from: AztecAddress.fromStringUnsafe(vault) });
+      expect(result).toBe(900n);
     });
 
     it("shows the vault's balance before and after, names a shortfall, and reviews a threshold change", async () => {
