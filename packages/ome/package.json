@@ -1,6 +1,6 @@
 {
   "name": "@ome-labs/ome",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Ome, a private k-of-n multisig on Aztec: the ome command line, its daemon omed and the ome-keeper that holds your viewing share",
   "keywords": [
     "aztec",
