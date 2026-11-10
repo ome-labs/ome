@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use ome_api::keeper::{KeeperEvent, LobbyRole, LobbyStatus};
+use ome_api::keeper::{KeeperEvent, LobbyChange, LobbyChangeKind, LobbyRole, LobbyStatus};
 use ome_crypto::{
     Point,
     sealing::envelope::{Envelope, TransportPublic},
@@ -17,7 +17,7 @@ use ome_wire::{
     limits::{MAX_LOBBY_SECRETS_BYTES, MAX_MEMBERS, MAX_NAME_BYTES},
     messages::lobby::{
         Invite, JoinRequest, JoinSecret, KeeperContact, LobbyJoin, LobbyLeave, LobbyMember,
-        LobbyPlan, LobbyState, SealedSecrets, scope,
+        LobbyPlan, LobbyRemoved, LobbyState, SealedSecrets, scope,
     },
     types::{WireField, WirePoint, parse_field},
     version::SUPPORTED,
@@ -71,6 +71,12 @@ pub(crate) struct LobbyRecord {
     pub(crate) members: Vec<LobbyMember>,
     pub(crate) revision: u32,
     pub(crate) plan: Option<LobbyPlan>,
+    /// How many members the vault will have (0 for a lobby stored before lobbies had a size).
+    #[serde(default)]
+    pub(crate) expected: u8,
+    /// The host removed this keeper's member.
+    #[serde(default)]
+    pub(crate) removed: bool,
 }
 
 impl LobbyRecord {
@@ -97,10 +103,14 @@ pub struct LobbyOpen {
     pub threshold: u8,
     /// Proposed viewing threshold.
     pub viewing_threshold: u8,
+    /// How many members the vault will have, host included.
+    pub members: u8,
     /// Opaque network label.
     pub network: String,
     /// The host's display name.
     pub member_name: String,
+    /// The host's Aztec account.
+    pub member_account: WireField,
     /// The host's signing key.
     pub signer_key: WirePoint,
 }
@@ -149,6 +159,10 @@ pub struct LobbyInfo {
     pub plan: Option<LobbyPlanInfo>,
     /// The invite, while this keeper hosts the lobby and it is open.
     pub invite: Option<String>,
+    /// How many members the vault will have (0 when the lobby predates sizes).
+    pub expected: u8,
+    /// The host removed this keeper's member.
+    pub removed: bool,
 }
 
 fn participant(contact: &KeeperContact) -> Participant {
@@ -205,6 +219,7 @@ pub(crate) fn is_lobby_message(body: &Message) -> bool {
             | Message::LobbyState(_)
             | Message::LobbyPlan(_)
             | Message::LobbyLeave(_)
+            | Message::LobbyRemoved(_)
     )
 }
 
@@ -214,6 +229,7 @@ fn lobby_of(body: &Message) -> Option<[u8; 16]> {
         Message::LobbyState(m) => Some(m.lobby),
         Message::LobbyPlan(m) => Some(m.lobby),
         Message::LobbyLeave(m) => Some(m.lobby),
+        Message::LobbyRemoved(m) => Some(m.lobby),
         _ => None,
     }
 }
@@ -229,14 +245,20 @@ impl Keeper {
             .collect()
     }
 
-    /// A join request for a vault that already exists: `name` and `signer_key` with this keeper as the newcomer's,
-    /// signed by this keeper's identity, in its string form.
+    /// A join request for a vault that already exists: `name`, `account` and `signer_key` with this keeper as the
+    /// newcomer's, signed by this keeper's identity, in its string form.
     ///
     /// # Errors
     /// Bounds errors.
-    pub fn join_request(&self, name: String, signer_key: WirePoint) -> Result<String> {
+    pub fn join_request(
+        &self,
+        name: String,
+        account: WireField,
+        signer_key: WirePoint,
+    ) -> Result<String> {
         let member = LobbyMember {
             name,
+            account,
             signer_key,
             keeper: self.contact(),
         };
@@ -262,11 +284,20 @@ impl Keeper {
         )
     }
 
-    fn emit_lobby(&self, record: &LobbyRecord) {
+    fn emit_lobby(
+        &self,
+        record: &LobbyRecord,
+        kind: Option<LobbyChangeKind>,
+        member: Option<IdentityPublic>,
+    ) {
         self.emit(KeeperEvent::Lobby {
             lobby: record.lobby.into(),
             status: record.status,
             members: u32::try_from(record.members.len()).unwrap_or(u32::MAX),
+            change: kind.map(|kind| LobbyChange {
+                kind,
+                member: member.map(|m| m.0.into()),
+            }),
         });
     }
 
@@ -306,6 +337,17 @@ impl Keeper {
         check_name("member name", &request.member_name)?;
         check_name("network", &request.network)?;
         check_point(&request.signer_key)?;
+        parse_field(&request.member_account)?;
+        if !(2..=MAX_MEMBERS).contains(&usize::from(request.members)) {
+            return Err(Error::Invalid(format!(
+                "a vault has 2 to {MAX_MEMBERS} members"
+            )));
+        }
+        check_thresholds(
+            request.threshold,
+            request.viewing_threshold,
+            usize::from(request.members),
+        )?;
         let lobby: [u8; 16] = random_bytes();
         let invite = Invite {
             lobby,
@@ -315,12 +357,14 @@ impl Keeper {
             name: request.name.clone(),
             threshold: request.threshold,
             viewing_threshold: request.viewing_threshold,
+            members: request.members,
             network: request.network.clone(),
         };
         let text = invite.encode()?;
         self.0.secrets.put(&secret_name(&lobby), &invite.secret.0)?;
         let me = LobbyMember {
             name: request.member_name,
+            account: request.member_account,
             signer_key: request.signer_key,
             keeper: invite.host.clone(),
         };
@@ -338,13 +382,15 @@ impl Keeper {
             me,
             revision: 0,
             plan: None,
+            expected: invite.members,
+            removed: false,
         };
         self.persist_lobby(&record)?;
         let mut state = self.0.state.lock().await;
         state.lobbies.insert(lobby, record.clone());
         self.refresh_allowlist(&state);
         drop(state);
-        self.emit_lobby(&record);
+        self.emit_lobby(&record, Some(LobbyChangeKind::Opened), None);
         Ok((lobby, text))
     }
 
@@ -358,17 +404,20 @@ impl Keeper {
         &self,
         invite: &str,
         member_name: String,
+        member_account: WireField,
         signer_key: WirePoint,
     ) -> Result<[u8; 16]> {
         let invite = Invite::decode(invite)?;
         check_name("member name", &member_name)?;
         check_point(&signer_key)?;
+        parse_field(&member_account)?;
         if invite.host.identity == self.identity() {
             return Err(Error::Invalid("this keeper hosts the lobby".into()));
         }
         let lobby = invite.lobby;
         let me = LobbyMember {
             name: member_name,
+            account: member_account,
             signer_key,
             keeper: self.contact(),
         };
@@ -402,6 +451,8 @@ impl Keeper {
                     members: Vec::new(),
                     revision: 0,
                     plan: None,
+                    expected: invite.members,
+                    removed: false,
                 },
             };
             self.0.secrets.put(&secret_name(&lobby), &invite.secret.0)?;
@@ -420,7 +471,7 @@ impl Keeper {
                 member: me,
             }),
         )?;
-        self.emit_lobby(&record);
+        self.emit_lobby(&record, Some(LobbyChangeKind::Opened), None);
         if self
             .send_with_retry(
                 Peer::from(&participant(&invite.host)),
@@ -464,6 +515,12 @@ impl Keeper {
             return Err(Error::Invalid(
                 "only the host can start an open lobby".into(),
             ));
+        }
+        if record.expected > 0 && record.members.len() != usize::from(record.expected) {
+            return Err(Error::Incomplete {
+                joined: record.members.len(),
+                expected: usize::from(record.expected),
+            });
         }
         check_thresholds(threshold, viewing_threshold, record.members.len())?;
         let session: [u8; 32] = random_bytes();
@@ -509,7 +566,7 @@ impl Keeper {
         self.refresh_allowlist(&state);
         drop(state);
         self.send_lobby_frame(record.peers(&self.identity()), &frame);
-        self.emit_lobby(&record);
+        self.emit_lobby(&record, Some(LobbyChangeKind::Started), None);
         self.lobby_info(&record, true)
     }
 
@@ -546,8 +603,110 @@ impl Keeper {
         self.refresh_allowlist(&state);
         drop(state);
         self.send_lobby_frame(peers, &frame);
-        self.emit_lobby(&record);
+        self.emit_lobby(&record, Some(LobbyChangeKind::Closed), None);
         self.lobby_info(&record, false)
+    }
+
+    /// Host: removes `member` from an open lobby, tells it so, and rotates the invite secret so the invite it joined
+    /// with no longer admits anyone; the remaining guests get the new roster and the host the new invite.
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] unless this keeper hosts the open lobby and `member` is a guest on it.
+    pub async fn remove_from_lobby(
+        &self,
+        lobby: [u8; 16],
+        member: IdentityPublic,
+    ) -> Result<LobbyInfo> {
+        let mut state = self.0.state.lock().await;
+        let record = state
+            .lobbies
+            .get(&lobby)
+            .filter(|r| r.role == LobbyRole::Host && r.status == LobbyStatus::Open)
+            .ok_or_else(|| {
+                Error::Invalid("only the host can remove someone from an open lobby".into())
+            })?;
+        if member == self.identity() {
+            return Err(Error::Invalid("the host closes its lobby instead".into()));
+        }
+        let removed = record
+            .members
+            .iter()
+            .find(|m| m.keeper.identity == member)
+            .map(|m| participant(&m.keeper))
+            .ok_or_else(|| Error::Invalid("no such member in the lobby".into()))?;
+        let mut record = record.clone();
+        record.members.retain(|m| m.keeper.identity != member);
+        self.0
+            .secrets
+            .put(&secret_name(&lobby), &JoinSecret(random_bytes()).0)?;
+        let (notice, _) = self.sign(
+            scope(&lobby),
+            0,
+            Message::LobbyRemoved(LobbyRemoved { lobby }),
+        )?;
+        // It may still be retrying its join: keep its connection a little longer.
+        let until = self.now() + self.0.config.round_timeout_secs;
+        let entry = state
+            .lingering
+            .entry(scope(&lobby))
+            .or_insert((until, Vec::new()));
+        entry.0 = until;
+        entry.1.push(removed.clone());
+        let (peers, frame) =
+            self.roster_changed(&mut state, record, LobbyChangeKind::Removed, Some(member))?;
+        let info = self.lobby_info(state.lobbies.get(&lobby).ok_or(Error::UnknownVault)?, false)?;
+        drop(state);
+        self.send_lobby_frame(vec![removed], &notice);
+        self.send_lobby_frame(peers, &frame);
+        Ok(info)
+    }
+
+    /// Host: changes an open lobby's size or thresholds; the guests get the new roster and the host the new invite.
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] unless this keeper hosts the open lobby and the new plan fits (a size from 2 to 8 and no
+    /// smaller than the roster, thresholds within it).
+    pub async fn update_lobby(
+        &self,
+        lobby: [u8; 16],
+        members: Option<u8>,
+        threshold: Option<u8>,
+        viewing_threshold: Option<u8>,
+    ) -> Result<LobbyInfo> {
+        let mut state = self.0.state.lock().await;
+        let record = state
+            .lobbies
+            .get(&lobby)
+            .filter(|r| r.role == LobbyRole::Host && r.status == LobbyStatus::Open)
+            .ok_or_else(|| Error::Invalid("only the host can change an open lobby".into()))?;
+        let mut record = record.clone();
+        if let Some(members) = members {
+            if !(2..=MAX_MEMBERS).contains(&usize::from(members)) {
+                return Err(Error::Invalid(format!(
+                    "a vault has 2 to {MAX_MEMBERS} members"
+                )));
+            }
+            if usize::from(members) < record.members.len() {
+                return Err(Error::Invalid(format!(
+                    "{} members have joined already; remove some first",
+                    record.members.len()
+                )));
+            }
+            record.expected = members;
+        }
+        record.threshold = threshold.unwrap_or(record.threshold);
+        record.viewing_threshold = viewing_threshold.unwrap_or(record.viewing_threshold);
+        check_thresholds(
+            record.threshold,
+            record.viewing_threshold,
+            usize::from(record.expected.max(2)),
+        )?;
+        let (peers, frame) =
+            self.roster_changed(&mut state, record, LobbyChangeKind::Updated, None)?;
+        let info = self.lobby_info(state.lobbies.get(&lobby).ok_or(Error::UnknownVault)?, false)?;
+        drop(state);
+        self.send_lobby_frame(peers, &frame);
+        Ok(info)
     }
 
     /// A lobby, with this member's opened plan secrets when `with_secrets`.
@@ -619,6 +778,9 @@ impl Keeper {
                     name: record.name.clone(),
                     threshold: record.threshold,
                     viewing_threshold: record.viewing_threshold,
+                    members: record
+                        .expected
+                        .max(record.members.len().try_into().unwrap_or(u8::MAX)),
                     network: record.network.clone(),
                 }
                 .encode()?,
@@ -639,6 +801,8 @@ impl Keeper {
             members: record.members.clone(),
             plan,
             invite,
+            expected: record.expected,
+            removed: record.removed,
         })
     }
 
@@ -711,6 +875,7 @@ impl Keeper {
             Message::LobbyState(roster) => self.on_lobby_state(&mut state, signer, roster),
             Message::LobbyPlan(plan) => self.on_lobby_plan(&mut state, signer, plan),
             Message::LobbyLeave(leave) => self.on_lobby_leave(&mut state, signer, leave),
+            Message::LobbyRemoved(removed) => self.on_lobby_removed(&mut state, signer, removed),
             _ => Ok(None),
         };
         drop(state);
@@ -759,10 +924,13 @@ impl Keeper {
                 return Err(Error::Invalid("transport key already on the roster".into()));
             }
         }
-        if count > MAX_MEMBERS {
-            return Err(Error::Full {
-                members: MAX_MEMBERS,
-            });
+        let limit = if record.expected > 0 {
+            usize::from(record.expected)
+        } else {
+            MAX_MEMBERS
+        };
+        if count > limit {
+            return Err(Error::Full { members: limit });
         }
         let mut record = record.clone();
         match record
@@ -773,7 +941,8 @@ impl Keeper {
             Some(existing) => *existing = member,
             None => record.members.push(member),
         }
-        self.roster_changed(state, record).map(Some)
+        self.roster_changed(state, record, LobbyChangeKind::Joined, Some(signer))
+            .map(Some)
     }
 
     /// Host: persists a changed roster, re-admits peers and signs the state for every guest.
@@ -781,6 +950,8 @@ impl Keeper {
         &self,
         state: &mut State,
         mut record: LobbyRecord,
+        kind: LobbyChangeKind,
+        member: Option<IdentityPublic>,
     ) -> Result<(Vec<Participant>, Vec<u8>)> {
         record.revision += 1;
         let (frame, _) = self.sign(
@@ -792,13 +963,14 @@ impl Keeper {
                 name: record.name.clone(),
                 threshold: record.threshold,
                 viewing_threshold: record.viewing_threshold,
+                expected: record.expected,
                 members: record.members.clone(),
                 started: record.status == LobbyStatus::Started,
             }),
         )?;
         self.persist_lobby(&record)?;
         let peers = record.peers(&self.identity());
-        self.emit_lobby(&record);
+        self.emit_lobby(&record, Some(kind), member);
         state.lobbies.insert(record.lobby, record);
         self.refresh_allowlist(state);
         Ok((peers, frame))
@@ -825,13 +997,32 @@ impl Keeper {
             return Ok(None);
         }
         let mut record = record.clone();
+        let joined: Vec<IdentityPublic> = roster
+            .members
+            .iter()
+            .map(|m| m.keeper.identity)
+            .filter(|id| !record.members.iter().any(|m| &m.keeper.identity == id))
+            .collect();
+        let left = record
+            .members
+            .iter()
+            .map(|m| m.keeper.identity)
+            .find(|id| !roster.members.iter().any(|m| &m.keeper.identity == id));
+        let kind = if joined.is_empty() && left.is_none() {
+            (LobbyChangeKind::Updated, None)
+        } else if let Some(id) = joined.first() {
+            (LobbyChangeKind::Joined, Some(*id))
+        } else {
+            (LobbyChangeKind::Left, left)
+        };
         record.revision = roster.revision;
         record.name = roster.name;
         record.threshold = roster.threshold;
         record.viewing_threshold = roster.viewing_threshold;
+        record.expected = roster.expected;
         record.members = roster.members;
         self.persist_lobby(&record)?;
-        self.emit_lobby(&record);
+        self.emit_lobby(&record, Some(kind.0), kind.1);
         state.lobbies.insert(record.lobby, record);
         Ok(None)
     }
@@ -883,7 +1074,7 @@ impl Keeper {
         self.persist_lobby(&record)?;
         self.0.secrets.destroy(&secret_name(&record.lobby))?;
         self.linger_lobby(state, &record);
-        self.emit_lobby(&record);
+        self.emit_lobby(&record, Some(LobbyChangeKind::Started), None);
         state.lobbies.insert(record.lobby, record);
         self.refresh_allowlist(state);
         Ok(None)
@@ -926,7 +1117,8 @@ impl Keeper {
                     entry.0 = until;
                     entry.1.push(leaving);
                 }
-                self.roster_changed(state, record).map(Some)
+                self.roster_changed(state, record, LobbyChangeKind::Left, Some(signer))
+                    .map(Some)
             }
             LobbyRole::Guest => {
                 if signer != record.host.identity {
@@ -936,12 +1128,42 @@ impl Keeper {
                 record.status = LobbyStatus::Closed;
                 self.persist_lobby(&record)?;
                 self.0.secrets.destroy(&secret_name(&record.lobby))?;
-                self.emit_lobby(&record);
+                self.emit_lobby(&record, Some(LobbyChangeKind::Closed), None);
                 state.lobbies.insert(record.lobby, record);
                 self.refresh_allowlist(state);
                 Ok(None)
             }
         }
+    }
+
+    /// Guest: the host removed this member from the lobby.
+    fn on_lobby_removed(
+        &self,
+        state: &mut State,
+        signer: IdentityPublic,
+        removed: LobbyRemoved,
+    ) -> Result<Option<(Vec<Participant>, Vec<u8>)>> {
+        let record = state
+            .lobbies
+            .get(&removed.lobby)
+            .filter(|r| r.role == LobbyRole::Guest && r.status == LobbyStatus::Open)
+            .ok_or_else(|| Error::Invalid("not an open lobby this keeper joined".into()))?;
+        if signer != record.host.identity {
+            return Ok(None);
+        }
+        let mut record = record.clone();
+        record.status = LobbyStatus::Closed;
+        record.removed = true;
+        self.persist_lobby(&record)?;
+        self.0.secrets.destroy(&secret_name(&record.lobby))?;
+        self.emit_lobby(
+            &record,
+            Some(LobbyChangeKind::Removed),
+            Some(self.identity()),
+        );
+        state.lobbies.insert(record.lobby, record);
+        self.refresh_allowlist(state);
+        Ok(None)
     }
 }
 

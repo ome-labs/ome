@@ -117,4 +117,15 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "
     ALTER TABLE receipts ADD COLUMN body BLOB;
     ",
+    // 6: renames of a vault and of its members, every one kept; the newest per subject is the name.
+    "
+    CREATE TABLE names (
+        vault BLOB NOT NULL,
+        subject TEXT NOT NULL CHECK (subject IN ('vault', 'member')),
+        by BLOB NOT NULL,
+        at INTEGER NOT NULL,
+        body BLOB NOT NULL,
+        PRIMARY KEY (vault, subject, by, at)
+    );
+    ",
 ];

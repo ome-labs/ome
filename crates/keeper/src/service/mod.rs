@@ -8,6 +8,7 @@ pub(crate) mod devices;
 pub(crate) mod ecdh;
 pub(crate) mod lobby;
 pub(crate) mod mailbox;
+pub(crate) mod names;
 pub(crate) mod peers;
 pub(crate) mod proposals;
 pub(crate) mod sync;

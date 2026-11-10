@@ -633,6 +633,43 @@ impl Store {
         })
     }
 
+    // --- Names -------------------------------------------------------------------------------------------------------
+
+    /// Stores a rename's signed body. Returns whether it was new.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn put_name(
+        &self,
+        vault: &[u8; 32],
+        subject: &str,
+        by: &[u8; 32],
+        at: u64,
+        body: &[u8],
+    ) -> Result<bool> {
+        self.with(|c| {
+            c.execute(
+                "INSERT OR IGNORE INTO names (vault, subject, by, at, body) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![vault, subject, by, ts(at), body],
+            )
+            .map(|n| n > 0)
+        })
+    }
+
+    /// Every rename body of `vault`, oldest first.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn names(&self, vault: &[u8; 32]) -> Result<Vec<Vec<u8>>> {
+        self.with(|c| {
+            let mut statement =
+                c.prepare("SELECT body FROM names WHERE vault = ?1 ORDER BY at, by")?;
+            statement
+                .query_map(params![vault], |row| row.get(0))?
+                .collect()
+        })
+    }
+
     // --- Lobbies -----------------------------------------------------------------------------------------------------
 
     /// Inserts or replaces a lobby with its role, status and record (JSON).

@@ -13,8 +13,10 @@ pub(super) async fn open(keeper: &Keeper, p: api::LobbyOpenParams) -> Result<api
             name: p.name,
             threshold: p.threshold,
             viewing_threshold: p.viewing_threshold,
+            members: p.members,
             network: p.network,
             member_name: p.member.name,
+            member_account: p.member.account.0,
             signer_key: p.member.signer_key.try_into()?,
         })
         .await?;
@@ -27,7 +29,7 @@ pub(super) async fn open(keeper: &Keeper, p: api::LobbyOpenParams) -> Result<api
 pub(super) async fn join(keeper: &Keeper, p: api::LobbyJoinParams) -> Result<api::LobbyJoined> {
     let signer_key = p.member.signer_key.try_into()?;
     let lobby = keeper
-        .join_lobby(&p.invite, p.member.name, signer_key)
+        .join_lobby(&p.invite, p.member.name, p.member.account.0, signer_key)
         .await?;
     Ok(api::LobbyJoined {
         lobby: lobby.into(),
@@ -64,6 +66,20 @@ pub(super) async fn start(keeper: &Keeper, p: api::LobbyStartParams) -> Result<a
             p.salt.0,
             &secrets,
         )
+        .await?;
+    Ok(convert::lobby(&keeper.identity(), &info))
+}
+
+pub(super) async fn remove(keeper: &Keeper, p: api::LobbyRemoveParams) -> Result<api::Lobby> {
+    let info = keeper
+        .remove_from_lobby(p.lobby.0, ome_wire::IdentityPublic(p.identity.0))
+        .await?;
+    Ok(convert::lobby(&keeper.identity(), &info))
+}
+
+pub(super) async fn update(keeper: &Keeper, p: api::LobbyUpdateParams) -> Result<api::Lobby> {
+    let info = keeper
+        .update_lobby(p.lobby.0, p.members, p.threshold, p.viewing_threshold)
         .await?;
     Ok(convert::lobby(&keeper.identity(), &info))
 }

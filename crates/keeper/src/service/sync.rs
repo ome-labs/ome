@@ -158,6 +158,12 @@ impl Keeper {
                 records.push(decode_body(&body)?);
             }
         }
+        // Names are few: every member gets the current ones, whatever it holds.
+        records.extend(
+            self.latest_names(*vault)?
+                .into_iter()
+                .map(Message::NameChange),
+        );
         records.truncate(MAX_SYNC_RECORDS);
         Ok(records)
     }

@@ -197,6 +197,7 @@ pub(super) fn invite(invite: &Invite) -> api::Invite {
         host_name: invite.host_name.clone(),
         threshold: invite.threshold,
         viewing_threshold: invite.viewing_threshold,
+        members: invite.members,
         network: invite.network.clone(),
         host: contact(&invite.host),
     }
@@ -211,8 +212,10 @@ pub(super) fn lobby(me: &IdentityPublic, info: &LobbyInfo) -> api::Lobby {
         host_name: info.host_name.clone(),
         threshold: info.threshold,
         viewing_threshold: info.viewing_threshold,
+        expected: info.expected,
         network: info.network.clone(),
         host: contact(&info.host),
+        removed: info.removed,
         members: info
             .members
             .iter()
@@ -220,6 +223,7 @@ pub(super) fn lobby(me: &IdentityPublic, info: &LobbyInfo) -> api::Lobby {
             .map(|(m, index)| api::LobbyMember {
                 index,
                 name: m.name.clone(),
+                account: m.account.into(),
                 signer_key: Point::from(&m.signer_key),
                 identity: m.keeper.identity.0.into(),
                 transport: m.keeper.transport.into(),

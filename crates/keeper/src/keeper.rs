@@ -590,5 +590,6 @@ fn is_replicated(body: &Message) -> bool {
             | Message::Approval(_)
             | Message::Rejection(_)
             | Message::ExecutionReceipt(_)
+            | Message::NameChange(_)
     )
 }

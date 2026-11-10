@@ -11,10 +11,11 @@ use ome_api::{
         ArtifactsStatus, AuditList, CeremonyDkg, CeremonyReshare, CeremonyStatusGet, ClaimsList,
         ClaimsPut, DevicesList, DevicesOffer, DevicesReview, DevicesRevoke, EcdhBatch,
         KeeperInfoGet, KeeperJoinRequest, LobbyClose, LobbyInspect, LobbyJoin, LobbyLeave,
-        LobbyList, LobbyOpen, LobbyStart, LobbyStatusGet, MailboxPoll, PayloadsGet, PayloadsPut,
-        PeersStatus, ProposalsGet, ProposalsList, ProposalsPut, ReceiptsList, ReceiptsPut,
-        RejectionsList, RejectionsPut, VaultList, VaultObserveConfig, VaultObserveTx,
-        VaultRegister, VaultRetire, VaultStatusGet, VaultSync, VaultUpdateSigners,
+        LobbyList, LobbyOpen, LobbyRemove, LobbyStart, LobbyStatusGet, LobbyUpdate, MailboxPoll,
+        NamesList, NamesPut, PayloadsGet, PayloadsPut, PeersStatus, ProposalsGet, ProposalsList,
+        ProposalsPut, ReceiptsList, ReceiptsPut, RejectionsList, RejectionsPut, VaultList,
+        VaultObserveConfig, VaultObserveTx, VaultRegister, VaultRetire, VaultStatusGet, VaultSync,
+        VaultUpdateSigners,
     },
 };
 use ome_protocol::vault::Config;
@@ -82,7 +83,7 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
     route! { request;
         KeeperInfoGet => |_| async { Ok(info(keeper)) };
         KeeperJoinRequest => |p: api::LobbyMemberParams| async move {
-            let request = keeper.join_request(p.name, p.signer_key.try_into()?)?;
+            let request = keeper.join_request(p.name, p.account.0, p.signer_key.try_into()?)?;
             Ok(api::JoinRequestText { request })
         };
         VaultList => |_| async { Ok(keeper.vaults().await.iter().map(convert::vault).collect()) };
@@ -199,6 +200,10 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
             keeper.put_claim(p.vault.0, p.proposal.0, p.phase, p.started_at).await
         };
         ClaimsList => |p: api::VaultParams| async move { Ok(keeper.claims(p.vault.0).await) };
+        NamesPut => |p: api::NamePutParams| async move {
+            keeper.put_name(p.vault.0, p.subject, p.name).await
+        };
+        NamesList => |p: api::VaultParams| async move { keeper.names(p.vault.0).await };
         AuditList => |p: api::AuditParams| async move {
             let limit = p.limit.unwrap_or(100).min(MAX_AUDIT);
             Ok(keeper.audit_log(p.vault.0, limit)?.into_iter().map(convert::audit).collect())
@@ -211,6 +216,8 @@ pub(super) async fn call(keeper: &Keeper, request: &Request) -> Result<Value, Rp
         LobbyStart => |p| lobby::start(keeper, p);
         LobbyClose => |p: api::LobbyParams| lobby::close(keeper, p, api::LobbyRole::Host);
         LobbyLeave => |p: api::LobbyParams| lobby::close(keeper, p, api::LobbyRole::Guest);
+        LobbyRemove => |p: api::LobbyRemoveParams| lobby::remove(keeper, p);
+        LobbyUpdate => |p: api::LobbyUpdateParams| lobby::update(keeper, p);
         DevicesOffer => |p| devices::offer(keeper, p);
         DevicesList => |_| devices::list(keeper);
         DevicesRevoke => |p: api::DeviceParams| async move {

@@ -237,6 +237,10 @@ impl Keeper {
                 _ => return,
             },
             Message::ExecutionReceipt(receipt) => self.store_receipt(vault, &receipt).await,
+            Message::NameChange(change) => {
+                self.on_name(&header, change).await;
+                Ok(())
+            }
             _ => Ok(()),
         };
         if let Err(error) = result {

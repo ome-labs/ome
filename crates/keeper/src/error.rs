@@ -44,8 +44,16 @@ pub enum Error {
         /// Members that answered with valid partials.
         received: usize,
     },
-    /// The lobby already has as many members as a vault can.
-    #[error("the lobby is full: a vault has at most {members} members")]
+    /// The lobby hasn't been joined by every member it plans for.
+    #[error("{joined} of {expected} members have joined the lobby")]
+    Incomplete {
+        /// Members on the roster.
+        joined: usize,
+        /// Members the lobby plans for.
+        expected: usize,
+    },
+    /// The lobby has as many members as it plans for.
+    #[error("the lobby is full: it plans for {members} members")]
     Full {
         /// Members it takes.
         members: usize,
@@ -95,7 +103,7 @@ impl Error {
             | Self::Protocol(_) => ErrorKind::Invalid,
             Self::Unavailable { .. } => ErrorKind::Unreadable,
             Self::Full { .. } => ErrorKind::Full,
-            Self::RateLimited | Self::Transport(_) => ErrorKind::NotReady,
+            Self::RateLimited | Self::Transport(_) | Self::Incomplete { .. } => ErrorKind::NotReady,
             Self::DataDir(_)
             | Self::Unseal(_)
             | Self::MissingSecret(_)
@@ -118,6 +126,9 @@ impl Error {
             }),
             Self::Full { members } => Some(ErrorDetails::Full {
                 members: count(*members),
+            }),
+            Self::Incomplete { .. } => Some(ErrorDetails::NotReady {
+                reason: ome_api::NotReadyReason::Members,
             }),
             _ => None,
         }

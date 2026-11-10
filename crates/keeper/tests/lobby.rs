@@ -21,8 +21,10 @@ fn open_request(name: &str) -> LobbyOpen {
         name: "Treasury".into(),
         threshold: 2,
         viewing_threshold: 2,
+        members: 3,
         network: "local-network".into(),
         member_name: name.into(),
+        member_account: [0x01; 32],
         signer_key: point(100),
     }
 }
@@ -60,7 +62,7 @@ async fn lobby_of_three(harness: &Harness) -> ([TestKeeper; 3], [u8; 16], String
     for (k, (name, seed)) in keepers[1..].iter().zip([("Grace", 101), ("Alan", 102)]) {
         assert_eq!(
             k.keeper
-                .join_lobby(&invite, name.into(), point(seed))
+                .join_lobby(&invite, name.into(), [0x02; 32], point(seed))
                 .await
                 .unwrap(),
             lobby
@@ -121,12 +123,17 @@ async fn a_join_with_the_wrong_invite_secret_is_refused() {
 
     intruder
         .keeper
-        .join_lobby(&forged.encode().unwrap(), "Mallory".into(), point(103))
+        .join_lobby(
+            &forged.encode().unwrap(),
+            "Mallory".into(),
+            [0x02; 32],
+            point(103),
+        )
         .await
         .unwrap();
     honest
         .keeper
-        .join_lobby(&invite, "Grace".into(), point(101))
+        .join_lobby(&invite, "Grace".into(), [0x02; 32], point(101))
         .await
         .unwrap();
 
@@ -171,5 +178,138 @@ async fn a_guest_leaves_and_the_host_closes() {
             .close_lobby(lobby, LobbyRole::Guest)
             .await
             .is_err()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_lobby_admits_only_its_size_and_starts_only_when_full() {
+    let harness = Harness::new(fast_config());
+    let [host, grace, alan] = [harness.keeper(1), harness.keeper(2), harness.keeper(3)];
+    let mut host_events = host.keeper.subscribe();
+    let (lobby, invite) = host
+        .keeper
+        .open_lobby(LobbyOpen {
+            members: 2,
+            ..open_request("Ada")
+        })
+        .await
+        .unwrap();
+    let early = host.keeper.start_lobby(lobby, 2, 2, [7; 32], SECRETS).await;
+    assert!(matches!(
+        early,
+        Err(ome_keeper::Error::Incomplete {
+            joined: 1,
+            expected: 2
+        })
+    ));
+    grace
+        .keeper
+        .join_lobby(&invite, "Grace".into(), [0x02; 32], point(101))
+        .await
+        .unwrap();
+    lobby_event(&mut host_events, LobbyStatus::Open, 2).await;
+    alan.keeper
+        .join_lobby(&invite, "Alan".into(), [0x03; 32], point(102))
+        .await
+        .unwrap();
+    // The third join is refused: the roster stays at two, with each member's account.
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let roster = info(&host.keeper, lobby).await;
+    assert_eq!(roster.expected, 2);
+    let accounts: Vec<[u8; 32]> = roster.members.iter().map(|m| m.account).collect();
+    assert_eq!(accounts, [[0x01; 32], [0x02; 32]]);
+    host.keeper
+        .start_lobby(lobby, 2, 2, [7; 32], SECRETS)
+        .await
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_host_removes_a_guest_and_its_invite_stops_working() {
+    let harness = Harness::new(fast_config());
+    let (keepers, lobby, old_invite) = lobby_of_three(&harness).await;
+    let mut removed = keepers[2].keeper.subscribe();
+    let mut staying = keepers[1].keeper.subscribe();
+    let removed_identity = keepers[2].keeper.identity();
+
+    let after = keepers[0]
+        .keeper
+        .remove_from_lobby(lobby, removed_identity)
+        .await
+        .unwrap();
+
+    assert_eq!(after.members.len(), 2);
+    let new_invite = after.invite.unwrap();
+    assert_ne!(new_invite, old_invite);
+    lobby_event(&mut staying, LobbyStatus::Open, 2).await;
+    wait_for(&mut removed, |e| match e {
+        KeeperEvent::Lobby {
+            status: LobbyStatus::Closed,
+            ..
+        } => Some(()),
+        _ => None,
+    })
+    .await;
+    assert!(info(&keepers[2].keeper, lobby).await.removed);
+
+    // The old invite no longer admits anyone; the new one does.
+    let latecomer = harness.keeper(4);
+    let mut host_events = keepers[0].keeper.subscribe();
+    latecomer
+        .keeper
+        .join_lobby(&old_invite, "Eve".into(), [0x04; 32], point(104))
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert_eq!(info(&keepers[0].keeper, lobby).await.members.len(), 2);
+    let again = harness.keeper(5);
+    again
+        .keeper
+        .join_lobby(&new_invite, "Hal".into(), [0x05; 32], point(105))
+        .await
+        .unwrap();
+    lobby_event(&mut host_events, LobbyStatus::Open, 3).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_host_changes_the_size_and_thresholds_before_starting() {
+    let harness = Harness::new(fast_config());
+    let (keepers, lobby, _) = lobby_of_three(&harness).await;
+    let mut guest = keepers[1].keeper.subscribe();
+    // Smaller than the roster, or a threshold above the size, is refused.
+    assert!(
+        keepers[0]
+            .keeper
+            .update_lobby(lobby, Some(2), None, None)
+            .await
+            .is_err()
+    );
+    assert!(
+        keepers[0]
+            .keeper
+            .update_lobby(lobby, None, Some(4), None)
+            .await
+            .is_err()
+    );
+
+    let updated = keepers[0]
+        .keeper
+        .update_lobby(lobby, Some(4), Some(3), Some(3))
+        .await
+        .unwrap();
+
+    assert_eq!((updated.expected, updated.threshold), (4, 3));
+    wait_for(&mut guest, |e| match e {
+        KeeperEvent::Lobby {
+            change: Some(change),
+            ..
+        } if change.kind == ome_api::keeper::LobbyChangeKind::Updated => Some(()),
+        _ => None,
+    })
+    .await;
+    let seen = info(&keepers[1].keeper, lobby).await;
+    assert_eq!(
+        (seen.expected, seen.threshold, seen.viewing_threshold),
+        (4, 3, 3)
     );
 }
