@@ -334,10 +334,67 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
         await m.client.call("proposals.reject", { vault, id: created.id, reason: "not now" });
       }
       const blocked = await status(alice, created.id, "blocked");
-      expect(blocked.rejections).toHaveLength(2);
+      expect(blocked.votes.filter((v) => !v.approve)).toHaveLength(2);
       await expect(
         alice.client.call("proposals.execute", { vault, id: created.id }),
       ).rejects.toThrow();
+    });
+  });
+
+  describe("lifecycle", () => {
+    it("shows who executes a proposal while it runs, refuses a second executor, and names the executor", async () => {
+      const fees = await alice.client.call("fees.status", {});
+      expect(fees).toMatchObject({ kind: "sponsored", healthy: true });
+      const bobAccount = (await bob.client.call("status", {})).profile?.account as Hex32;
+      const intent = { kind: "transfer" as const, token, to: bobAccount, amount: "1", memo: null };
+      const preview = await alice.client.call("proposals.preview", {
+        vault,
+        intent,
+        expiresInHours: 1,
+      });
+      expect(BigInt(preview.fee?.fee ?? "0")).toBeGreaterThan(0n);
+      expect(BigInt(preview.fee?.maxFee ?? "0")).toBeGreaterThan(BigInt(preview.fee?.fee ?? "0"));
+
+      const created = await alice.client.call("proposals.create", {
+        vault,
+        intent,
+        expiresInHours: 1,
+      });
+      expect(created.createdAt).toBeGreaterThan(0);
+      expect(created.createdAt).toBeLessThan(created.expiresAt);
+      await proposal(bob, created.id);
+      for (const m of [alice, bob]) {
+        // oxlint-disable-next-line no-await-in-loop
+        await m.client.call("proposals.approve", { vault, id: created.id });
+      }
+      const ready = await status(bob, created.id, "ready");
+      expect(ready.createdAt).toBe(created.createdAt);
+      expect(ready.votes.map((v) => v.at).every((at) => at > 0)).toBe(true);
+
+      // Alice proves for a while; Bob's daemon sees her claim and won't prove the same transaction.
+      const executing = alice.client.call("proposals.execute", { vault, id: created.id });
+      const seen = await until(async () => {
+        const view = await bob.client.call("proposals.get", { vault, id: created.id });
+        return view.executing ?? undefined;
+      }, "Alice's claim at Bob");
+      expect(seen).toMatchObject({ member: { name: "Alice" }, mine: false });
+      await expect(
+        bob.client.call("proposals.execute", { vault, id: created.id }),
+      ).rejects.toMatchObject({ kind: "conflict" });
+      expect((await executing).status).toBe("executed");
+
+      for (const m of [alice, bob, carol]) {
+        // oxlint-disable-next-line no-await-in-loop
+        const view = await status(m, created.id, "executed");
+        expect(view.execution?.executor?.name).toBe("Alice");
+        expect(view.execution?.block).toBeGreaterThan(0);
+        expect(view.executing).toBeNull();
+      }
+      const events = bob.events.filter((e) => "proposal" in e && e.proposal === created.id);
+      expect(events.some((e) => e.type === "proposalExecuting")).toBe(true);
+      expect(events.some((e) => e.type === "proposalExecuted" && e.by?.name === "Alice")).toBe(
+        true,
+      );
     });
   });
 
@@ -397,11 +454,12 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
         expect((await done(m)).error).toBeNull();
       }
 
-      // Dave's daemon now holds the vault, its committee and its secrets, and reads its balance.
+      // Dave's daemon now holds the vault, its committee and its secrets, and reads the balance Alice reads.
       await dave.client.call("tokens.add", { vault, token });
-      expect(await until(() => balance(dave), "Dave's balance")).toBe(1000n * 10n ** 18n - 90n);
+      expect(await until(() => balance(dave), "Dave's balance")).toBe(await balance(alice));
 
       // A payment after the rotation, approved by the newcomer.
+      const before = (await balance(alice)) ?? 0n;
       const bobAccount = (await bob.client.call("status", {})).profile?.account as Hex32;
       const fresh = await alice.client.call("proposals.create", {
         vault,
@@ -421,7 +479,7 @@ describe.skipIf(!available)("members' daemons on a local network", () => {
       expect((await alice.client.call("proposals.execute", { vault, id: fresh.id })).status).toBe(
         "executed",
       );
-      const after = 1000n * 10n ** 18n - 95n;
+      const after = before - 5n;
       for (const m of [alice, dave]) {
         // oxlint-disable-next-line no-await-in-loop
         await until(

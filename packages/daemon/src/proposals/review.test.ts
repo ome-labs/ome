@@ -15,6 +15,7 @@ describe("proposals.review", () => {
       calls: [],
       extras: "0x",
       txNonce: Fr.random().toString(),
+      createdAt: NOW,
       expiresAt: NOW + 3600,
       summary: JSON.stringify({ kind: "cancel", cancels: `0x${"00".repeat(32)}`, memo: null }),
       proposer: 1,

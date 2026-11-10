@@ -24,6 +24,8 @@ export interface Stored {
   readonly payload: HexBytes | null;
   readonly approvals: HexBytes[];
   readonly rejections: HexBytes[];
+  /** When this member's keeper stored each vote, by body. */
+  readonly voteTimes: ReadonlyMap<HexBytes, number>;
 }
 
 /** The proposals of `vault`, with their payloads and votes, from the member's keeper. */
@@ -38,7 +40,15 @@ export async function storedProposals(context: Context, vault: Hex32): Promise<S
         keeper.call("approvals.list", { proposal: info.id }),
         keeper.call("rejections.list", { proposal: info.id }),
       ]);
-      return { vault, body, info, payload, approvals, rejections };
+      return {
+        vault,
+        body,
+        info,
+        payload,
+        approvals: approvals.map((vote) => vote.body),
+        rejections: rejections.map((vote) => vote.body),
+        voteTimes: new Map([...approvals, ...rejections].map((vote) => [vote.body, vote.at])),
+      };
     }),
   );
 }
@@ -68,12 +78,17 @@ export async function proposalView(
     record.config?.config ?? (await wallet.getVaultConfig(context.vaults.address(vault)));
   const input = { manifest, config };
   const now = await wallet.chainTime();
-  const receipts = await context.keeper.client.call("receipts.list", { vault });
+  const [receipts, claims] = await Promise.all([
+    context.keeper.client.call("receipts.list", { vault }),
+    context.keeper.client.call("claims.list", { vault }),
+  ]);
   const executed = new Map(receipts.map((r) => [r.proposal, r]));
   const nameOf = (index: number) => {
     const member = manifest.members.find((m) => m.index === index);
     return member ? (record.names[member.identity] ?? `member ${index}`) : `member ${index}`;
   };
+  const memberRef = (index: number) => ({ index, name: nameOf(index) });
+  const at = (vote: HexBytes) => stored.voteTimes.get(vote) ?? 0;
 
   const approvals: Vote[] = stored.approvals.map((a) => {
     const { slot } = decodeApproval(a);
@@ -83,7 +98,15 @@ export async function proposalView(
     } catch {
       valid = false;
     }
-    return { slot, index: slot + 1, name: nameOf(slot + 1), valid, reason: null };
+    return {
+      slot,
+      index: slot + 1,
+      name: nameOf(slot + 1),
+      approve: true,
+      valid,
+      reason: null,
+      at: at(a),
+    };
   });
   const approvedSlots = new Set(approvals.filter((v) => v.valid).map((v) => v.slot));
   const rejections: Vote[] = stored.rejections
@@ -95,7 +118,15 @@ export async function proposalView(
       } catch {
         valid = false;
       }
-      return { slot, index: slot + 1, name: nameOf(slot + 1), valid, reason };
+      return {
+        slot,
+        index: slot + 1,
+        name: nameOf(slot + 1),
+        approve: false,
+        valid,
+        reason,
+        at: at(r),
+      };
     })
     .filter((v) => v.valid && !approvedSlots.has(v.slot));
 
@@ -137,6 +168,10 @@ export async function proposalView(
   }
   const mySlot = context.vaults.myIndex(vault) - 1;
   const receipt = executed.get(info.id);
+  // The newest live claim: who is executing it right now, if anyone.
+  const claim = receipt
+    ? undefined
+    : claims.filter((c) => c.proposal === info.id).toSorted((a, b) => b.updatedAt - a.updatedAt)[0];
   const cancelledBy =
     intent.kind === "cancel"
       ? intent.cancels
@@ -152,13 +187,13 @@ export async function proposalView(
     status,
     threshold: config.threshold,
     members: manifest.members.length,
-    approvals,
-    rejections,
+    votes: [...approvals, ...rejections],
     mySlot,
     approvedByMe: approvals.some((v) => v.valid && v.slot === mySlot),
     rejectedByMe: rejections.some((v) => v.slot === mySlot),
     configVersion: info.configVersion,
     currentConfigVersion: config.version,
+    createdAt: info.createdAt,
     expiresAt: info.expiresAt,
     txNonce: info.txNonce,
     outerHash: info.outerHash,
@@ -167,7 +202,22 @@ export async function proposalView(
     calls,
     token:
       intent.kind === "transfer" ? (tokens.find((t) => t.address === intent.token) ?? null) : null,
-    execution: receipt ? { txHash: receipt.txHash, at: receipt.at } : null,
+    execution: receipt
+      ? {
+          txHash: receipt.txHash,
+          at: receipt.at,
+          executor: receipt.executor === null ? null : memberRef(receipt.executor),
+          block: receipt.block || null,
+        }
+      : null,
+    executing: claim
+      ? {
+          member: memberRef(claim.member),
+          phase: claim.phase,
+          since: claim.startedAt,
+          mine: claim.mine,
+        }
+      : null,
     cancelledBy,
   };
 }

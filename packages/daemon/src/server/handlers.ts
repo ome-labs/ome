@@ -91,6 +91,7 @@ export const handlers: Handlers = {
   },
   "signer.sealingKey": async (d, p) => ({ key: d.signer.sealingKey(p.passphrase) }),
   "node.status": async (d) => d.node.check(),
+  "fees.status": async (d) => d.refreshFees(),
 
   "lobby.inspect": async (d, p) => d.founding.inspect(p.invite),
   "lobby.create": async (d, p) => d.founding.create(p),
@@ -208,8 +209,15 @@ export const handlers: Handlers = {
     require((p.reason ?? "").length <= 280, "a reason is at most 280 characters");
     return d.proposals.reject({ ...p, vault: lower(p.vault), id: lower(p.id) });
   },
-  "proposals.execute": async (d, p) =>
-    d.proposals.execute({ vault: lower(p.vault), id: lower(p.id) }),
+  "proposals.execute": async (d, p) => {
+    const view = await d.proposals.execute({
+      vault: lower(p.vault),
+      id: lower(p.id),
+      force: p.force ?? false,
+    });
+    void d.refreshFees().catch(() => undefined);
+    return view;
+  },
   "proposals.cancel": async (d, p) =>
     d.proposals.cancel({ vault: lower(p.vault), id: lower(p.id) }),
 

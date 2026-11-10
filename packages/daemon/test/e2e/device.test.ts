@@ -209,7 +209,7 @@ describe.skipIf(!available)("a member's signing phone", () => {
     expect(approved.status).toBe("Approved");
     await until(async () => {
       const view = await bob.client.call("proposals.get", { vault, id: payment.id });
-      return view.approvals.some((v) => v.slot === 0) ? true : undefined;
+      return view.votes.some((v) => v.approve && v.slot === 0) ? true : undefined;
     }, "the phone's approval to reach Bob");
     await bob.client.call("proposals.approve", { vault, id: payment.id });
     await status(bob, payment.id, "ready");

@@ -98,6 +98,7 @@ export async function fakeContext(members = 3, viewingThreshold = 2): Promise<Fa
         case "approvals.list":
         case "rejections.list":
         case "receipts.list":
+        case "claims.list":
           return Promise.resolve([]);
         default:
           return Promise.reject(new Error(`unexpected keeper call ${method}`));

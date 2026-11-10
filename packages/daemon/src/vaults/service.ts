@@ -7,6 +7,7 @@ import type {
   Hex32,
   Manifest,
   MemberReachability,
+  MemberRef,
   VaultConfig,
   VaultDetails,
   VaultSummary,
@@ -210,6 +211,16 @@ export class VaultService {
       }
     }
     return false;
+  }
+
+  /** Member `index` of `vault`, named as this member knows them. */
+  memberRef(vault: Hex32, index: number): MemberRef {
+    const record = this.record(vault);
+    const member = this.#manifests.get(record.address)?.members.find((m) => m.index === index);
+    return {
+      index,
+      name: (member && record.names[member.identity]) ?? `member ${index}`,
+    };
   }
 
   summary(vault: Hex32): VaultSummary {

@@ -1,6 +1,7 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254";
 import type {
   ApproveParams,
+  ExecuteParams,
   ExecutionProgress,
   Hex32,
   Intent,
@@ -25,6 +26,7 @@ import {
 import type { Context } from "../context.ts";
 import { decodeCalls } from "../contracts/decode.ts";
 import { DaemonError, notReady, require } from "../errors.ts";
+import { feeEstimate, feesStatus, requireFees } from "../fees.ts";
 import { LIMITS } from "../limits.ts";
 import { requireBalance } from "../vaults/tokens.ts";
 import { effectsOf } from "./effects.ts";
@@ -168,9 +170,17 @@ export class ProposalService {
       const gas = result.gasUsed.totalGas;
       const facts = await wallet.simulationFacts(tx, result);
       const effects = await effectsOf(this.#context, vault, tx.payload.calls, facts, tokens);
-      return { ok: true, gas: { da: gas.daGas, l2: gas.l2Gas }, error: null, effects };
+      const used = { da: gas.daGas, l2: gas.l2Gas };
+      const fee = await feeEstimate(this.#context, used).catch(() => null);
+      return { ok: true, gas: used, error: null, effects, fee };
     } catch (error) {
-      return { ok: false, gas: null, error: simulationError(error, tokens), effects: null };
+      return {
+        ok: false,
+        gas: null,
+        error: simulationError(error, tokens),
+        effects: null,
+        fee: null,
+      };
     }
   }
 
@@ -226,6 +236,7 @@ export class ProposalService {
             message: "the proposal didn't rebuild on this device",
           },
           effects: null,
+          fee: null,
         };
     const intent = proposal.intent;
     const label =
@@ -347,13 +358,35 @@ export class ProposalService {
   }
 
   /** Executes a ready proposal from this device and stores the receipt with the keeper. */
-  async execute(ref: ProposalRef): Promise<ProposalView> {
+  /**
+   * Executes a ready proposal. Another member's live claim refuses it with `conflict` unless `force`: both would
+   * prove, and only one transaction can land. This member's own claim follows each phase, so every member sees how
+   * far it is.
+   */
+  async execute(params: ExecuteParams): Promise<ProposalView> {
+    const ref = { vault: params.vault, id: params.id };
     await this.ensureContracts(ref);
     const { stored } = await this.#stored(ref);
+    const executing = (await this.get(ref)).executing;
+    if (executing && !executing.mine && !params.force)
+      throw DaemonError.detailed(
+        {
+          kind: "conflict",
+          member: executing.member,
+          phase: executing.phase,
+          since: executing.since,
+        },
+        `${executing.member.name} is executing this proposal (${executing.phase}); execute with force to prove it too`,
+      );
     const intent = intentOf(stored.info.summary);
     if (intent.kind === "transfer")
       await requireBalance(this.#context, ref.vault, intent.token, intent.amount);
-    const progress = (phase: ExecutionProgress["phase"], extra: Partial<ExecutionProgress> = {}) =>
+    const keeper = this.#context.keeper.client;
+    const startedAt = Math.floor(Date.now() / 1000);
+    const progress = async (
+      phase: ExecutionProgress["phase"],
+      extra: Partial<ExecutionProgress> = {},
+    ) => {
       this.#context.emit({
         type: "execution",
         execution: {
@@ -365,25 +398,45 @@ export class ProposalService {
           ...extra,
         },
       });
-    progress("rebuilding");
+      // The claim is a courtesy to the other members; an unreachable keeper never stops the execution.
+      await keeper
+        .call("claims.put", { vault: ref.vault, proposal: stored.info.id, phase, startedAt })
+        .catch(() => undefined);
+    };
+    await progress("rebuilding");
     try {
       const tx = await this.#rebuilt(stored);
-      progress("proving");
+      await this.#requirePayable(ref.vault, tx);
+      await progress("proving");
       const receipt = await this.#context.wallet().executeVaultTx(tx, stored.approvals);
       const txHash = receipt.txHash.toString();
-      await this.#context.keeper.client.call("receipts.put", {
+      await keeper.call("receipts.put", {
         vault: ref.vault,
         proposal: tx.id,
         txHash,
+        block: receipt.blockNumber ?? 0,
       });
-      progress("mined", { txHash });
+      await progress("mined", { txHash });
       // A governance call changed the config: adopt it now, not at the next sync.
       await this.#context.vaults.observe(ref.vault).catch(() => undefined);
     } catch (error) {
-      progress("failed", { error: error instanceof Error ? error.message : String(error) });
+      await progress("failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
     return this.get(ref);
+  }
+
+  /**
+   * Refuses before proving when the fee payer can't cover `tx`. A healthy sponsored payer is trusted without a
+   * simulation; the member's own payer, or one with no Fee Juice, is checked against `tx`'s simulated cost.
+   */
+  async #requirePayable(vault: Hex32, tx: VaultTx): Promise<void> {
+    const status = await feesStatus(this.#context);
+    if (status.kind === "sponsored" && status.healthy) return;
+    const simulation = await this.#simulate(vault, tx);
+    if (simulation.fee) await requireFees(this.#context, simulation.fee);
   }
 
   /** The proposal id of a stored body. */

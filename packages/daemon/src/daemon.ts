@@ -11,6 +11,7 @@ import {
   API_VERSION,
   type DaemonEvent,
   type DaemonInfo,
+  type FeesStatus,
   type Hex32,
   type KeeperState,
   type ProfileCreateParams,
@@ -26,6 +27,7 @@ import type { Context } from "./context.ts";
 import { ContractRegistry } from "./contracts/registry.ts";
 import { DeviceService } from "./devices/service.ts";
 import { DaemonError, notReady, require } from "./errors.ts";
+import { feesStatus } from "./fees.ts";
 import { FoundingService } from "./founding/founding.ts";
 import { KeeperSupervisor, keeperBinary } from "./keeper/supervisor.ts";
 import { LIMITS } from "./limits.ts";
@@ -93,6 +95,8 @@ export class Daemon implements Context {
   #wallet: OmeWallet | undefined;
   #account: AztecAddress | undefined;
   #feePayer: AztecAddress | undefined;
+  /** The fee payer's last read status, refreshed in the background: `status` never waits on the node. */
+  #fees: FeesStatus | null = null;
   #server: DaemonServer | undefined;
   #sync: NodeJS.Timeout | undefined;
   #core: Promise<void> | undefined;
@@ -120,6 +124,11 @@ export class Daemon implements Context {
       (ref) => this.proposals.get(ref),
       (event) => this.emit(event),
       (ref) => this.proposals.ensureContracts(ref),
+      {
+        list: (vault) => this.proposals.list(vault),
+        member: (vault, index) => this.vaults.memberRef(vault, index),
+        now: () => this.wallet().chainTime(),
+      },
     );
     this.#received = new ReceivedWatcher(this);
   }
@@ -278,7 +287,22 @@ export class Daemon implements Context {
       signer: this.signer.status(),
       vaults,
       defaultVault,
+      fees: this.#fees,
     };
+  }
+
+  /** The vaults this member is active in. */
+  #activeVaults(): Hex32[] {
+    return this.vaults
+      .list()
+      .filter((r) => r.status === "active")
+      .map((r) => r.address);
+  }
+
+  /** Reads the fee payer's Fee Juice now and keeps it for `status`. */
+  async refreshFees(): Promise<FeesStatus> {
+    this.#fees = await feesStatus(this);
+    return this.#fees;
   }
 
   /** Creates the profile: the sealed signer, the keeper's master key, and the member's own Aztec account. */
@@ -385,9 +409,12 @@ export class Daemon implements Context {
     await this.vaults.load();
     await this.contracts.load();
     await this.membership.load();
+    void this.refreshFees().catch(() => undefined);
     this.#sync = setInterval(() => {
       void this.vaults.sync().then(() => this.#checkReceived());
       void this.registerSenders();
+      void this.refreshFees().catch(() => undefined);
+      void this.#proposalEvents.tick(this.#activeVaults()).catch(() => undefined);
     }, SYNC_INTERVAL_MS);
     this.#sync.unref();
   }
