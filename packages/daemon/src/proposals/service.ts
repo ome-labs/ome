@@ -1,4 +1,5 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254";
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address";
 import type {
   ApproveParams,
   ExecuteParams,
@@ -87,7 +88,10 @@ export class ProposalService {
     return proposalView(this.#context, stored, all, this.#tokens(ref.vault));
   }
 
-  /** Builds the transaction; `share` also records and offers the contracts its calls need, for a real proposal. */
+  /**
+   * Builds the transaction. `share` (a real proposal) also simulates it and lists every contract it reaches, nested
+   * calls included, so the other members can fetch them before simulating; the artifacts are offered to the keeper.
+   */
   async #prepare(params: ProposeParams, txNonce?: Fr, share = false): Promise<VaultTx> {
     const { minExpiryHours: min, maxExpiryHours: max } = LIMITS;
     require(params.expiresInHours >= min &&
@@ -97,20 +101,31 @@ export class ProposalService {
     const vault = this.#context.vaults.address(params.vault);
     const payload = await payloadOf(this.#context, params.intent, vault);
     const authwits = await authwitsOf(this.#context, params.intent);
-    const contracts = share
-      ? await this.#context.contracts.forProposal([
-          ...payload.calls.map((call) => call.to),
-          ...authwits.map((a) => a.call.to),
-        ])
-      : undefined;
-    return wallet.prepareVaultTx(vault, payload, {
+    const terms = {
       expiresAt: (await wallet.chainTime()) + params.expiresInHours * 3600,
       summary: summaryOf(params.intent),
       proposer: this.#context.vaults.myIndex(params.vault),
-      txNonce,
       authwits,
-      ...(contracts ? { contracts } : {}),
-    });
+    };
+    const tx = await wallet.prepareVaultTx(vault, payload, { ...terms, txNonce });
+    if (!share) return tx;
+    const targets = [...payload.calls.map((call) => call.to), ...authwits.map((a) => a.call.to)];
+    const reached = await this.#reached(tx);
+    const contracts = await this.#context.contracts.forProposal([...targets, ...reached]);
+    return wallet.prepareVaultTx(vault, payload, { ...terms, txNonce: tx.txNonce, contracts });
+  }
+
+  /** The contracts `tx`'s simulation reaches besides the vault; none when it doesn't simulate. */
+  async #reached(tx: VaultTx): Promise<AztecAddress[]> {
+    try {
+      const wallet = this.#context.wallet();
+      const facts = await wallet.simulationFacts(tx, await wallet.previewVaultTx(tx));
+      return facts.contracts
+        .map((address) => AztecAddress.fromStringUnsafe(address))
+        .filter((address) => !address.equals(tx.vault));
+    } catch {
+      return [];
+    }
   }
 
   /** What the member knows names for in `vault`. */
@@ -143,10 +158,14 @@ export class ProposalService {
         stored.payload,
         Math.min(await wallet.chainTime(), stored.info.expiresAt),
       );
+      const contracts = payloadContracts(request);
       return await this.#context.contracts.ensure(
         ref.vault,
-        [...request.calls, ...request.authwits.map((a) => a.call)].map((call) => call.to),
-        payloadContracts(request),
+        [
+          ...[...request.calls, ...request.authwits.map((a) => a.call)].map((call) => call.to),
+          ...(contracts.addresses ?? []),
+        ],
+        contracts,
       );
     } catch {
       return false;
@@ -165,12 +184,20 @@ export class ProposalService {
     return { calls, authwits, ...(await this.#simulate(params.vault, tx)) };
   }
 
-  /** Simulates `tx` and reads its effects on the vault; a failure becomes a kind with its message. */
-  async #simulate(vault: Hex32, tx: VaultTx): Promise<Review["simulation"]> {
+  /**
+   * Simulates `tx` and reads its effects on the vault; a failure becomes a kind with its message. A contract the
+   * simulation reaches but this member doesn't know (one the proposal didn't list) is fetched, and it runs once more.
+   */
+  async #simulate(vault: Hex32, tx: VaultTx, retry = true): Promise<Review["simulation"]> {
     const wallet = this.#context.wallet();
     const tokens = this.#tokens(vault);
     try {
-      const result = await wallet.previewVaultTx(tx);
+      const result = await wallet.previewVaultTx(tx).catch(async (error: unknown) => {
+        const missing = unknownContract(error);
+        if (!retry || !missing) throw error;
+        await this.#context.contracts.ensure(vault, [missing], { classIds: [], instances: [] });
+        return wallet.previewVaultTx(tx);
+      });
       const gas = result.gasUsed.totalGas;
       const facts = await wallet.simulationFacts(tx, result);
       const effects = await effectsOf(this.#context, vault, tx.payload.calls, facts, tokens);
@@ -453,6 +480,14 @@ export class ProposalService {
   static idOf(body: string): string {
     return decodeProposal(body).id;
   }
+}
+
+/** The address a simulation failed on because this PXE doesn't know its contract. */
+function unknownContract(error: unknown): Hex32 | undefined {
+  const message = error instanceof Error ? error.message : String(error);
+  return /No contract instance found for address (0x[0-9a-fA-F]{64})/u
+    .exec(message)?.[1]
+    ?.toLowerCase() as Hex32 | undefined;
 }
 
 /** One line saying what a proposal does, with exact numbers. */

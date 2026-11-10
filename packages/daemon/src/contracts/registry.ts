@@ -188,8 +188,9 @@ export class ContractRegistry {
   }
 
   /**
-   * What other members need to run `targets`: their classes, and the instances the node doesn't publish. The artifacts
-   * of those classes are offered to this member's keeper, so members' keepers can fetch them.
+   * What other members need to run `targets` (every contract a proposal reaches, nested calls included): their
+   * addresses and classes, and the instances the node doesn't publish. The artifacts of those classes are offered to
+   * this member's keeper, so members' keepers can fetch them.
    */
   async forProposal(targets: AztecAddress[]): Promise<PayloadContracts> {
     const pxe = this.#context.wallet().pxeService;
@@ -214,13 +215,15 @@ export class ContractRegistry {
       // oxlint-disable-next-line no-await-in-loop
       if (artifact) await this.#offer(classId, artifact).catch(() => undefined);
     }
-    return { classIds: [...classIds], instances };
+    const addresses = [...new Set(targets.map((t) => lower(t)))];
+    return { classIds: [...classIds], instances, addresses };
   }
 
   /**
    * Makes the contracts a proposal names usable here: classes this PXE lacks are fetched from the vault's members
-   * (through the keeper) and checked; targets' instances are registered from the node or the payload. Returns whether
-   * everything is here; a fetch in flight finishes with a keeper `artifact` event.
+   * (through the keeper) and checked; targets' instances are registered from the node or the payload, fetching a
+   * published instance's class when it is missing. Returns whether everything is here; a fetch in flight finishes with
+   * a keeper `artifact` event.
    */
   async ensure(vault: Hex32, targets: string[], contracts: PayloadContracts): Promise<boolean> {
     const pxe = this.#context.wallet().pxeService;
@@ -244,8 +247,13 @@ export class ContractRegistry {
         ready = false;
         continue;
       }
+      const classId = instance.originalContractClassId;
       // oxlint-disable-next-line no-await-in-loop
-      const artifact = await pxe.getContractArtifact(instance.originalContractClassId);
+      let artifact = await pxe.getContractArtifact(classId);
+      // oxlint-disable-next-line no-await-in-loop
+      if (!artifact && (await this.fetched(vault, lower(classId))))
+        // oxlint-disable-next-line no-await-in-loop
+        artifact = await pxe.getContractArtifact(classId);
       // oxlint-disable-next-line no-await-in-loop
       if (artifact) await this.#context.wallet().registerContract(instance, artifact);
       else ready = false;
